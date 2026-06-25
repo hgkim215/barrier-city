@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Xcode 사용자별 파일 (머지 충돌 주범)
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+
+# 빌드 산출물
+DerivedData/
+build/
+.build/
+*.xcarchive
+
+# Swift Package Manager
+.swiftpm/
+
+# 비밀/키 방어 (이 repo엔 키 없음 — 실수 방지용)
+proxy/.dev.vars
+proxy/.wrangler/
+.env
+*.env
+node_modules/

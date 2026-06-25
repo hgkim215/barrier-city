@@ -8,11 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		0450740C2FED0B25008DEC5E /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 0450740B2FED0B25008DEC5E /* RealityKitContent */; };
+		DA1A000000000000000000B1 /* DialogueKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D1 /* DialogueKit */; };
+		DA1A000000000000000000B2 /* DialogueKitOpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D2 /* DialogueKitOpenAI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		045074062FED0B25008DEC5E /* Barrier City.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Barrier City.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0450740A2FED0B25008DEC5E /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
+		DA1A000000000000000000F1 /* DialogueKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DialogueKit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -42,6 +45,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				0450740C2FED0B25008DEC5E /* RealityKitContent in Frameworks */,
+				DA1A000000000000000000B1 /* DialogueKit in Frameworks */,
+				DA1A000000000000000000B2 /* DialogueKitOpenAI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				0450740A2FED0B25008DEC5E /* RealityKitContent */,
+				DA1A000000000000000000F1 /* DialogueKit */,
 			);
 			path = Packages;
 			sourceTree = "<group>";
@@ -94,6 +100,8 @@
 			name = "Barrier City";
 			packageProductDependencies = (
 				0450740B2FED0B25008DEC5E /* RealityKitContent */,
+				DA1A000000000000000000D1 /* DialogueKit */,
+				DA1A000000000000000000D2 /* DialogueKitOpenAI */,
 			);
 			productName = "Barrier City";
 			productReference = 045074062FED0B25008DEC5E /* Barrier City.app */;
@@ -360,6 +368,14 @@
 		0450740B2FED0B25008DEC5E /* RealityKitContent */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RealityKitContent;
+		};
+		DA1A000000000000000000D1 /* DialogueKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DialogueKit;
+		};
+		DA1A000000000000000000D2 /* DialogueKitOpenAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DialogueKitOpenAI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
