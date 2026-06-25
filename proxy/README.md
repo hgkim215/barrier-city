@@ -1,7 +1,7 @@
 # OpenAI 키 은닉 프록시 (CloudFlare Worker)
 
 앱 바이너리에 OpenAI 키를 넣지 않기 위한 최소 프록시. 흐름: `앱 → Worker(키 부착) → OpenAI`.
-엔드포인트: `POST /chat`(Chat Completions, 스트림), `POST /tts`(gpt-4o-mini-tts).
+엔드포인트(제네릭 패스스루): 별칭 `POST /chat`(Chat Completions, 스트림)·`POST /tts`(gpt-4o-mini-tts)·`POST /embeddings`, 그 외 `POST /v1/*` 경로는 그대로 OpenAI로 전달(예: `/v1/audio/transcriptions`). 허용 범위는 OpenAI 키 권한이 통제하며, 새 엔드포인트 추가 시 Worker 재배포가 필요 없다.
 
 ## 사전 준비 (개발자 — 키/계정 필요)
 1. **OpenAI 키 발급:** platform.openai.com → Billing 충전 → API keys → Create(가능하면 restricted key).
