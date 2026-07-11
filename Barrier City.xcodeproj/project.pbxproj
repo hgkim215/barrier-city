@@ -133,6 +133,10 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 045074072FED0B25008DEC5E /* Products */;
+			packageReferences = (
+				DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */,
+				DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -366,17 +370,31 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/RealityKitContent;
+		};
+		DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DialogueKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		0450740B2FED0B25008DEC5E /* RealityKitContent */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */;
 			productName = RealityKitContent;
 		};
 		DA1A000000000000000000D1 /* DialogueKit */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
 			productName = DialogueKit;
 		};
 		DA1A000000000000000000D2 /* DialogueKitOpenAI */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
 			productName = DialogueKitOpenAI;
 		};
 /* End XCSwiftPackageProductDependency section */

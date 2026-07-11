@@ -8,6 +8,8 @@
 	<string>휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.</string>
+	<key>NSWorldSensingUsageDescription</key>
+	<string>몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>

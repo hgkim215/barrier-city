@@ -1,0 +1,779 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "Reality Composer Pro Version 2.0 (494.60.2)"
+    }
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+reorder rootPrims = ["Root", "stair", "ramp", "Floor_1", "base", "Glass"]
+
+def Xform "Root"
+{
+    reorder nameChildren = ["_coffee", "Ground", "Collision", "DirectionalLight"]
+    def Xform "DirectionalLight" (
+        customData = {
+            float3 rotationEulerHint = (-1.1440989, 0, 0)
+        }
+    )
+    {
+        quatf xformOp:orient = (0.84079325, -0.5413564, 0, 0)
+        float3 xformOp:translate = (0, 11.582308, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "DirectionalLight"
+        {
+            token info:id = "RealityKit.DirectionalLight"
+            float intensity = 1000
+
+            def RealityKitStruct "Shadow"
+            {
+                bool isEnabled = 1
+            }
+        }
+    }
+
+    def Xform "Ground" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0)
+        }
+    )
+    {
+        reorder nameChildren = ["Ground", "__"]
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:translate = (0, 0, 10)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Cube "__" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (0, 0, 0)
+            }
+        )
+        {
+            rel material:binding = </Root/Ground/__/DefaultMaterial> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            double size = 0.2
+            int ui:nodegraph:node:stackingOrder = 1
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (200, 1, 200)
+            float3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            def Material "DefaultMaterial"
+            {
+                token outputs:mtlx:surface
+                token outputs:realitykit:vertex
+                token outputs:surface.connect = </Root/Ground/__/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+
+                def Shader "DefaultSurfaceShader"
+                {
+                    uniform token info:id = "UsdPreviewSurface"
+                    color3f inputs:diffuseColor = (1, 1, 1)
+                    float inputs:roughness = 0.75
+                    token outputs:surface
+                }
+            }
+        }
+    }
+
+    def Xform "Collision" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0)
+        }
+    )
+    {
+        reorder nameChildren = ["_coffee_1", "Ground"]
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:translate = (0, 0, 10)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Cube "Ground" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = None (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            double size = 0.2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (200, 1, 200)
+            float3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def "_coffee" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707965, -1.110223e-16, -1.8652013e-9)
+        }
+        references = @Building/_coffee.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.7071067, -0.70710677, 6.594482e-10, -6.594482e-10)
+        float3 xformOp:scale = (0.9999998, 0.9999998, 0.9999998)
+        float3 xformOp:translate = (0, 0.3, 20)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        over "Ramp" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (0, 0, 0)
+            }
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-6.5, 6.699999809265137, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "Cube_004" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_003" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_008" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_001" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_002" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_007" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_003" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Floor" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </base> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_001" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </base> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Stair" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </stair> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "DOOR2" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </window_frame> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+
+            over "Cube_034"
+            {
+                float3 xformOp:translate = (0, 0, 0)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+        }
+
+        over "BaseFloor" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </base> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "FloweBed1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </ramp> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "DOOR1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </window_frame> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Door1Window" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Glass> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.6999970078468323, 5.867500305175781, 1.3000000715255737)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "WINDOW_004" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Glass> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_006" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Glass> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_006" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </window_frame> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_002" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Glass> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_005" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </window_frame> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "WINDOW_005" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Glass> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+    }
+}
+
+def Material "stair"
+{
+    token cullMode = "unspecified" (
+        allowedTokens = ["unspecified", "none", "front", "back"]
+    )
+    token inputs:frame:stPrimvarName = "st" (
+        customData = {
+            dictionary realitykit = {
+                bool hide = 1
+            }
+        }
+    )
+    token outputs:mtlx:surface.connect = </stair/PreviewSurface.outputs:out>
+    token outputs:realitykit:vertex
+    token outputs:surface.connect = None
+    float2 ui:nodegraph:node:pos = (-345.18976, 44.378433)
+    int ui:nodegraph:node:stackingOrder = 1
+    string[] ui:nodegraph:realitykit:node:attributesShowingChildren = []
+    float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
+    int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 36
+
+    def Shader "UsdPreviewSurface" (
+        active = false
+    )
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.18, 0.18, 0.18)
+        color3f inputs:diffuseColor.connect = </Root/base/Base/diffuseColor.outputs:rgb>
+        float inputs:opacityThreshold
+        float inputs:roughness = 0.5
+        token outputs:surface
+    }
+
+    def Shader "roughness"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </stair/roughness/TexCoordReader.outputs:result>
+        float outputs:r
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
+            float2 outputs:result
+        }
+    }
+
+    def Shader "diffuseColor"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </stair/diffuseColor/TexCoordReader.outputs:result>
+        color3f outputs:rgb
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
+            float2 outputs:result
+        }
+    }
+
+    def Shader "PreviewSurface" (
+        active = true
+    )
+    {
+        uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+        float inputs:clearcoat
+        float inputs:clearcoatRoughness
+        color3f inputs:diffuseColor.connect = </stair/BaseColor.outputs:out>
+        color3f inputs:emissiveColor
+        float inputs:ior
+        float inputs:metallic
+        float3 inputs:normal
+        float inputs:occlusion
+        float inputs:opacity
+        float inputs:opacityThreshold
+        float inputs:roughness
+        token outputs:out
+        float2 ui:nodegraph:node:pos = (-255, 105)
+        int ui:nodegraph:node:stackingOrder = 81
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["Advanced", "inputs:roughness", "inputs:normal"]
+    }
+
+    def Shader "BaseColor"
+    {
+        uniform token info:id = "ND_tiledimage_color3"
+        asset inputs:file = @textures/New Folder/ALbedo.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.05, 0.02)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        color3f outputs:out
+        float2 ui:nodegraph:node:pos = (-520.99097, -77.83184)
+        int ui:nodegraph:node:stackingOrder = 176
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+}
+
+def Material "ramp"
+{
+    token cullMode = "unspecified" (
+        allowedTokens = ["unspecified", "none", "front", "back"]
+    )
+    token inputs:frame:stPrimvarName = "st" (
+        customData = {
+            dictionary realitykit = {
+                bool hide = 1
+            }
+        }
+    )
+    token outputs:mtlx:surface.connect = </ramp/PreviewSurface.outputs:out>
+    token outputs:realitykit:vertex
+    token outputs:surface.connect = </ramp/UsdPreviewSurface.outputs:surface>
+    string[] ui:nodegraph:realitykit:node:attributesShowingChildren = []
+    float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
+    int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 36
+
+    def Shader "UsdPreviewSurface" (
+        active = false
+    )
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.18, 0.18, 0.18)
+        color3f inputs:diffuseColor.connect = </Root/base/Base/diffuseColor.outputs:rgb>
+        float inputs:opacityThreshold
+        float inputs:roughness = 0.5
+        token outputs:surface
+    }
+
+    def Shader "roughness"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </ramp/roughness/TexCoordReader.outputs:result>
+        float outputs:r
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
+            float2 outputs:result
+        }
+    }
+
+    def Shader "diffuseColor"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </ramp/diffuseColor/TexCoordReader.outputs:result>
+        color3f outputs:rgb
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
+            float2 outputs:result
+        }
+    }
+
+    def Shader "PreviewSurface" (
+        active = true
+    )
+    {
+        uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+        float inputs:clearcoat
+        float inputs:clearcoatRoughness
+        color3f inputs:diffuseColor.connect = </ramp/BaseColor.outputs:out>
+        color3f inputs:emissiveColor
+        float inputs:ior
+        float inputs:metallic
+        float3 inputs:normal.connect = </ramp/Normal.outputs:out>
+        float inputs:occlusion.connect = </ramp/Occlusion.outputs:out>
+        float inputs:opacity
+        float inputs:opacityThreshold
+        float inputs:roughness.connect = </ramp/Roughness.outputs:out>
+        token outputs:out
+        float2 ui:nodegraph:node:pos = (-255, 105)
+        int ui:nodegraph:node:stackingOrder = 81
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["Advanced", "inputs:roughness", "inputs:normal"]
+    }
+
+    def Shader "Normal"
+    {
+        uniform token info:id = "ND_tiledimage_vector3"
+        asset inputs:file = @textures/New Folder/노말.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.1, 0.1)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        float3 outputs:out
+        float2 ui:nodegraph:node:pos = (-803.4, -16.935673)
+        int ui:nodegraph:node:stackingOrder = 151
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+
+    def Shader "BaseColor"
+    {
+        uniform token info:id = "ND_tiledimage_color3"
+        asset inputs:file = @textures/New Folder/ALbedo.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.1, 0.1)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        color3f outputs:out
+        float2 ui:nodegraph:node:pos = (-520.99097, -77.83184)
+        int ui:nodegraph:node:stackingOrder = 176
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+
+    def Shader "Occlusion"
+    {
+        uniform token info:id = "ND_tiledimage_float"
+        float inputs:default
+        asset inputs:file = @textures/New Folder/오클.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.1, 0.1)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        float outputs:out
+        float2 ui:nodegraph:node:pos = (-523.5761, 356.6455)
+        int ui:nodegraph:node:stackingOrder = 127
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+
+    def Shader "Roughness"
+    {
+        uniform token info:id = "ND_tiledimage_float"
+        asset inputs:file = @textures/New Folder/러프니스.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.1, 0.1)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        float outputs:out
+        float2 ui:nodegraph:node:pos = (-814.33386, 258.88943)
+        int ui:nodegraph:node:stackingOrder = 118
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+
+    def Shader "Roughness_1"
+    {
+        uniform token info:id = "ND_tiledimage_float"
+        asset inputs:file = @textures/New Folder/메테릭.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.1, 0.1)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        float outputs:out
+        float2 ui:nodegraph:node:pos = (-206.91602, 482.34702)
+        int ui:nodegraph:node:stackingOrder = 134
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+}
+
+def Material "Floor_1"
+{
+    token outputs:mtlx:surface.connect = </Floor_1/PreviewSurface.outputs:out>
+    token outputs:realitykit:vertex
+    float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.5, 100.5)
+
+    def Shader "PreviewSurface"
+    {
+        uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+        color3f inputs:diffuseColor.connect = </Floor_1/TiledImage.outputs:out>
+        float inputs:metallic
+        float3 inputs:normal
+        float inputs:opacity
+        float inputs:roughness
+        token outputs:out
+        float2 ui:nodegraph:node:pos = (93.5, 100.5)
+    }
+
+    def Shader "TiledImage"
+    {
+        uniform token info:id = "ND_tiledimage_color3"
+        asset inputs:file = @textures/New Folder/F.png@
+        string inputs:filtertype
+        float2 inputs:realworldimagesize = (0.05, 0.05)
+        float2 inputs:realworldtilesize
+        color3f outputs:out
+        float2 ui:nodegraph:node:pos = (-177.8789, 129.53516)
+        int ui:nodegraph:node:stackingOrder = 10
+    }
+}
+
+def Material "base"
+{
+    token cullMode = "unspecified" (
+        allowedTokens = ["unspecified", "none", "front", "back"]
+    )
+    token inputs:frame:stPrimvarName = "st" (
+        customData = {
+            dictionary realitykit = {
+                bool hide = 1
+            }
+        }
+    )
+    token outputs:mtlx:surface.connect = </base/PreviewSurface.outputs:out>
+    token outputs:realitykit:vertex
+    token outputs:surface.connect = None
+    float2 ui:nodegraph:node:pos = (-282.2827, -52.350014)
+    int ui:nodegraph:node:stackingOrder = 1
+    string[] ui:nodegraph:realitykit:node:attributesShowingChildren = []
+    float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
+    int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 36
+
+    def Shader "UsdPreviewSurface" (
+        active = false
+    )
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.18, 0.18, 0.18)
+        color3f inputs:diffuseColor.connect = </Root/base/Base/diffuseColor.outputs:rgb>
+        float inputs:opacityThreshold
+        float inputs:roughness = 0.5
+        token outputs:surface
+    }
+
+    def Shader "roughness"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </base/roughness/TexCoordReader.outputs:result>
+        float outputs:r
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = None
+            float2 outputs:result
+        }
+    }
+
+    def Shader "diffuseColor"
+    {
+        uniform token info:id = "UsdUVTexture"
+        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        float2 inputs:st.connect = </base/diffuseColor/TexCoordReader.outputs:result>
+        color3f outputs:rgb
+
+        def Shader "TexCoordReader"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            token inputs:varname.connect = None
+            float2 outputs:result
+        }
+    }
+
+    def Shader "PreviewSurface" (
+        active = true
+    )
+    {
+        uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+        float inputs:clearcoat
+        float inputs:clearcoatRoughness
+        color3f inputs:diffuseColor.connect = </base/BaseColor.outputs:out>
+        color3f inputs:emissiveColor
+        float inputs:ior
+        float inputs:metallic
+        float3 inputs:normal
+        float inputs:occlusion
+        float inputs:opacity
+        float inputs:opacityThreshold
+        float inputs:roughness
+        token outputs:out
+        float2 ui:nodegraph:node:pos = (-255, 105)
+        int ui:nodegraph:node:stackingOrder = 81
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["Advanced", "inputs:roughness", "inputs:normal"]
+    }
+
+    def Shader "BaseColor"
+    {
+        uniform token info:id = "ND_tiledimage_color3"
+        asset inputs:file = @textures/New Folder/ALbedo.png@
+        string inputs:filtertype = "linear"
+        float2 inputs:realworldimagesize = (0.02, 0.02)
+        float2 inputs:realworldtilesize = (1, 1)
+        float2 inputs:texcoord
+        float2 inputs:uvoffset = (1, 1)
+        float2 inputs:uvtiling = (1, 1)
+        color3f outputs:out
+        float2 ui:nodegraph:node:pos = (-520.99097, -77.83184)
+        int ui:nodegraph:node:stackingOrder = 183
+        string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["outputs:out", "inputs:default"]
+    }
+}
+
+def Material "Glass"
+{
+    token outputs:mtlx:surface
+    token outputs:realitykit:vertex
+    token outputs:surface.connect = </Glass/UsdPreviewSurface.outputs:surface>
+
+    def Shader "UsdPreviewSurface"
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.96001047, 1, 0.9575649) (
+            colorSpace = "srgb_texture"
+        )
+        float inputs:metallic = 0.5
+        normal3f inputs:normal = (1, 1, 1)
+        float inputs:opacity = 0.1
+        float inputs:roughness = 0.5
+        token outputs:surface
+    }
+}
+
+def Material "window_frame"
+{
+    token outputs:mtlx:surface
+    token outputs:realitykit:vertex
+    token outputs:surface.connect = </window_frame/UsdPreviewSurface.outputs:surface>
+
+    def Shader "UsdPreviewSurface"
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.14650391, 0.14650391, 0.14650391) (
+            colorSpace = "srgb_texture"
+        )
+        float inputs:metallic = 1
+        token outputs:surface
+    }
+}
+
