@@ -2,10 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSHandsTrackingUsageDescription</key>
+	<string>손으로 휠체어 바퀴를 잡고 굴리기 위해 손 추적을 사용합니다.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.</string>
+	<key>NSWorldSensingUsageDescription</key>
+	<string>몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
