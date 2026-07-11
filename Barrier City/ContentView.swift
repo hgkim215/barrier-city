@@ -2,25 +2,13 @@
 //  ContentView.swift
 //  Barrier City
 //
-//  Created by mac on 6/25/26.
-//
 
 import SwiftUI
-import RealityKit
-import RealityKitContent
 
+/// 창(2D) 콘텐츠: 휠체어 컨트롤 패널(시작/종료 + 시뮬 디버그 입력 + 진단).
 struct ContentView: View {
-
     var body: some View {
-        VStack {
-            Model3D(named: "Scene", bundle: realityKitContentBundle)
-                .padding(.bottom, 50)
-
-            Text("Hello, world!")
-
-            ToggleImmersiveSpaceButton()
-        }
-        .padding()
+        ControlPanelView()
     }
 }
 
