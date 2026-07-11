@@ -7,6 +7,8 @@ struct ControlPanelView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
+    @State private var isImmersiveTransitioning = false
+    @State private var immersiveError: String?
 
     var body: some View {
         @Bindable var model = model
@@ -42,17 +44,46 @@ struct ControlPanelView: View {
 
             if model.isImmersive {
                 Button(role: .destructive) {
-                    Task { await dismissSpace() }
+                    Task { @MainActor in
+                        guard !isImmersiveTransitioning else { return }
+                        isImmersiveTransitioning = true
+                        await dismissSpace()
+                        isImmersiveTransitioning = false
+                    }
                 } label: {
                     Label("체험 종료", systemImage: "xmark.circle.fill")
                 }
             } else {
                 Button {
-                    Task { await openSpace(id: "wheelchair") }
+                    Task { @MainActor in
+                        guard !isImmersiveTransitioning else { return }
+                        isImmersiveTransitioning = true
+                        immersiveError = nil
+                        defer { isImmersiveTransitioning = false }
+
+                        switch await openSpace(id: "wheelchair") {
+                        case .opened:
+                            break
+                        case .userCancelled:
+                            immersiveError = "몰입 공간 열기가 취소되었습니다."
+                        case .error:
+                            immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+                        @unknown default:
+                            immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                        }
+                    }
                 } label: {
-                    Label("체험 시작", systemImage: "figure.roll")
+                    Label(isImmersiveTransitioning ? "여는 중…" : "체험 시작",
+                          systemImage: "figure.roll")
                 }
                 .buttonStyle(.borderedProminent)
+            }
+
+            if let immersiveError {
+                Text(immersiveError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
             }
 
             Divider()
@@ -122,6 +153,7 @@ struct ControlPanelView: View {
         }
         .padding(28)
         .frame(width: 460)
+        .disabled(isImmersiveTransitioning)
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {

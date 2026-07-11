@@ -131,12 +131,12 @@
 			);
 			mainGroup = 045073FD2FED0B25008DEC5E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */,
+				DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 045074072FED0B25008DEC5E /* Products */;
-			packageReferences = (
-				DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */,
-				DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */,
-			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -173,10 +173,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PNDHN9YB2X;
+				DEVELOPMENT_TEAM = H2WD8C55D7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "손으로 휠체어 바퀴를 잡고 굴리기 위해 손 추적을 사용합니다.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -203,10 +207,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PNDHN9YB2X;
+				DEVELOPMENT_TEAM = H2WD8C55D7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "손으로 휠체어 바퀴를 잡고 굴리기 위해 손 추적을 사용합니다.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -371,11 +379,11 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */ = {
+		DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/RealityKitContent;
 		};
-		DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */ = {
+		DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DialogueKit;
 		};
@@ -384,17 +392,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		0450740B2FED0B25008DEC5E /* RealityKitContent */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */;
+			package = DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */;
 			productName = RealityKitContent;
 		};
 		DA1A000000000000000000D1 /* DialogueKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */;
 			productName = DialogueKit;
 		};
 		DA1A000000000000000000D2 /* DialogueKitOpenAI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */;
 			productName = DialogueKitOpenAI;
 		};
 /* End XCSwiftPackageProductDependency section */

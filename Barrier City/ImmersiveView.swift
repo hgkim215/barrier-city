@@ -169,7 +169,6 @@ struct ImmersiveView: View {
         .onAppear {
             model.isImmersive = true
             AppModel.current = model
-            ImpactAudio.shared.prepare()   // 충돌/덜컹 소리 준비
         }
         .onDisappear {
             model.isImmersive = false

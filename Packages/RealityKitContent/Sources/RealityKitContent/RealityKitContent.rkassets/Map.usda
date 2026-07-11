@@ -376,7 +376,7 @@ def Material "stair"
     def Shader "roughness"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/roughness.png@
         float2 inputs:st.connect = </stair/roughness/TexCoordReader.outputs:result>
         float outputs:r
 
@@ -391,7 +391,7 @@ def Material "stair"
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/ALbedo.png@
         float2 inputs:st.connect = </stair/diffuseColor/TexCoordReader.outputs:result>
         color3f outputs:rgb
 
@@ -476,7 +476,7 @@ def Material "ramp"
     def Shader "roughness"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/roughness.png@
         float2 inputs:st.connect = </ramp/roughness/TexCoordReader.outputs:result>
         float outputs:r
 
@@ -491,7 +491,7 @@ def Material "ramp"
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/ALbedo.png@
         float2 inputs:st.connect = </ramp/diffuseColor/TexCoordReader.outputs:result>
         color3f outputs:rgb
 
@@ -674,7 +674,7 @@ def Material "base"
     def Shader "roughness"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/roughness.png@
         float2 inputs:st.connect = </base/roughness/TexCoordReader.outputs:result>
         float outputs:r
 
@@ -689,7 +689,7 @@ def Material "base"
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
-        asset inputs:file = @textures/스크린샷 2026-06-22 오후 5.31.05.png@
+        asset inputs:file = @textures/New Folder/ALbedo.png@
         float2 inputs:st.connect = </base/diffuseColor/TexCoordReader.outputs:result>
         color3f outputs:rgb
 
@@ -776,4 +776,3 @@ def Material "window_frame"
         token outputs:surface
     }
 }
-
