@@ -16,11 +16,6 @@ final class AppModel {
     /// (약한 참조로 두면 버려진 인스턴스/해제로 nil이 될 수 있어 strong으로 보관)
     static var current: AppModel?
 
-    // MARK: - 몰입공간 상태(Barrier_CityApp / ToggleImmersiveSpaceButton에서 사용)
-    let immersiveSpaceID = "ImmersiveSpace"
-    enum ImmersiveSpaceState { case closed, inTransition, open }
-    var immersiveSpaceState = ImmersiveSpaceState.closed
-
     // MARK: - 엔티티 참조(System이 직접 제어). 관찰 대상 아님.
     /// 캐릭터 캡슐(CharacterControllerComponent). 시뮬 공간에서 실제로 움직이며 충돌.
     @ObservationIgnored var characterBody: Entity?

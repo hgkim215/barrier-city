@@ -48,7 +48,7 @@ struct ControlPanelView: View {
                 }
             } else {
                 Button {
-                    Task { await openSpace(id: "ImmersiveSpace") }
+                    Task { await openSpace(id: "wheelchair") }
                 } label: {
                     Label("체험 시작", systemImage: "figure.roll")
                 }
