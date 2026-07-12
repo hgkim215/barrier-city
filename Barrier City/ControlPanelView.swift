@@ -112,6 +112,9 @@ struct ControlPanelView: View {
 
                     Text("좌/우를 번갈아 밀면 곡선 주행, 한쪽만 반복하면 제자리 회전에 가까워집니다.")
                         .font(.caption2).foregroundStyle(.secondary)
+
+                    Divider()
+                    JoystickControlView()
                 }
             }
 
