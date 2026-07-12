@@ -177,6 +177,10 @@ struct ImmersiveView: View {
             Attachment(id: "entryPrompt") {
                 EntryPromptView()
             }
+            // [김현기] 키오스크 주문 화면(고정 높이 장벽은 InteractionSetup이 처리)
+            Attachment(id: "kioskScreen") {
+                KioskOrderView()
+            }
         }
         .onAppear {
             model.isImmersive = true
