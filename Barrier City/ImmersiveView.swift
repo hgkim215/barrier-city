@@ -89,9 +89,11 @@ struct ImmersiveView: View {
             keyLight.look(at: [0, 0, 0], from: [3, 6, 4], relativeTo: nil)
             content.add(keyLight)
 
+            // 보조광: 방향광으로 둔다(점광원은 매트한 실내 바닥에 원형 빛 웅덩이를
+            // 만들어 거슬리므로). 주광 반대편에서 부드럽게 채운다.
             let fillLight = Entity()
-            fillLight.components.set(PointLightComponent(color: .white, intensity: 6000, attenuationRadius: 30))
-            fillLight.position = [0, 4, 2]
+            fillLight.components.set(DirectionalLightComponent(color: .white, intensity: 1500))
+            fillLight.look(at: [0, 0, 0], from: [-3, 5, -2], relativeTo: nil)
             content.add(fillLight)
 
             // 휠체어 USDZ(본체 + 뒷바퀴 분리). 사용자 기준 고정(content)에 둔다.
