@@ -32,7 +32,7 @@ enum InteractionSetup {
         im.dismissedTriggerID = nil
         im.isTransitioning = false
         im.transitionError = nil
-        im.staffCalled = false
+        im.kioskTooHighShown = false
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
@@ -94,40 +94,46 @@ enum InteractionSetup {
         if im.activeTrigger?.id != verdict.showID {
             im.activeTrigger = verdict.showID.flatMap { id in im.triggers.first { $0.id == id } }
             if im.activeTrigger == nil { im.transitionError = nil }   // 닫힐 때 안내 문구도 정리
+            im.kioskTooHighShown = false   // 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋
         }
         updatePanel(im)
     }
 
-    /// 활성 트리거의 kind에 따라 알맞은 패널만 표시·배치한다.
+    /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).
+    /// 키오스크는 박스에 묻히지 않도록 사용자 쪽으로 당겨(forwardOffset) 표면 앞에 띄운다.
     private static func updatePanel(_ im: InteractionModel) {
         let trigger = im.activeTrigger
+        showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
+                      trigger: trigger, forwardOffset: 0)
+        showBillboard(im.kioskPanelEntity, active: trigger?.kind == .kioskScreen,
+                      trigger: trigger, forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+    }
 
-        // 문 예/아니요 패널: 눈높이 + 사용자를 향한 yaw 빌보드.
-        if let entry = im.panelEntity {
-            if let t = trigger, t.kind == .yesNoPrompt {
-                entry.isEnabled = true
-                entry.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
-                                  relativeTo: entry.parent)
-                let worldPos = entry.position(relativeTo: nil)
-                let yaw = atan2(-worldPos.x, -worldPos.z)
-                entry.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
-            } else {
-                entry.isEnabled = false
-            }
+    /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, forwardOffset만큼 사용자(세계 원점)
+    /// 쪽으로 당긴 뒤 사용자를 향하도록 yaw 빌보드. 빌보드라 접근 각도와 무관하게 정면으로 보인다.
+    private static func showBillboard(_ panel: Entity?, active: Bool,
+                                      trigger: ProximityTrigger?, forwardOffset: Float) {
+        guard let panel else { return }
+        guard active, let t = trigger else {
+            panel.isEnabled = false
+            return
         }
-
-        // 키오스크 화면: 서 있는 눈높이 + 고정 방향(빌보드 안 함 = 높이 장벽 연출).
-        // 방향은 맵 로컬(부모=worldRoot) 기준이라 키오스크에 붙박이처럼 고정된다.
-        if let kiosk = im.kioskPanelEntity {
-            if let t = trigger, t.kind == .kioskScreen {
-                kiosk.isEnabled = true
-                kiosk.setPosition([t.center.x, InteractionTuning.kioskScreenHeight, t.center.y],
-                                  relativeTo: kiosk.parent)
-                kiosk.setOrientation(simd_quatf(angle: InteractionTuning.kioskScreenYaw, axis: [0, 1, 0]),
-                                     relativeTo: kiosk.parent)
-            } else {
-                kiosk.isEnabled = false
-            }
+        panel.isEnabled = true
+        // 1) 트리거 중심 위 눈높이(맵 로컬)에 놓고 월드 위치를 얻는다.
+        panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
+                          relativeTo: panel.parent)
+        var worldPos = panel.position(relativeTo: nil)
+        // 2) 사용자(세계 원점)를 향하는 수평 방향으로 forwardOffset만큼 당겨 표면 앞으로.
+        let horiz = SIMD2(worldPos.x, worldPos.z)
+        let dist = simd_length(horiz)
+        if forwardOffset > 0, dist > 0.001 {
+            let pulled = horiz - (horiz / dist) * forwardOffset   // 원점 쪽으로 당김
+            worldPos.x = pulled.x
+            worldPos.z = pulled.y
+            panel.setPosition(worldPos, relativeTo: nil)
         }
+        // 3) 사용자를 향하도록 yaw 빌보드.
+        let yaw = atan2(-worldPos.x, -worldPos.z)
+        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
     }
 }

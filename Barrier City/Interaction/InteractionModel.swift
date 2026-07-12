@@ -75,13 +75,10 @@ enum InteractionTuning {
     /// 문 패널 문구
     static let doorPrompt = "안으로 입장하시겠습니까?"
 
-    /// 키오스크 트리거 진입 반경(m)
-    static let kioskTriggerRadius: Float = 2.0
-    /// 키오스크 화면 중심 높이(m, 맵 좌표 y). 서 있는 눈높이 → 앉으면 올려다봄.
-    static let kioskScreenHeight: Float = 1.5
-    /// 키오스크 화면이 향하는 방향(라디안, 맵 좌표 yaw 고정. 빌보드 안 함).
-    /// 0 = 방 안쪽(+Z)을 향함. 시뮬레이터에서 실측 조정.
-    static let kioskScreenYaw: Float = 0
+    /// 키오스크 트리거 진입 반경(m). 휠체어로 접근할 때 스치듯 지나가지 않게 넉넉히.
+    static let kioskTriggerRadius: Float = 3.0
+    /// 키오스크 패널을 키오스크 표면에서 사용자 쪽으로 당기는 거리(m). 박스에 안 묻히게.
+    static let kioskPanelForwardOffset: Float = 0.8
     /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(카운터 좌측 부근 추정. 실측 조정).
     static let kioskFallbackCenter = SIMD2<Float>(-4, -4)
     /// 키오스크 화면 타이틀 겸 트리거 prompt 값.
@@ -121,8 +118,9 @@ final class InteractionModel {
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?
-    /// 키오스크에서 "직원 호출"을 누른 상태(스텁). 재진입 시 install에서 리셋.
-    var staffCalled = false
+    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
+    /// 트리거 이탈/재진입 시 리셋.
+    var kioskTooHighShown = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.

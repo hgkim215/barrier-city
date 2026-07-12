@@ -68,9 +68,11 @@ enum SceneSwitcher {
         //    Kiosk 프림의 맵 좌표(worldRoot 기준)를 찾고, 실패 시 폴백 상수(문 DOOR1 패턴 동일).
         var kioskCenter = InteractionTuning.kioskFallbackCenter
         if let kiosk = indoorVisible.findEntity(named: "Kiosk") {
-            let p = kiosk.position(relativeTo: worldRoot)
-            kioskCenter = SIMD2(p.x, p.z)
-            print("키오스크 트리거: Kiosk 위치 사용 (\(p.x), \(p.z))")
+            // 트리거 중심은 엔티티 원점(pivot)이 아니라 '보이는 메시의 중심'(visualBounds)으로.
+            // 메시가 pivot에서 벗어나 있으면 원점과 실제 키오스크 위치가 다르다.
+            let b = kiosk.visualBounds(relativeTo: worldRoot)
+            kioskCenter = SIMD2(b.center.x, b.center.z)
+            print("키오스크 트리거 등록: (\(b.center.x), \(b.center.z))")
         } else {
             print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
         }
@@ -84,7 +86,7 @@ enum SceneSwitcher {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.staffCalled = false
+        im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
         im.kioskPanelEntity?.isEnabled = false
     }
