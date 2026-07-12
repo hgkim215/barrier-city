@@ -17,6 +17,14 @@ enum GameScene {
     case indoor
 }
 
+/// 트리거가 활성화됐을 때 띄우는 UI 종류.
+enum TriggerKind {
+    /// 예/아니요 확인 패널(문 등)
+    case yesNoPrompt
+    /// 키오스크 주문 화면(고정 높이 장벽)
+    case kioskScreen
+}
+
 /// 근접 인터랙션 트리거 하나(문·키오스크 등). 순수 값 타입.
 struct ProximityTrigger: Identifiable, Equatable {
     /// 고유 id (예: "door.enter")
@@ -25,12 +33,27 @@ struct ProximityTrigger: Identifiable, Equatable {
     let center: SIMD2<Float>
     /// 진입 반경(m)
     let radius: Float
-    /// 패널에 표시할 질문 문구
+    /// 활성화 시 띄울 UI 종류
+    let kind: TriggerKind
+    /// 패널에 표시할 질문 문구(kioskScreen은 화면 타이틀로 사용)
     let prompt: String
-    /// 확인 버튼 라벨
+    /// 확인 버튼 라벨(yesNoPrompt 전용)
     let confirmLabel: String
-    /// 취소 버튼 라벨
+    /// 취소 버튼 라벨(yesNoPrompt 전용)
     let cancelLabel: String
+
+    /// kind 기본값 .yesNoPrompt, 라벨 기본값 ""이라 기존 문 트리거 생성부는 무수정.
+    init(id: String, center: SIMD2<Float>, radius: Float,
+         kind: TriggerKind = .yesNoPrompt,
+         prompt: String, confirmLabel: String = "", cancelLabel: String = "") {
+        self.id = id
+        self.center = center
+        self.radius = radius
+        self.kind = kind
+        self.prompt = prompt
+        self.confirmLabel = confirmLabel
+        self.cancelLabel = cancelLabel
+    }
 }
 
 /// 인터랙션 튜닝 상수 단일 진실원(시뮬레이터에서 보고 조정).
@@ -51,6 +74,18 @@ enum InteractionTuning {
     static let indoorSpawnHeading: Float = 0
     /// 문 패널 문구
     static let doorPrompt = "안으로 입장하시겠습니까?"
+
+    /// 키오스크 트리거 진입 반경(m)
+    static let kioskTriggerRadius: Float = 2.0
+    /// 키오스크 화면 중심 높이(m, 맵 좌표 y). 서 있는 눈높이 → 앉으면 올려다봄.
+    static let kioskScreenHeight: Float = 1.5
+    /// 키오스크 화면이 향하는 방향(라디안, 맵 좌표 yaw 고정. 빌보드 안 함).
+    /// 0 = 방 안쪽(+Z)을 향함. 시뮬레이터에서 실측 조정.
+    static let kioskScreenYaw: Float = 0
+    /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(카운터 좌측 부근 추정. 실측 조정).
+    static let kioskFallbackCenter = SIMD2<Float>(-4, -4)
+    /// 키오스크 화면 타이틀 겸 트리거 prompt 값.
+    static let kioskTitle = "주문하기"
 }
 
 /// evaluate의 판정 결과.
@@ -82,8 +117,12 @@ final class InteractionModel {
     var transitionError: String?
 
     // MARK: - 엔티티·구독 참조(관찰 대상 아님)
-    /// 패널 attachment 엔티티(worldRoot 자식).
+    /// 문 예/아니요 패널 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var panelEntity: Entity?
+    /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
+    @ObservationIgnored var kioskPanelEntity: Entity?
+    /// 키오스크에서 "직원 호출"을 누른 상태(스텁). 재진입 시 install에서 리셋.
+    var staffCalled = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.
