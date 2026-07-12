@@ -181,6 +181,10 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskOrderView()
             }
+            // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
+            Attachment(id: "questHUD") {
+                QuestHUDView()
+            }
         }
         .onAppear {
             model.isImmersive = true

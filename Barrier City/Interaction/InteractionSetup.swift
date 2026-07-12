@@ -76,6 +76,9 @@ enum InteractionSetup {
         im.updateSubscription = content.subscribe(to: SceneEvents.Update.self) { _ in
             tick()
         }
+
+        // 4) [김현기] 퀘스트 가이드 HUD 설치(HUD는 씬 루트에 붙고 head를 따라간다).
+        QuestSetup.install(content: content, attachments: attachments, appModel: appModel)
     }
 
     /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치·빌보드.
