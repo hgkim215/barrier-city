@@ -37,6 +37,7 @@ struct KioskOrderView: View {
                     .foregroundStyle(.secondary)
                 Button {
                     im.kioskTooHighShown = true
+                    QuestModel.shared.advance(on: .kioskFailed)
                 } label: {
                     Label("키오스크 사용하기", systemImage: "hand.tap.fill")
                         .font(.title2)
