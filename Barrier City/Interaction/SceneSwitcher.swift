@@ -64,13 +64,29 @@ enum SceneSwitcher {
         app.posZ = InteractionTuning.indoorSpawnZ
         app.heading = InteractionTuning.indoorSpawnHeading
 
-        // 5) 인터랙션 상태 전환: 실내 트리거는 1차 스코프에 없음(Kiosk는 다음 단계)
+        // 5) 인터랙션 상태 전환: 실내에는 키오스크 트리거를 등록한다.
+        //    Kiosk 프림의 맵 좌표(worldRoot 기준)를 찾고, 실패 시 폴백 상수(문 DOOR1 패턴 동일).
+        var kioskCenter = InteractionTuning.kioskFallbackCenter
+        if let kiosk = indoorVisible.findEntity(named: "Kiosk") {
+            let p = kiosk.position(relativeTo: worldRoot)
+            kioskCenter = SIMD2(p.x, p.z)
+            print("키오스크 트리거: Kiosk 위치 사용 (\(p.x), \(p.z))")
+        } else {
+            print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
+        }
         im.scene = .indoor
-        im.triggers = []
+        im.triggers = [ProximityTrigger(
+            id: "kiosk.order",
+            center: kioskCenter,
+            radius: InteractionTuning.kioskTriggerRadius,
+            kind: .kioskScreen,
+            prompt: InteractionTuning.kioskTitle)]
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
+        im.staffCalled = false
         im.panelEntity?.isEnabled = false
+        im.kioskPanelEntity?.isEnabled = false
     }
 
     /// Indoor 프로토타입의 검정 벽 임시 보정: 모든 메시를 밝은 단색으로 덮어쓴다.
