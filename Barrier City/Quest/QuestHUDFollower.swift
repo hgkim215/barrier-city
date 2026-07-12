@@ -74,6 +74,8 @@ final class QuestHUDFollower {
         }
     }
 
+    /// 세션 정리용. 현재 팀원 파일(ImmersiveView.onDisappear) 경계 때문에 호출 지점이
+    /// 없어 도달하지 않는다. NPC 작업으로 팀원 파일 수정이 열리면 onDisappear에 연결한다.
     func stop() {
         running = false
         session.stop()
