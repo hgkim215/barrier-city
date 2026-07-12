@@ -23,6 +23,16 @@ enum InteractionSetup {
                         appModel: AppModel) {
         let im = InteractionModel.shared
 
+        // 0) 매 진입마다 Outdoor 초기 상태로 리셋.
+        //    InteractionModel은 싱글턴이라 '체험 종료' 후에도 상태가 남는다. 첫 입장에서
+        //    scene이 .indoor가 된 채 재진입하면 switchToIndoor의 `scene == .outdoor` 가드가
+        //    막혀 "예"를 눌러도 전환이 안 되던 버그를 방지한다.
+        im.scene = .outdoor
+        im.activeTrigger = nil
+        im.dismissedTriggerID = nil
+        im.isTransitioning = false
+        im.transitionError = nil
+
         // 1) 패널 attachment를 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
         if let panel = attachments.entity(for: "entryPrompt"), let worldRoot = appModel.worldRoot {
             panel.isEnabled = false

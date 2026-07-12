@@ -14,24 +14,26 @@ struct EntryPromptView: View {
         // @Observable 싱글턴: body에서 읽는 프로퍼티가 관찰 의존성이 된다.
         let im = InteractionModel.shared
 
-        VStack(spacing: 14) {
+        VStack(spacing: 22) {
             Text(im.activeTrigger?.prompt ?? "")
-                .font(.title3).bold()
+                .font(.title).bold()
                 .multilineTextAlignment(.center)
 
             if let error = im.transitionError {
                 Text(error)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 16) {
                 Button {
                     im.dismissActive()
                 } label: {
                     Text(im.activeTrigger?.cancelLabel ?? "아니요")
-                        .frame(minWidth: 80)
+                        .font(.title3)
+                        .frame(minWidth: 120)
+                        .padding(.vertical, 4)
                 }
                 .buttonStyle(.bordered)
 
@@ -39,14 +41,16 @@ struct EntryPromptView: View {
                     Task { await SceneSwitcher.switchToIndoor() }
                 } label: {
                     Text(im.activeTrigger?.confirmLabel ?? "예")
-                        .frame(minWidth: 80)
+                        .font(.title3)
+                        .frame(minWidth: 120)
+                        .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
             }
             .disabled(im.isTransitioning)
         }
-        .padding(24)
-        .frame(width: 340)
+        .padding(40)
+        .frame(width: 560)
         .glassBackgroundEffect()
     }
 }
