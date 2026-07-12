@@ -32,14 +32,26 @@ enum InteractionSetup {
         im.dismissedTriggerID = nil
         im.isTransitioning = false
         im.transitionError = nil
+        im.staffCalled = false
 
-        // 1) 패널 attachment를 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
-        if let panel = attachments.entity(for: "entryPrompt"), let worldRoot = appModel.worldRoot {
-            panel.isEnabled = false
-            worldRoot.addChild(panel)
-            im.panelEntity = panel
+        // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
+        if let worldRoot = appModel.worldRoot {
+            if let panel = attachments.entity(for: "entryPrompt") {
+                panel.isEnabled = false
+                worldRoot.addChild(panel)
+                im.panelEntity = panel
+            } else {
+                print("⚠️ entryPrompt attachment 없음 — 문 패널 비활성")
+            }
+            if let kiosk = attachments.entity(for: "kioskScreen") {
+                kiosk.isEnabled = false
+                worldRoot.addChild(kiosk)
+                im.kioskPanelEntity = kiosk
+            } else {
+                print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
+            }
         } else {
-            print("⚠️ entryPrompt attachment 또는 worldRoot 없음 — 인터랙션 패널 비활성")
+            print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
         }
 
         // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
@@ -86,21 +98,36 @@ enum InteractionSetup {
         updatePanel(im)
     }
 
-    /// 패널을 트리거 위 눈높이에 놓고, 사용자(세계 원점 부근)를 바라보게 yaw 빌보드.
+    /// 활성 트리거의 kind에 따라 알맞은 패널만 표시·배치한다.
     private static func updatePanel(_ im: InteractionModel) {
-        guard let panel = im.panelEntity else { return }
-        guard let trigger = im.activeTrigger else {
-            panel.isEnabled = false
-            return
+        let trigger = im.activeTrigger
+
+        // 문 예/아니요 패널: 눈높이 + 사용자를 향한 yaw 빌보드.
+        if let entry = im.panelEntity {
+            if let t = trigger, t.kind == .yesNoPrompt {
+                entry.isEnabled = true
+                entry.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
+                                  relativeTo: entry.parent)
+                let worldPos = entry.position(relativeTo: nil)
+                let yaw = atan2(-worldPos.x, -worldPos.z)
+                entry.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
+            } else {
+                entry.isEnabled = false
+            }
         }
-        panel.isEnabled = true
-        // 위치: 맵 좌표(worldRoot 로컬) — 트리거 중심 위 panelHeight.
-        panel.setPosition([trigger.center.x, InteractionTuning.panelHeight, trigger.center.y],
-                          relativeTo: panel.parent)
-        // 빌보드: 사용자는 항상 세계 원점 부근(세계가 역변환으로 움직이므로).
-        // 패널의 세계 위치에서 원점을 향하는 yaw만 적용한다.
-        let worldPos = panel.position(relativeTo: nil)
-        let yaw = atan2(-worldPos.x, -worldPos.z)
-        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
+
+        // 키오스크 화면: 서 있는 눈높이 + 고정 방향(빌보드 안 함 = 높이 장벽 연출).
+        // 방향은 맵 로컬(부모=worldRoot) 기준이라 키오스크에 붙박이처럼 고정된다.
+        if let kiosk = im.kioskPanelEntity {
+            if let t = trigger, t.kind == .kioskScreen {
+                kiosk.isEnabled = true
+                kiosk.setPosition([t.center.x, InteractionTuning.kioskScreenHeight, t.center.y],
+                                  relativeTo: kiosk.parent)
+                kiosk.setOrientation(simd_quatf(angle: InteractionTuning.kioskScreenYaw, axis: [0, 1, 0]),
+                                     relativeTo: kiosk.parent)
+            } else {
+                kiosk.isEnabled = false
+            }
+        }
     }
 }
