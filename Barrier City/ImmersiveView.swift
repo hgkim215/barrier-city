@@ -36,7 +36,7 @@ struct ImmersiveView: View {
         let _ = (model.leftGrabbed, model.rightGrabbed,
                  model.wheelAngleLeft, model.wheelAngleRight)
 
-        return RealityView { content in
+        return RealityView { content, attachments in
             // System이 읽을 입력 소스를 '실제 화면에 쓰이는' 이 모델로 고정.
             AppModel.current = model
 
@@ -48,6 +48,7 @@ struct ImmersiveView: View {
                 Self.stripPhysics(cafeVisible)    // USDA에 딸려온 RigidBody 제거(메시가 떨어지지 않게)
                 Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
                 worldRoot.addChild(cafeVisible)
+                InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
             } else {
                 print("⚠️ Immersive.usda(시각) 로드 실패 — 이름/번들 확인")
             }
@@ -62,6 +63,7 @@ struct ImmersiveView: View {
                 model.collisionShapes = n
                 cafeCollision.components.set(OpacityComponent(opacity: 0))   // 안 보이게(충돌만)
                 content.add(cafeCollision)
+                InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
             } else {
                 print("⚠️ Immersive.usda(콜리전) 로드 실패")
             }
@@ -87,9 +89,11 @@ struct ImmersiveView: View {
             keyLight.look(at: [0, 0, 0], from: [3, 6, 4], relativeTo: nil)
             content.add(keyLight)
 
+            // 보조광: 방향광으로 둔다(점광원은 매트한 실내 바닥에 원형 빛 웅덩이를
+            // 만들어 거슬리므로). 주광 반대편에서 부드럽게 채운다.
             let fillLight = Entity()
-            fillLight.components.set(PointLightComponent(color: .white, intensity: 6000, attenuationRadius: 30))
-            fillLight.position = [0, 4, 2]
+            fillLight.components.set(DirectionalLightComponent(color: .white, intensity: 1500))
+            fillLight.look(at: [0, 0, 0], from: [-3, 5, -2], relativeTo: nil)
             content.add(fillLight)
 
             // 휠체어 USDZ(본체 + 뒷바퀴 분리). 사용자 기준 고정(content)에 둔다.
@@ -157,7 +161,10 @@ struct ImmersiveView: View {
                 print("⚠️ WhellChair.usdz 로드 실패 — 이름/번들 확인")
             }
 
-        } update: { _ in
+            // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
+            InteractionSetup.install(content: content, attachments: attachments, appModel: model)
+
+        } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
             applyRoll(leftWheel, angle: model.wheelAngleLeft)
@@ -165,6 +172,19 @@ struct ImmersiveView: View {
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
             setMaterials(leftWheelMesh, model.leftGrabbed ? leftHiMats : leftBaseMats)
             setMaterials(rightWheelMesh, model.rightGrabbed ? rightHiMats : rightBaseMats)
+        } attachments: {
+            // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
+            Attachment(id: "entryPrompt") {
+                EntryPromptView()
+            }
+            // [김현기] 키오스크 주문 화면(고정 높이 장벽은 InteractionSetup이 처리)
+            Attachment(id: "kioskScreen") {
+                KioskOrderView()
+            }
+            // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
+            Attachment(id: "questHUD") {
+                QuestHUDView()
+            }
         }
         .onAppear {
             model.isImmersive = true
@@ -233,7 +253,7 @@ struct ImmersiveView: View {
     /// 이름에 "collision"이 들어간 엔티티(또는 그 하위)의 메시에만 정적 콜리전을 부여한다.
     /// → 디테일 모델은 시각용, 단순 도형(이름에 collision)은 충돌용으로 분리. 부여 수 반환.
     @discardableResult
-    private static func addStaticCollision(_ entity: Entity, inherited: Bool = false) async -> Int {
+    static func addStaticCollision(_ entity: Entity, inherited: Bool = false) async -> Int {
         let isCollider = inherited || entity.name.lowercased().contains("collision")
         var count = 0
         if isCollider,
@@ -251,7 +271,7 @@ struct ImmersiveView: View {
     }
 
     /// USDA에 딸려온 물리(RigidBody)/콜리전을 제거 — 물리·충돌은 코드에서만 관리.
-    private static func stripPhysics(_ entity: Entity) {
+    static func stripPhysics(_ entity: Entity) {
         entity.components.remove(PhysicsBodyComponent.self)
         entity.components.remove(PhysicsMotionComponent.self)
         entity.components.remove(CollisionComponent.self)
