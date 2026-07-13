@@ -5,6 +5,7 @@ import SwiftUI
 struct ControlPanelView: View {
 
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
     @State private var isImmersiveTransitioning = false
@@ -85,6 +86,14 @@ struct ControlPanelView: View {
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             }
+
+            Button {
+                openWindow(id: "npc-dialogue-test")
+            } label: {
+                Label("NPC와 대화 시작하기", systemImage: "person.wave.2.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
 
             Divider()
 

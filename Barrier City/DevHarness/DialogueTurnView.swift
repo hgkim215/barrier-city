@@ -11,10 +11,11 @@ import SwiftUI
 struct DialogueTurnView: View {
     @State private var ctrl = NPCDialogueController()
     @State private var pressing = false
+    @State private var beginListeningTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("NPC 대화 한 턴 (T6)").font(.headline)
+            Text("AI NPC 대화 테스트").font(.title2).bold()
 
             Text("상태: \(ctrl.status.rawValue)   ·   호감도 \(String(format: "%.2f", ctrl.rapport))")
                 .font(.caption).foregroundStyle(.secondary)
@@ -41,14 +42,24 @@ struct DialogueTurnView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in
-                            if !pressing { pressing = true; Task { await ctrl.beginListening() } }
+                            guard !pressing else { return }
+                            pressing = true
+                            beginListeningTask = Task { await ctrl.beginListening() }
                         }
                         .onEnded { _ in
-                            pressing = false; Task { await ctrl.endTurn() }
+                            pressing = false
+                            let beginTask = beginListeningTask
+                            beginListeningTask = nil
+                            Task {
+                                await beginTask?.value
+                                await ctrl.endTurn()
+                            }
                         }
                 )
                 .disabled(ctrl.status == .thinking || ctrl.status == .speaking)
         }
         .padding(24)
+        .frame(width: 520)
+        .frame(minHeight: 320)
     }
 }
