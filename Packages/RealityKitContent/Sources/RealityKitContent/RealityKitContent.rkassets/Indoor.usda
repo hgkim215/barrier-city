@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Indoor", "Kiosk", "wall", "kiosk"]
+    reorder nameChildren = ["Indoor", "Kiosk", "Door", "Collision", "wall", "kiosk"]
     def Material "wall"
     {
         token outputs:mtlx:surface
@@ -46,7 +46,7 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        prepend references = @Indoor.usdz@
+        references = @Indoor.usdz@
     )
     {
         rel material:binding = </Root/wall> (
@@ -64,7 +64,7 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        prepend references = @Kiosk.usdz@
+        references = @Kiosk.usdz@
     )
     {
         rel material:binding = </Root/kiosk> (
@@ -74,6 +74,252 @@ def Xform "Root"
         float3 xformOp:scale = (1, 1, 1)
         float3 xformOp:translate = (0, 0.003, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def "Door" (
+        active = true
+        prepend apiSchemas = ["MaterialBindingAPI"]
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @Door.usdz@
+    )
+    {
+        rel material:binding = </Root/kiosk> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (0.9, 0.9, 0.9)
+        float3 xformOp:translate = (0, -0.19999999, -0.6852033)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def Xform "Collision" (
+        active = true
+    )
+    {
+        reorder nameChildren = ["_4T", "_4T_2", "_2T_1", "_2T_2", "_2T_3", "_2T_4", "_2T_5", "_2T", "BT", "Wall", "_4T_4"]
+        def Cube "_4T" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_4T/DefaultMaterial>
+            double size = 0.2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (11.5, 3, 6)
+            float3 xformOp:translate = (-3.5449097, 0.35768867, -4.607517)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_4T_2" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_4T_2/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (20, 20)
+            int ui:nodegraph:node:stackingOrder = 1
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (11.5, 3, 6)
+            float3 xformOp:translate = (-3.5449097, 0.35768867, -2.3114257)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T_1" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T_1/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (40, 40)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-5.780175, 0.41373026, -2.3018415)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T_2" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T_2/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (40, 40)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-5.780175, 0.41373026, -0.012383699)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T_3" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T_3/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (40, 40)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-5.780175, 0.41373026, -4.616665)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T_4" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T_4/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (60, 60)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-7.6474924, 0.41373026, -4.616665)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T_5" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T_5/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (60, 60)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-7.6653447, 0.41373026, -2.3018415)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_2T" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/_2T/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (60, 60)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (3.5, 4, 9)
+            float3 xformOp:translate = (-7.6273713, 0.41373026, -0.012383699)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "BT" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/BT/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (40, 40)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (30, 4, 27)
+            float3 xformOp:translate = (4.9125957, 0.35768524, -2.678761)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_4T_4" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (0, 1.5707963, 0)
+            }
+        )
+        {
+            rel material:binding = </Root/Collision/_4T_4/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (40, 40)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (0.70710677, 0, 0.70710677, 0)
+            float3 xformOp:scale = (13, 3, 10)
+            float3 xformOp:translate = (5.9682603, 0.3576906, 2.899314)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def "Wall" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (-1.5707964, 0, 0)
+            }
+            prepend references = @Wall.usdz@
+        )
+        {
+            rel material:binding = </Root/wall> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            float3 xformOp:translate = (0, 0.003, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "BT_1" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/BT_1/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (60, 60)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (50, 4, 27)
+            float3 xformOp:translate = (-3.009296, 0.35768524, 4.6492496)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "_4T_5" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (1.5707964, 0, 0)
+            }
+        )
+        {
+            rel material:binding = </Root/Collision/_4T_5/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (60, 60)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+            float3 xformOp:scale = (15, 2.9999995, 3)
+            float3 xformOp:translate = (5.110362, 0.3441931, 5.557474)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def "Kiosk" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (-1.5707964, 0, 0)
+            }
+            references = @Kiosk.usdz@
+        )
+        {
+            rel material:binding = </Root/kiosk> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            float2 ui:nodegraph:node:pos = (20, 20)
+            int ui:nodegraph:node:stackingOrder = 1
+            quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            float3 xformOp:translate = (0, 0.003, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
     }
 }
 

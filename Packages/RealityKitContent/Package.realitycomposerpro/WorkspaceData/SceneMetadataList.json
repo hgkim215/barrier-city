@@ -14,7 +14,16 @@
   "65F6F990-A780-4474-B78B-572E0E4E273D" : {
     "objectMetadataList" : [
       [
-        "65F6F990-A780-4474-B78B-572E0E4E273D",
+        "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD",
+        "Root",
+        "Ground"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD",
         "Root"
       ],
       {
@@ -46,19 +55,92 @@
       {
         "isExpanded" : true,
         "isLocked" : false
-      },
+      }
+    ]
+  },
+  "6B7D26C6-B578-443A-A0BF-DD87961062E2" : {
+    "objectMetadataList" : [
       [
-        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
         "Root",
-        "door",
-        "Door1Window_001"
+        "_",
+        "Track"
       ],
       {
         "isExpanded" : true,
         "isLocked" : false
       },
       [
-        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Upset",
+        "Track3"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Greeting"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Greeting",
+        "Track"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Happy"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Upset"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root",
+        "Happy",
+        "Track"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "6B7D26C6-B578-443A-A0BF-DD87961062E2",
+        "Root"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      }
+    ]
+  },
+  "7808C05B-485F-4339-ADE8-F7BA9133C11B" : {
+    "objectMetadataList" : [
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root"
       ],
       {
@@ -66,30 +148,22 @@
         "isLocked" : false
       },
       [
-        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
-        "door",
-        "Door1Window_001",
-        "Cube_048"
-      ],
-      {
-        "isExpanded" : false,
-        "isLocked" : true
-      },
-      [
-        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
-        "Root",
-        "Collision",
-        "Ground"
+        "Collision"
       ],
       {
         "isExpanded" : true,
         "isLocked" : false
-      },
+      }
+    ]
+  },
+  "AF09ED6F-1707-48FD-8720-65B998362C09" : {
+    "objectMetadataList" : [
       [
-        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "Ground"
+        "Greeting"
       ],
       {
         "isExpanded" : true,
@@ -111,8 +185,16 @@
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "WhellChair",
-        "Meshes"
+        "Greeting",
+        "Track"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "AF09ED6F-1707-48FD-8720-65B998362C09",
+        "Root"
       ],
       {
         "isExpanded" : true,
@@ -121,11 +203,8 @@
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "WhellChair",
-        "Meshes",
-        "Sketchfab_model",
-        "c871628b65c6420985c943b2013f4bdc_fbx",
-        "RootNode"
+        "Timeline",
+        "Track"
       ],
       {
         "isExpanded" : true,
@@ -143,9 +222,7 @@
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "WhellChair",
-        "Meshes",
-        "Sketchfab_model"
+        "Sphere_Right"
       ],
       {
         "isExpanded" : true,
@@ -154,10 +231,8 @@
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "WhellChair",
-        "Meshes",
-        "Sketchfab_model",
-        "c871628b65c6420985c943b2013f4bdc_fbx"
+        "Mad",
+        "Track"
       ],
       {
         "isExpanded" : true,
@@ -165,7 +240,8 @@
       },
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
-        "Root"
+        "Root",
+        "Mad"
       ],
       {
         "isExpanded" : true,
@@ -203,9 +279,7 @@
     "objectMetadataList" : [
       [
         "D66134B1-3681-4A8E-AFE5-29F257229F3B",
-        "Root",
-        "GridMaterial",
-        "GridMaterial"
+        "Root"
       ],
       {
         "isExpanded" : true,
@@ -213,6 +287,29 @@
       },
       [
         "D66134B1-3681-4A8E-AFE5-29F257229F3B",
+        "Root",
+        "GridMaterial",
+        "GridMaterial"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      }
+    ]
+  },
+  "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66" : {
+    "objectMetadataList" : [
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
+        "Root",
+        "Collision"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root"
       ],
       {
