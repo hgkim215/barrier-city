@@ -8,11 +8,13 @@
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Immersive.usda" : "AF09ED6F-1707-48FD-8720-65B998362C09",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Indoor.usda" : "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Map.usda" : "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD",
+    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Outdoor.usda" : "7808C05B-485F-4339-ADE8-F7BA9133C11B",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Scene.usda" : "D66134B1-3681-4A8E-AFE5-29F257229F3B"
   },
   "projectID" : 4815832620845530990,
   "uuidToIntID" : {
     "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD" : 8903777739564549412,
+    "7808C05B-485F-4339-ADE8-F7BA9133C11B" : -735971796591842786,
     "AF09ED6F-1707-48FD-8720-65B998362C09" : 5875154184719619959,
     "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66" : 9177250681377678408
   }
