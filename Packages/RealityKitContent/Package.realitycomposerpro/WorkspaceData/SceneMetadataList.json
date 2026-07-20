@@ -11,7 +11,7 @@
       }
     ]
   },
-  "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD" : {
+  "65F6F990-A780-4474-B78B-572E0E4E273D" : {
     "objectMetadataList" : [
       [
         "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD",
@@ -32,10 +32,10 @@
       }
     ]
   },
-  "65F6F990-A780-4474-B78B-572E0E4E273D" : {
+  "66168B71-AB05-424E-8B6C-D33D6E61B08F" : {
     "objectMetadataList" : [
       [
-        "65F6F990-A780-4474-B78B-572E0E4E273D",
+        "66168B71-AB05-424E-8B6C-D33D6E61B08F",
         "Root"
       ],
       {
@@ -44,11 +44,13 @@
       }
     ]
   },
-  "66168B71-AB05-424E-8B6C-D33D6E61B08F" : {
+  "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8" : {
     "objectMetadataList" : [
       [
-        "66168B71-AB05-424E-8B6C-D33D6E61B08F",
-        "Root"
+        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "Root",
+        "base",
+        "큐브"
       ],
       {
         "isExpanded" : true,
@@ -168,6 +170,19 @@
         "isLocked" : false
       },
       [
+        "7E20BC30-FD87-442E-A225-5ED2A2A9B0E8",
+        "Root",
+        "Collision"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      }
+    ]
+  },
+  "AF09ED6F-1707-48FD-8720-65B998362C09" : {
+    "objectMetadataList" : [
+      [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
         "Greeting",
@@ -198,7 +213,7 @@
       [
         "AF09ED6F-1707-48FD-8720-65B998362C09",
         "Root",
-        "Sphere_Left"
+        "collision"
       ],
       {
         "isExpanded" : true,

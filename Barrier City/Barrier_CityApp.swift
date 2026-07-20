@@ -13,20 +13,15 @@ struct Barrier_CityApp: App {
     @State private var appModel = AppModel()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "control") {
             ContentView()
                 .environment(appModel)
         }
+        .windowResizability(.contentSize)
 
-        ImmersiveSpace(id: appModel.immersiveSpaceID) {
+        ImmersiveSpace(id: "wheelchair") {
             ImmersiveView()
                 .environment(appModel)
-                .onAppear {
-                    appModel.immersiveSpaceState = .open
-                }
-                .onDisappear {
-                    appModel.immersiveSpaceState = .closed
-                }
         }
         .immersionStyle(selection: .constant(.full), in: .full)
     }
