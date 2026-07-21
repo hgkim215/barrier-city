@@ -35,6 +35,7 @@ final class PressureAudio {
     private var lineSpoken = false
     private var stepCooldown: Float = 0
     private var speechTask: Task<Void, Never>?
+    private var configObserver: NSObjectProtocol?
 
     private init() {}
 
@@ -100,8 +101,8 @@ final class PressureAudio {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, options: [.mixWithOthers])
         try? session.setActive(true)
-        stepBuffer = makeStep()
-        engine.attach(stepPlayer)
+        if stepBuffer == nil { stepBuffer = makeStep() }
+        if stepPlayer.engine == nil { engine.attach(stepPlayer) }
         engine.connect(stepPlayer, to: engine.mainMixerNode, format: format)
         do {
             try engine.start()
@@ -110,6 +111,26 @@ final class PressureAudio {
         } catch {
             print("PressureAudio 시작 실패: \(error)")
         }
+        observeConfigurationChange()
+    }
+
+    /// 다른 컴포넌트(VoiceOutput의 재생, SpeechInput의 녹음)가 프로세스 공용 AVAudioSession의
+    /// 카테고리를 바꾸면 AVAudioEngineConfigurationChange가 오고 엔진이 멈춘 채 남는다.
+    /// started가 true라 prepare()는 다시 돌지 않아 발소리가 로그 한 줄 없이 영구히 무음이 된다
+    /// — 알림을 받아 재구성한다.
+    private func observeConfigurationChange() {
+        guard configObserver == nil else { return }
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
+            Task { @MainActor in PressureAudio.shared.handleConfigurationChange() }
+        }
+    }
+
+    private func handleConfigurationChange() {
+        guard Self.isEnabled, started else { return }
+        print("PressureAudio: 오디오 엔진 구성 변경 감지 — 재시작")
+        started = false
+        prepare()
     }
 
     private func playStep() {

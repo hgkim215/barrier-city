@@ -60,7 +60,8 @@ final class VoiceOutput {
     }
 
     private func playData(_ data: Data) async throws {
-        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default,
+                                                       options: [.mixWithOthers])
         try AVAudioSession.sharedInstance().setActive(true)
         let p = try AVAudioPlayer(data: data)
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -74,7 +75,8 @@ final class VoiceOutput {
     }
 
     private func speakOnDevice(_ text: String) async {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default,
+                                                        options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         let u = AVSpeechUtterance(string: text)
         u.voice = AVSpeechSynthesisVoice(language: "ko-KR")
