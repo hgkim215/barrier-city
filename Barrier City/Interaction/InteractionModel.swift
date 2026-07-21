@@ -141,10 +141,22 @@ final class InteractionModel {
     /// - 진입: 가장 가까운 트리거의 radius 안이고 dismissed가 아니면 표시
     /// - 표시 중: radius + exitHysteresis 밖으로 나가야 닫힘(경계 깜빡임 방지)
     /// - dismissed: 범위 안에서는 유지, 범위 밖으로 나가면 해제(재접근 시 재표시)
+    ///
+    /// 트리거가 둘 이상인 씬(실내: 키오스크 r3.0 + NPC r2.5)에서는 "가장 가까운 트리거"만
+    /// 보면 안 된다. 다른 트리거가 근소하게 더 가깝지만 자기 반경 밖인 구간에 들어서면,
+    /// 표시 중인 패널이 자기 반경 안인데도 닫혀 버려 겹치는 띠에서 깜빡인다.
+    /// 그래서 '더 가까운 트리거가 실제로 표시 가능한 경우'가 아니면 표시 중인 트리거를 유지한다.
     nonisolated static func evaluate(playerX: Float, playerZ: Float,
                                      triggers: [ProximityTrigger],
                                      activeID: String?,
                                      dismissedID: String?) -> ProximityVerdict {
+        // 표시 중인 트리거가 아직 자기 히스테리시스 반경 안인가(가장 가까운지와 무관).
+        let activeStillInside: Bool = {
+            guard let activeID, let a = triggers.first(where: { $0.id == activeID }) else { return false }
+            let d = simd_distance(SIMD2(playerX, playerZ), a.center)
+            return d <= a.radius + InteractionTuning.exitHysteresis
+        }()
+
         // 가장 가까운 트리거를 찾는다.
         var best: (trigger: ProximityTrigger, distance: Float)?
         for t in triggers {
@@ -156,16 +168,20 @@ final class InteractionModel {
         }
 
         if activeID == t.id {
-            // 이미 표시 중: 히스테리시스 반경 밖으로 나가야 닫힘.
-            let stillInside = d <= t.radius + InteractionTuning.exitHysteresis
-            return ProximityVerdict(showID: stillInside ? t.id : nil, clearDismissed: false)
+            // 이미 표시 중이고 가장 가깝다: 히스테리시스 반경 밖으로 나가야 닫힘.
+            return ProximityVerdict(showID: activeStillInside ? t.id : nil, clearDismissed: false)
         }
-        if d <= t.radius {
-            // 범위 안: 거절 상태면 숨김 유지, 아니면 표시.
-            if dismissedID == t.id { return ProximityVerdict(showID: nil, clearDismissed: false) }
+        if d <= t.radius, dismissedID != t.id {
+            // 더 가까운 트리거가 자기 범위 안이고 거절 상태도 아니다 → 교체.
             return ProximityVerdict(showID: t.id, clearDismissed: false)
         }
-        // 범위 밖: 거절 상태 해제(다시 다가오면 재표시).
-        return ProximityVerdict(showID: nil, clearDismissed: dismissedID != nil)
+        // 가장 가까운 트리거를 띄울 수 없다(범위 밖이거나 거절됨).
+        // 표시 중인 트리거가 아직 자기 반경 안이면 그대로 유지한다.
+        if activeStillInside {
+            return ProximityVerdict(showID: activeID, clearDismissed: false)
+        }
+        // 아무것도 못 띄움: 범위 밖일 때만 거절 상태 해제(다시 다가오면 재표시).
+        let outOfRange = d > t.radius
+        return ProximityVerdict(showID: nil, clearDismissed: outOfRange && dismissedID != nil)
     }
 }
