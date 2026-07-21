@@ -42,8 +42,10 @@ final class StandUpGuard {
             // 추적 유실 시 오버레이를 그대로 두면 화면에 고정된 채 남고,
             // KioskFlowModel.tick의 !standUpShown 게이트 때문에 유휴 타이머까지
             // 함께 멈춘다. 가드를 비활성 상태로 되돌려 체험이 계속되게 한다.
-            KioskFlowModel.shared.standUpShown = false
-            overlayEntity?.isEnabled = false
+            // @Observable의 setter는 값이 같아도 변경을 발생시키므로, 실제로 값이
+            // 바뀔 때만 써서 매 프레임 불필요한 옵저버 갱신을 막는다.
+            if KioskFlowModel.shared.standUpShown { KioskFlowModel.shared.standUpShown = false }
+            if overlayEntity?.isEnabled == true { overlayEntity?.isEnabled = false }
             return
         }
         let m = anchor.originFromAnchorTransform

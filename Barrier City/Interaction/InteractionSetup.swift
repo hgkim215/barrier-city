@@ -101,6 +101,9 @@ enum InteractionSetup {
     private static func tick(dt: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
+        // 일어서기 가드는 트리거·씬 전환과 무관(자기 오버레이만 갱신)하므로 전환 중에도
+        // 계속 돌아야 한다 — 실내 로드처럼 여러 프레임 걸리는 전환 동안 멈추면 안 된다.
+        standUpGuard?.tick()
         guard !im.isTransitioning else { return }
 
         let verdict = InteractionModel.evaluate(
@@ -135,7 +138,6 @@ enum InteractionSetup {
             kfm.reachableUpper = false
         }
         kfm.tick(dt: dt, transitioning: im.isTransitioning)
-        standUpGuard?.tick()
     }
 
     /// 키오스크 화면을 월드에 고정한 트리거 id(활성화 시 1회 배치용).
