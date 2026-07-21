@@ -66,9 +66,9 @@ struct NPCOrderView: View {
                             .buttonStyle(.bordered)
                         }
                     }
-                    // 음성 응답이 나오는 동안(.speaking)만 잠근다 — 답이 느릴 때(.thinking)도
-                    // 눌러서 벗어날 수 있어야 선택지가 존재하는 의미가 있다.
-                    .disabled(c.status == .speaking)
+                    // 듣는 중(.listening)에만 잠근다 — 발화 중에 선택지를 눌러 두 입력이
+                    // 동시에 진행되면 push-to-talk이 마이크를 켠 채로 남을 수 있다.
+                    .disabled(c.status == .listening)
                 }
 
                 if !m.sttUnavailable {
@@ -89,13 +89,13 @@ struct NPCOrderView: View {
                         .disabled(c.status == .thinking || c.status == .speaking)
                 }
 
-                // 선택지가 이미 떠 있으면 눌러도 할 게 없으니 숨긴다. 음성이 겹칠 때(.speaking)만 잠근다.
+                // 선택지가 이미 떠 있으면 눌러도 할 게 없으니 숨긴다. 듣는 중(.listening)만 잠근다.
                 if !m.fallbackMode {
                     Button("선택지로 주문하기") {
                         m.offerChoices()
                     }
                     .font(.callout)
-                    .disabled(c.status == .speaking)
+                    .disabled(c.status == .listening)
                 }
             }
         }
@@ -105,6 +105,9 @@ struct NPCOrderView: View {
         // STT를 못 쓰게 되면 push-to-talk 버튼 자체가 화면에서 빠지므로 떼기 이벤트가
         // 오지 않는다 — holding이 눌린 채로 남아 재진입 시 잘못된 상태로 보이지 않도록 리셋.
         .onChange(of: m.sttUnavailable) { _, _ in holding = false }
+        // 선택지로 주문을 완료하면 완료 화면으로 전환되며 push-to-talk 버튼이 사라져
+        // 떼기 이벤트가 오지 않을 수 있다 — holding이 눌린 채로 남지 않도록 리셋.
+        .onChange(of: m.completed) { _, _ in holding = false }
     }
 
     private func statusLine(_ c: NPCDialogueController) -> String {
