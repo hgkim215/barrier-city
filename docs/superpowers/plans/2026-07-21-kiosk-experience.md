@@ -128,7 +128,11 @@ git commit -m "test: Barrier CityTests 유닛 테스트 타깃 신설"
 - Test: `Barrier CityTests/KioskFlowLogicTests.swift`
 - Delete: `Barrier CityTests/SmokeTests.swift` (Step 6 참조)
 
-새 파일을 앱 타깃에 추가하는 법: Xcode가 폴더 동기화(fileSystemSynchronizedGroups)를 쓰지 않는 프로젝트이므로, 파일 생성 후 `ruby scripts/add_files.rb` 헬퍼로 추가한다(Step 1에서 작성). 이후 태스크도 동일 헬퍼를 쓴다.
+새 파일을 타깃에 추가하는 법 — **앱 타깃과 테스트 타깃이 다르다**:
+- **앱 타깃(`Barrier City`)**: 그룹이 `PBXFileSystemSynchronizedRootGroup`이라 `Barrier City/` 아래에 파일을 만들기만 하면 자동으로 타깃에 포함된다. 프로젝트 파일을 건드리지 말 것(`add_files.rb`를 앱 타깃에 실행하면 실패한다).
+- **테스트 타깃(`Barrier CityTests`)**: 일반 `PBXGroup`이라 자동 포함되지 않는다. 파일 생성 후 `ruby scripts/add_files.rb "Barrier CityTests" <경로>`로 추가해야 한다(Step 1에서 작성).
+
+이 구분은 이후 모든 태스크에 동일하게 적용된다.
 
 **Interfaces:**
 - Produces:
@@ -401,7 +405,6 @@ enum KioskFlowLogic {
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/KioskTuning.swift" "Barrier City/Kiosk/KioskFlowLogic.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **`, KioskFlowLogicTests 17개 전부 PASS
@@ -731,7 +734,6 @@ final class KioskFlowModel {
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/KioskFlowModel.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **` (주의: `testPaymentFlow…`가 `QuestModel.shared.advance`를 호출하지만 퀘스트 1·2단계가 아닌 상태라 무시됨 — QuestModel의 불일치 무시 동작 덕에 테스트 격리가 유지된다)
@@ -1067,7 +1069,6 @@ RB
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/KioskMenu.swift" "Barrier City/Kiosk/KioskScreenView.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **`
@@ -1419,7 +1420,7 @@ git add "Barrier City" "Barrier City.xcodeproj"
 git commit -m "feat(kiosk): 일어서기 가드 — head 높이 감지 + 안내 오버레이 (fail-open)"
 ```
 
-(파일 추가 잊지 말 것: `ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/StandUpGuard.swift" "Barrier City/Kiosk/StandUpOverlayView.swift"` 를 Step 4 전에 실행.)
+(앱 타깃 파일은 `Barrier City/Kiosk/` 아래에 만들기만 하면 폴더 동기화로 자동 포함된다 — 프로젝트 파일을 건드리지 말 것.)
 
 ---
 
@@ -1606,7 +1607,6 @@ KioskFlowModel의 타이머·결제 경로가 이제 PressureAudio를 호출하�
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/PressureAudio.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **`
@@ -1782,7 +1782,6 @@ enum NPCSetup {
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Dialogue/NPCSetup.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **`
@@ -2045,7 +2044,6 @@ struct NPCOrderView: View {
 
 Run:
 ```bash
-ruby scripts/add_files.rb "Barrier City" "Barrier City/Dialogue/NPCOrderModel.swift" "Barrier City/Dialogue/NPCOrderView.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
 Expected: `** TEST SUCCEEDED **`
