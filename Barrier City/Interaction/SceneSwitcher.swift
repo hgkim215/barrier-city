@@ -99,6 +99,7 @@ enum SceneSwitcher {
         im.transitionError = nil
         im.panelEntity?.isEnabled = false
         im.kioskPanelEntity?.isEnabled = false
+        im.npcPanelEntity?.isEnabled = false
 
         // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
         QuestModel.shared.advance(on: .enteredIndoor)

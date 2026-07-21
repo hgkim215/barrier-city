@@ -19,6 +19,22 @@ enum InteractionSetup {
     /// 일어서기 가드(설치 시 시작, 씬 루트의 오버레이를 관리).
     private static var standUpGuard: StandUpGuard?
 
+    /// 직전 프레임에 NPC 대화 트리거가 활성이었는가(활성화 엣지 검출용).
+    private static var npcWasActive = false
+
+    /// NPC 트리거가 활성화되는 순간 `.npcHelpDone`을 다시 발행해야 하는가(순수 판정).
+    ///
+    /// NPC 트리거는 항상 활성이라(fail-open) 사용자가 키오스크보다 먼저 직원에게 주문할 수
+    /// 있다. 그때 발행된 `.npcHelpDone`은 퀘스트가 아직 2단계라 버려지는데,
+    /// `NPCOrderModel.completed`는 한 번 켜지면 꺼지지 않아 패널이 완료 화면만 보여주고
+    /// `release()`·`selectFallback`이 모두 막힌다 — 이벤트를 다시 낼 방법이 없어 최종 단계가
+    /// 영영 완료되지 않는다. 그래서 트리거에 다시 다가오는 순간 조건을 확인해 재발행한다.
+    nonisolated static func shouldRefireNPCDone(activationEdge: Bool,
+                                               completed: Bool,
+                                               pendingEvent: QuestEvent?) -> Bool {
+        activationEdge && completed && pendingEvent == .npcHelpDone
+    }
+
     /// ImmersiveView make 클로저 끝에서 호출. 전제: model.worldRoot와
     /// InteractionModel.shared.visibleMap이 설정된 뒤여야 한다.
     static func install(content: RealityViewContent,
@@ -39,6 +55,7 @@ enum InteractionSetup {
         NPCSetup.reset()
         NPCOrderModel.shared.reset()
         kioskPlacedForTriggerID = nil
+        npcWasActive = false
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
@@ -68,6 +85,9 @@ enum InteractionSetup {
         }
 
         // 1.5) 일어서기 가드: 오버레이는 씬 루트에(맵과 함께 움직이면 안 된다).
+        //     이전 인스턴스를 먼저 멈춘다 — 안 그러면 몰입 공간에 드나들 때마다
+        //     ARKitSession이 하나씩 살아남아 전시장처럼 재진입이 잦은 환경에서 누적된다.
+        standUpGuard?.stop()
         let guardInstance = StandUpGuard()
         if let overlay = attachments.entity(for: "standUpOverlay") {
             overlay.isEnabled = false
@@ -128,6 +148,16 @@ enum InteractionSetup {
         }
         updatePanel(im)
 
+        // [NPC] 트리거가 활성화되는 순간, 이미 주문을 마쳤는데 퀘스트가 그 단계를
+        // 기다리고 있으면(= 키오스크보다 먼저 주문한 경우) 완료 이벤트를 다시 발행한다.
+        let npcNowActive = (im.activeTrigger?.kind == .npcDialogue)
+        if shouldRefireNPCDone(activationEdge: npcNowActive && !npcWasActive,
+                               completed: NPCOrderModel.shared.completed,
+                               pendingEvent: QuestModel.shared.currentStep?.completionEvent) {
+            QuestModel.shared.advance(on: .npcHelpDone)
+        }
+        npcWasActive = npcNowActive
+
         // [키오스크] 활성 여부·리치 판정 갱신 후 상태 머신 진행.
         let kfm = KioskFlowModel.shared
         let kioskNowActive = (im.activeTrigger?.kind == .kioskScreen)
@@ -146,7 +176,9 @@ enum InteractionSetup {
         } else {
             kfm.reachableUpper = false
         }
-        kfm.tick(dt: dt, transitioning: im.isTransitioning)
+        // 전환 중이면 위의 `guard !im.isTransitioning`에서 이미 반환됐으므로 여기선 항상 false다.
+        // (KioskFlowModel.tick 자체의 !transitioning 검사는 다른 호출자·테스트를 위해 유지)
+        kfm.tick(dt: dt, transitioning: false)
     }
 
     /// 키오스크 화면을 월드에 고정한 트리거 id(활성화 시 1회 배치용).
