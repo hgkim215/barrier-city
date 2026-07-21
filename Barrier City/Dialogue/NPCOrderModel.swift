@@ -25,6 +25,11 @@ final class NPCOrderModel {
     /// 주문 완료(퀘스트 발행됨). 완료 후 패널은 안내만 표시.
     private(set) var completed = false
 
+    /// 이전 턴(누르기/떼기)이 끝날 때까지 다음 턴을 미루는 직렬화 핸들.
+    private var turnTask: Task<Void, Never>?
+    /// 완료 이벤트 없이 끝난 연속 턴 수. 일정 횟수 이상이면 자동으로 선택지 폴백으로 유도.
+    private var consecutiveIncompleteTurns = 0
+
     struct Choice: Identifiable {
         var id: String { label }
         let label: String
@@ -42,19 +47,39 @@ final class NPCOrderModel {
     ]
 
     /// push-to-talk 시작. STT 시작에 실패하면 폴백 모드로 전환.
+    /// endTurn()과 같은 turnTask 체인에 올려, 누르기 직후 떼는 경우에도 실행 순서를 보장한다.
     func beginListening() async {
-        await controller.beginListening()
-        if controller.status != .listening { fallbackMode = true }
+        let previous = turnTask
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            await self.controller.beginListening()
+            if self.controller.status != .listening { self.enterFallback() }
+        }
+        turnTask = task
+        await task.value
     }
 
     /// push-to-talk 종료 → AI 응답 → 완료 이벤트 확인.
     func endTurn() async {
-        await controller.endTurn()
-        // orderPlaced(주문 확정)·helpRequested(도움 요청) 모두 3단계 완료로 인정.
-        if controller.lastEvent.contains("orderPlaced")
-            || controller.lastEvent.contains("helpRequested") {
-            complete()
+        let previous = turnTask
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self, !self.completed else { return }
+            await self.controller.endTurn()
+            // orderPlaced(주문 확정)·helpRequested(도움 요청) 모두 3단계 완료로 인정.
+            if self.controller.lastEvent.contains("orderPlaced")
+                || self.controller.lastEvent.contains("helpRequested") {
+                self.complete()
+                return
+            }
+            // 실제 발화가 있었는데도 완료 이벤트가 없으면(잡담 등) 미완료 턴으로 센다.
+            guard !self.controller.userText.isEmpty else { return }
+            self.consecutiveIncompleteTurns += 1
+            if self.consecutiveIncompleteTurns >= 3 { self.enterFallback() }
         }
+        turnTask = task
+        await task.value
     }
 
     /// 폴백 선택지 주문: 고정 응답을 자막+TTS로 내보내고 완료 처리.
@@ -66,6 +91,13 @@ final class NPCOrderModel {
         complete()
     }
 
+    /// 폴백 진입 지점을 하나로 모은다. STT 에러 문구 등이 화면에 남지 않도록 지운다.
+    func enterFallback() {
+        fallbackMode = true
+        controller.npcSubtitle = ""
+        controller.userText = ""
+    }
+
     private func complete() {
         guard !completed else { return }
         completed = true
@@ -73,9 +105,13 @@ final class NPCOrderModel {
         QuestModel.shared.advance(on: .npcHelpDone)
     }
 
-    /// 몰입 공간 재진입 시 초기화.
+    /// 몰입 공간 재진입 시 초기화. 컨트롤러(장수명 객체)의 이전 세션 잔여 상태도 함께 지운다.
     func reset() {
         fallbackMode = false
         completed = false
+        consecutiveIncompleteTurns = 0
+        controller.lastEvent = ""
+        controller.userText = ""
+        controller.npcSubtitle = ""
     }
 }

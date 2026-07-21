@@ -83,10 +83,11 @@ struct NPCOrderView: View {
                         }
                         .disabled(c.status == .thinking || c.status == .speaking)
 
-                    Button("말하기가 어려우면 선택지로 주문") {
-                        m.fallbackMode = true
+                    Button("선택지로 주문하기") {
+                        m.enterFallback()
                     }
                     .font(.callout)
+                    .disabled(c.status == .thinking || c.status == .speaking)
                 }
             }
         }
