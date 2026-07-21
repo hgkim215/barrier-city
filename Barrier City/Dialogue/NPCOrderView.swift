@@ -50,8 +50,8 @@ struct NPCOrderView: View {
                 }
                 .frame(minHeight: 80)
 
+                // 선택지와 push-to-talk은 배타적이지 않다 — 둘 다 보일 수 있다.
                 if m.fallbackMode {
-                    // 폴백: 선택지 버튼(오프라인·STT 불가에서도 완주)
                     VStack(spacing: 12) {
                         ForEach(m.choices) { choice in
                             Button { m.selectFallback(choice) } label: {
@@ -63,8 +63,11 @@ struct NPCOrderView: View {
                             .buttonStyle(.bordered)
                         }
                     }
-                } else {
+                }
+
+                if !m.sttUnavailable {
                     // push-to-talk: 누르는 동안 듣고, 떼면 응답.
+                    // 누르기/떼기 순서 보장을 위해 모델의 동기 진입점을 그대로 호출한다.
                     Label(holding ? "듣는 중… 떼면 전송" : "누른 채로 말하기",
                           systemImage: holding ? "waveform" : "mic.fill")
                         .font(.title2).bold()
@@ -75,20 +78,17 @@ struct NPCOrderView: View {
                         .onLongPressGesture(minimumDuration: .infinity) {
                         } onPressingChanged: { pressing in
                             holding = pressing
-                            if pressing {
-                                Task { await m.beginListening() }
-                            } else {
-                                Task { await m.endTurn() }
-                            }
+                            if pressing { m.press() } else { m.release() }
                         }
                         .disabled(c.status == .thinking || c.status == .speaking)
-
-                    Button("선택지로 주문하기") {
-                        m.enterFallback()
-                    }
-                    .font(.callout)
-                    .disabled(c.status == .thinking || c.status == .speaking)
                 }
+
+                // 탈출구는 항상 열어 둔다. 음성이 겹칠 때(.speaking)만 잠근다.
+                Button("선택지로 주문하기") {
+                    m.offerChoices()
+                }
+                .font(.callout)
+                .disabled(c.status == .speaking)
             }
         }
         .padding(48)

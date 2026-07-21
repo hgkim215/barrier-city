@@ -20,14 +20,20 @@ final class NPCOrderModel {
     let controller = NPCDialogueController()
     private let voice = VoiceOutput(config: AppConfig.proxy)
 
-    /// 음성 대신 선택지 버튼으로 진행 중인가(STT 실패 시 자동, 수동 전환도 가능).
-    var fallbackMode = false
+    /// 선택지 버튼을 제공 중인가(STT 실패 시 자동, 수동 전환도 가능).
+    /// 음성 입력과 배타적이지 않다 — 둘 다 켜질 수 있다.
+    private(set) var fallbackMode = false
+    /// 마이크(STT)를 쓸 수 없는 상태. 이때만 push-to-talk을 숨긴다.
+    private(set) var sttUnavailable = false
     /// 주문 완료(퀘스트 발행됨). 완료 후 패널은 안내만 표시.
     private(set) var completed = false
 
     /// 이전 턴(누르기/떼기)이 끝날 때까지 다음 턴을 미루는 직렬화 핸들.
     private var turnTask: Task<Void, Never>?
-    /// 완료 이벤트 없이 끝난 연속 턴 수. 일정 횟수 이상이면 자동으로 선택지 폴백으로 유도.
+    /// 세션 구분자. reset()마다 증가하며, 이전 세션에서 남은 턴이 뒤늦게 끝나도
+    /// 새 세션의 상태를 건드리지 못하게 막는다.
+    private var sessionEpoch = 0
+    /// 완료 이벤트 없이 끝난 연속 턴 수. 일정 횟수 이상이면 선택지를 함께 제공한다.
     private var consecutiveIncompleteTurns = 0
 
     struct Choice: Identifiable {
@@ -46,40 +52,45 @@ final class NPCOrderModel {
                reply: "따뜻한 카페라떼 한 잔, 바로 준비해드릴게요."),
     ]
 
-    /// push-to-talk 시작. STT 시작에 실패하면 폴백 모드로 전환.
-    /// endTurn()과 같은 turnTask 체인에 올려, 누르기 직후 떼는 경우에도 실행 순서를 보장한다.
-    func beginListening() async {
-        let previous = turnTask
-        let task = Task { [weak self] in
-            await previous?.value
+    /// push-to-talk 버튼을 누른 순간. MainActor에서 동기적으로 체인에 연결하므로
+    /// 뷰의 누르기/떼기 순서가 그대로 턴 실행 순서가 된다(빠른 탭에서도 역전 없음).
+    func press() {
+        chain { [weak self] epoch in
             guard let self else { return }
             await self.controller.beginListening()
-            if self.controller.status != .listening { self.enterFallback() }
+            guard epoch == self.sessionEpoch else { return }
+            if self.controller.status != .listening { self.enterSTTUnavailable() }
         }
-        turnTask = task
-        await task.value
     }
 
-    /// push-to-talk 종료 → AI 응답 → 완료 이벤트 확인.
-    func endTurn() async {
-        let previous = turnTask
-        let task = Task { [weak self] in
-            await previous?.value
+    /// push-to-talk 버튼을 뗀 순간 → AI 응답 → 완료 이벤트 확인.
+    func release() {
+        chain { [weak self] epoch in
             guard let self, !self.completed else { return }
             await self.controller.endTurn()
+            guard epoch == self.sessionEpoch else { return }   // 이전 세션의 잔여 턴은 무시
             // orderPlaced(주문 확정)·helpRequested(도움 요청) 모두 3단계 완료로 인정.
             if self.controller.lastEvent.contains("orderPlaced")
                 || self.controller.lastEvent.contains("helpRequested") {
                 self.complete()
                 return
             }
-            // 실제 발화가 있었는데도 완료 이벤트가 없으면(잡담 등) 미완료 턴으로 센다.
-            guard !self.controller.userText.isEmpty else { return }
+            // 완료 이벤트 없이 끝난 턴 — 인식 결과가 비어도(마이크가 못 알아들은 경우)
+            // 사용자 입장에선 똑같이 진전이 없으므로 같은 카운터로 센다.
             self.consecutiveIncompleteTurns += 1
-            if self.consecutiveIncompleteTurns >= 3 { self.enterFallback() }
+            if self.consecutiveIncompleteTurns >= 3 { self.offerChoices() }
         }
-        turnTask = task
-        await task.value
+    }
+
+    /// 턴 본문을 직렬화 체인에 잇는다. 프롤로그(이전 턴 확보 + 세션 기록)는 동기 실행.
+    private func chain(_ body: @escaping (Int) async -> Void) {
+        let previous = turnTask
+        let epoch = sessionEpoch
+        turnTask = Task { [weak self] in
+            await previous?.value
+            guard let self, epoch == self.sessionEpoch else { return }
+            await body(epoch)
+        }
     }
 
     /// 폴백 선택지 주문: 고정 응답을 자막+TTS로 내보내고 완료 처리.
@@ -91,8 +102,16 @@ final class NPCOrderModel {
         complete()
     }
 
-    /// 폴백 진입 지점을 하나로 모은다. STT 에러 문구 등이 화면에 남지 않도록 지운다.
-    func enterFallback() {
+    /// 선택지를 화면에 제공한다. 대화 맥락(자막·내 발화)은 그대로 둔다.
+    /// 사용자가 직접 누르는 "선택지로 주문하기"와 대화 정체 시 자동 유도가 함께 쓰는 경로.
+    func offerChoices() {
+        fallbackMode = true
+    }
+
+    /// STT를 쓸 수 없을 때. 마이크가 무용지물이므로 음성 UI를 내리고,
+    /// 화면에 남은 STT 에러 문구를 지운 뒤 선택지만 남긴다.
+    private func enterSTTUnavailable() {
+        sttUnavailable = true
         fallbackMode = true
         controller.npcSubtitle = ""
         controller.userText = ""
@@ -107,7 +126,10 @@ final class NPCOrderModel {
 
     /// 몰입 공간 재진입 시 초기화. 컨트롤러(장수명 객체)의 이전 세션 잔여 상태도 함께 지운다.
     func reset() {
+        sessionEpoch += 1        // 진행 중이던 이전 세션 턴을 무효화
+        turnTask = nil
         fallbackMode = false
+        sttUnavailable = false
         completed = false
         consecutiveIncompleteTurns = 0
         controller.lastEvent = ""
