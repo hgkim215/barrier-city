@@ -62,19 +62,26 @@ final class NPCOrderModel {
             guard let self else { return }
             await self.controller.beginListening()
             guard epoch == self.sessionEpoch else { return }
-            if self.controller.status != .listening { self.enterSTTUnavailable() }
+            // .idle로 돌아왔다 = 마이크를 켜려다 실패했다(권한·인식기 오류). 그 경우에만
+            // 음성 UI를 내린다 — .thinking·.speaking은 아직 이전 턴이 끝나지 않은 것뿐이라
+            // 여기서 STT를 못 쓰는 상태로 단정하면 남은 세션 내내 마이크가 사라진다.
+            if self.controller.status == .idle { self.enterSTTUnavailable() }
         }
     }
 
     /// push-to-talk 버튼을 뗀 순간 → AI 응답 → 완료 이벤트 확인.
     func release() {
         chain { [weak self] epoch in
-            guard let self, !self.completed else { return }
+            guard let self else { return }
             // endTurn 직전에 비워둔다 — 이전 세션에서 남은 턴이 reset() 이후에 뒤늦게
             // lastEvent를 써도, 그 값이 다음 세션 첫 발화의 완료 판정에 남지 않도록.
             self.controller.lastEvent = ""
+            // 이미 완료됐더라도 endTurn은 반드시 호출한다. 이것이 인식기를 멈추는 유일한
+            // 경로라, 선택지로 주문을 마치느라 떼기 이벤트를 놓친 경우 여기서 건너뛰면
+            // 마이크가 켜진 채 남아 오디오 세션이 .record로 고착되고 이후 재생이 모두 막힌다.
             await self.controller.endTurn()
-            guard epoch == self.sessionEpoch else { return }   // 이전 세션의 잔여 턴은 무시
+            // 이전 세션의 잔여 턴이거나 이미 완료됐으면 진행 판정은 하지 않는다.
+            guard epoch == self.sessionEpoch, !self.completed else { return }
             // orderPlaced(주문 확정)·helpRequested(도움 요청) 모두 3단계 완료로 인정.
             if self.controller.lastEvent.contains("orderPlaced")
                 || self.controller.lastEvent.contains("helpRequested") {

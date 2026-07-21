@@ -106,8 +106,12 @@ struct NPCOrderView: View {
         // 오지 않는다 — holding이 눌린 채로 남아 재진입 시 잘못된 상태로 보이지 않도록 리셋.
         .onChange(of: m.sttUnavailable) { _, _ in holding = false }
         // 선택지로 주문을 완료하면 완료 화면으로 전환되며 push-to-talk 버튼이 사라져
-        // 떼기 이벤트가 오지 않을 수 있다 — holding이 눌린 채로 남지 않도록 리셋.
-        .onChange(of: m.completed) { _, _ in holding = false }
+        // 떼기 이벤트가 오지 않을 수 있다 — 라벨만 되돌리는 게 아니라 실제로 턴을 끝내야
+        // 마이크가 꺼진다(안 그러면 인식기가 계속 돌아 이후 재생이 전부 막힌다).
+        .onChange(of: m.completed) { _, _ in
+            if holding { m.release() }
+            holding = false
+        }
     }
 
     private func statusLine(_ c: NPCDialogueController) -> String {
