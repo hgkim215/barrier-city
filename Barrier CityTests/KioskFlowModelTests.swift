@@ -15,6 +15,7 @@ final class KioskFlowModelTests: XCTestCase {
     let item = KioskMenuItem(id: "americano", name: "아메리카노", price: 4000)
 
     override func setUp() async throws {
+        PressureAudio.isEnabled = false   // 오디오·네트워크 부수 효과 차단
         KioskFlowModel.shared.reset()
         KioskFlowModel.shared.isActive = true
     }

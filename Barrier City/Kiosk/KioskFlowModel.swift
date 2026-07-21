@@ -62,6 +62,7 @@ final class KioskFlowModel {
                 cart.removeAll()
                 categoryIndex = 0
                 resetHoldRemaining = KioskTuning.resetHoldSeconds
+                if resetCount == 1 { PressureAudio.shared.onFirstReset() }
             }
         case .resetting:
             resetHoldRemaining -= dt
@@ -72,6 +73,7 @@ final class KioskFlowModel {
         case .failed:
             break
         }
+        PressureAudio.shared.tick(dt: dt)
     }
 
     // MARK: 입력(전부 유휴 타이머를 리셋한다)
@@ -112,6 +114,7 @@ final class KioskFlowModel {
                                                    attempts: paymentAttempts,
                                                    maxAttempts: KioskTuning.paymentMaxAttempts)
         paymentAttempts = r.attempts
+        if paymentAttempts == 1 { PressureAudio.shared.onPaymentStruggle() }
         phase = r.phase
         if phase == .failed {
             QuestModel.shared.advance(on: .kioskFailed)
@@ -143,5 +146,6 @@ final class KioskFlowModel {
         reachableUpper = false
         standUpShown = false
         isActive = false
+        PressureAudio.shared.reset()
     }
 }
