@@ -8,14 +8,29 @@
 
 /* Begin PBXBuildFile section */
 		0450740C2FED0B25008DEC5E /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 0450740B2FED0B25008DEC5E /* RealityKitContent */; };
+		7C46444DEF1FE0CB8F7E8842 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */; };
 		DA1A000000000000000000B1 /* DialogueKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D1 /* DialogueKit */; };
 		DA1A000000000000000000B2 /* DialogueKitOpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D2 /* DialogueKitOpenAI */; };
+		FED24DEDB81DA93D107030D1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 133129D60519B94F0E46B29D /* Foundation.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E8AB9CB1FE042FA99E660E21 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 045073FE2FED0B25008DEC5E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 045074052FED0B25008DEC5E;
+			remoteInfo = "Barrier City";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		045074062FED0B25008DEC5E /* Barrier City.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Barrier City.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0450740A2FED0B25008DEC5E /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
+		133129D60519B94F0E46B29D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/XROS.platform/Developer/SDKs/XROS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		94FFF2F9473BBA0A761CEF06 /* Barrier CityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Barrier CityTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA1A000000000000000000F1 /* DialogueKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DialogueKit; sourceTree = "<group>"; };
+		F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,6 +65,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3D0290AC3933A762420278B9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FED24DEDB81DA93D107030D1 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -59,6 +82,8 @@
 				045074082FED0B25008DEC5E /* Barrier City */,
 				045074092FED0B25008DEC5E /* Packages */,
 				045074072FED0B25008DEC5E /* Products */,
+				249DB9975732FDA4E6ACF940 /* Frameworks */,
+				D91E909C00FE20427874A558 /* Barrier CityTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -66,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				045074062FED0B25008DEC5E /* Barrier City.app */,
+				94FFF2F9473BBA0A761CEF06 /* Barrier CityTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -77,6 +103,31 @@
 				DA1A000000000000000000F1 /* DialogueKit */,
 			);
 			path = Packages;
+			sourceTree = "<group>";
+		};
+		249DB9975732FDA4E6ACF940 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F6F3DB41CBEDB109144D399F /* visionOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D91E909C00FE20427874A558 /* Barrier CityTests */ = {
+			isa = PBXGroup;
+			children = (
+				F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */,
+			);
+			name = "Barrier CityTests";
+			path = "Barrier CityTests";
+			sourceTree = "<group>";
+		};
+		F6F3DB41CBEDB109144D399F /* visionOS */ = {
+			isa = PBXGroup;
+			children = (
+				133129D60519B94F0E46B29D /* Foundation.framework */,
+			);
+			name = visionOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -107,6 +158,24 @@
 			productReference = 045074062FED0B25008DEC5E /* Barrier City.app */;
 			productType = "com.apple.product-type.application";
 		};
+		4226F44108B5450AD4134104 /* Barrier CityTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15E5E134BB8101F1BA0D6B56 /* Build configuration list for PBXNativeTarget "Barrier CityTests" */;
+			buildPhases = (
+				BC6DAE4A8930CF36BAFF6BC4 /* Sources */,
+				3D0290AC3933A762420278B9 /* Frameworks */,
+				D623CA1DE8286327E2BB3A47 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B174F36C34E574F3C157EE04 /* PBXTargetDependency */,
+			);
+			name = "Barrier CityTests";
+			productName = "Barrier CityTests";
+			productReference = 94FFF2F9473BBA0A761CEF06 /* Barrier CityTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -132,8 +201,8 @@
 			mainGroup = 045073FD2FED0B25008DEC5E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */,
-				DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */,
+				DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */,
+				DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 045074072FED0B25008DEC5E /* Products */;
@@ -141,12 +210,20 @@
 			projectRoot = "";
 			targets = (
 				045074052FED0B25008DEC5E /* Barrier City */,
+				4226F44108B5450AD4134104 /* Barrier CityTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		045074042FED0B25008DEC5E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D623CA1DE8286327E2BB3A47 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -163,7 +240,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC6DAE4A8930CF36BAFF6BC4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C46444DEF1FE0CB8F7E8842 /* SmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B174F36C34E574F3C157EE04 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "Barrier City";
+			target = 045074052FED0B25008DEC5E /* Barrier City */;
+			targetProxy = E8AB9CB1FE042FA99E660E21 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		045074182FED0B26008DEC5E /* Debug */ = {
@@ -355,6 +449,34 @@
 			};
 			name = Release;
 		};
+		2749176A415A8720346523FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.barriercity.BarrierCityTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = xros;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Barrier City.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Barrier City";
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		D5668F275AF20899916A2DDC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.barriercity.BarrierCityTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = xros;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Barrier City.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Barrier City";
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -376,14 +498,23 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		15E5E134BB8101F1BA0D6B56 /* Build configuration list for PBXNativeTarget "Barrier CityTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5668F275AF20899916A2DDC /* Release */,
+				2749176A415A8720346523FF /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */ = {
+		DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/RealityKitContent;
 		};
-		DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */ = {
+		DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DialogueKit;
 		};
@@ -392,17 +523,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		0450740B2FED0B25008DEC5E /* RealityKitContent */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "Packages/RealityKitContent" */;
+			package = DA1A000000000000000000E1 /* XCLocalSwiftPackageReference "RealityKitContent" */;
 			productName = RealityKitContent;
 		};
 		DA1A000000000000000000D1 /* DialogueKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
 			productName = DialogueKit;
 		};
 		DA1A000000000000000000D2 /* DialogueKitOpenAI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "Packages/DialogueKit" */;
+			package = DA1A000000000000000000E2 /* XCLocalSwiftPackageReference "DialogueKit" */;
 			productName = DialogueKitOpenAI;
 		};
 /* End XCSwiftPackageProductDependency section */
