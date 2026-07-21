@@ -37,6 +37,7 @@ enum InteractionSetup {
         im.transitionError = nil
         KioskFlowModel.shared.reset()
         NPCSetup.reset()
+        NPCOrderModel.shared.reset()
         kioskPlacedForTriggerID = nil
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.

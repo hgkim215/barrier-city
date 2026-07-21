@@ -1,0 +1,110 @@
+//
+//  NPCOrderView.swift
+//  Barrier City
+//
+//  NPC 직원 대화 패널(빌보드 attachment).
+//  push-to-talk(누르는 동안 듣기)로 음성 주문 → NPC 음성+자막 응답.
+//  STT 실패·오프라인이면 선택지 버튼 폴백으로 같은 흐름을 완주한다.
+//
+
+import SwiftUI
+
+struct NPCOrderView: View {
+
+    @State private var holding = false
+
+    var body: some View {
+        let m = NPCOrderModel.shared
+        let c = m.controller
+
+        VStack(spacing: 20) {
+            if m.completed {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44)).foregroundStyle(.green)
+                Text("주문이 접수되었습니다")
+                    .font(.largeTitle).bold()
+                if !c.npcSubtitle.isEmpty {
+                    Text("“\(c.npcSubtitle)”")
+                        .font(.title3).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            } else {
+                Text("직원에게 주문하기")
+                    .font(.largeTitle).bold()
+                Text(statusLine(c))
+                    .font(.title3).foregroundStyle(.secondary)
+
+                // 자막 영역: 내 발화(실시간/확정) + NPC 응답
+                VStack(spacing: 8) {
+                    if c.status == .listening {
+                        Text(c.liveText.isEmpty ? "…" : c.liveText)
+                            .font(.title3).foregroundStyle(.blue)
+                    } else if !c.userText.isEmpty {
+                        Text("나: \(c.userText)").font(.title3)
+                    }
+                    if !c.npcSubtitle.isEmpty {
+                        Text("직원: \(c.npcSubtitle)")
+                            .font(.title3).bold()
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .frame(minHeight: 80)
+
+                if m.fallbackMode {
+                    // 폴백: 선택지 버튼(오프라인·STT 불가에서도 완주)
+                    VStack(spacing: 12) {
+                        ForEach(m.choices) { choice in
+                            Button { m.selectFallback(choice) } label: {
+                                Text(choice.label)
+                                    .font(.title3)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                } else {
+                    // push-to-talk: 누르는 동안 듣고, 떼면 응답.
+                    Label(holding ? "듣는 중… 떼면 전송" : "누른 채로 말하기",
+                          systemImage: holding ? "waveform" : "mic.fill")
+                        .font(.title2).bold()
+                        .frame(minWidth: 300)
+                        .padding(.vertical, 16)
+                        .background(holding ? Color.blue : Color.blue.opacity(0.5),
+                                    in: Capsule())
+                        .onLongPressGesture(minimumDuration: .infinity) {
+                        } onPressingChanged: { pressing in
+                            holding = pressing
+                            if pressing {
+                                Task { await m.beginListening() }
+                            } else {
+                                Task { await m.endTurn() }
+                            }
+                        }
+                        .disabled(c.status == .thinking || c.status == .speaking)
+
+                    Button("말하기가 어려우면 선택지로 주문") {
+                        m.fallbackMode = true
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+        .padding(48)
+        .frame(width: 720)
+        .glassBackgroundEffect()
+    }
+
+    private func statusLine(_ c: NPCDialogueController) -> String {
+        switch c.status {
+        case .idle:      return "버튼을 누른 채로 주문을 말해 보세요"
+        case .listening: return "듣고 있어요"
+        case .thinking:  return "직원이 생각하고 있어요…"
+        case .speaking:  return "직원이 말하는 중"
+        }
+    }
+}
+
+#Preview(windowStyle: .automatic) {
+    NPCOrderView()
+}
