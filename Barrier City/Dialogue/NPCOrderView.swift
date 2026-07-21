@@ -23,8 +23,11 @@ struct NPCOrderView: View {
                     .font(.system(size: 44)).foregroundStyle(.green)
                 Text("주문이 접수되었습니다")
                     .font(.largeTitle).bold()
-                if !c.npcSubtitle.isEmpty {
-                    Text("“\(c.npcSubtitle)”")
+                // 선택지로 완료했다면 그 응답을 우선한다 — 겹쳐 있던 음성 턴의 자막이
+                // 완료 화면에 잘못 인용되지 않도록.
+                let reply = m.completedReply ?? c.npcSubtitle
+                if !reply.isEmpty {
+                    Text("“\(reply)”")
                         .font(.title3).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -63,6 +66,9 @@ struct NPCOrderView: View {
                             .buttonStyle(.bordered)
                         }
                     }
+                    // 음성 응답이 나오는 동안(.speaking)만 잠근다 — 답이 느릴 때(.thinking)도
+                    // 눌러서 벗어날 수 있어야 선택지가 존재하는 의미가 있다.
+                    .disabled(c.status == .speaking)
                 }
 
                 if !m.sttUnavailable {
@@ -83,17 +89,22 @@ struct NPCOrderView: View {
                         .disabled(c.status == .thinking || c.status == .speaking)
                 }
 
-                // 탈출구는 항상 열어 둔다. 음성이 겹칠 때(.speaking)만 잠근다.
-                Button("선택지로 주문하기") {
-                    m.offerChoices()
+                // 선택지가 이미 떠 있으면 눌러도 할 게 없으니 숨긴다. 음성이 겹칠 때(.speaking)만 잠근다.
+                if !m.fallbackMode {
+                    Button("선택지로 주문하기") {
+                        m.offerChoices()
+                    }
+                    .font(.callout)
+                    .disabled(c.status == .speaking)
                 }
-                .font(.callout)
-                .disabled(c.status == .speaking)
             }
         }
         .padding(48)
         .frame(width: 720)
         .glassBackgroundEffect()
+        // STT를 못 쓰게 되면 push-to-talk 버튼 자체가 화면에서 빠지므로 떼기 이벤트가
+        // 오지 않는다 — holding이 눌린 채로 남아 재진입 시 잘못된 상태로 보이지 않도록 리셋.
+        .onChange(of: m.sttUnavailable) { _, _ in holding = false }
     }
 
     private func statusLine(_ c: NPCDialogueController) -> String {

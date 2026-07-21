@@ -27,6 +27,9 @@ final class NPCOrderModel {
     private(set) var sttUnavailable = false
     /// 주문 완료(퀘스트 발행됨). 완료 후 패널은 안내만 표시.
     private(set) var completed = false
+    /// 선택지로 완료했을 때의 응답. 완료 화면이 진행 중이던 음성 턴의 자막과
+    /// 뒤섞이지 않고 실제로 고른 응답을 그대로 인용하게 한다.
+    private(set) var completedReply: String?
 
     /// 이전 턴(누르기/떼기)이 끝날 때까지 다음 턴을 미루는 직렬화 핸들.
     private var turnTask: Task<Void, Never>?
@@ -67,6 +70,9 @@ final class NPCOrderModel {
     func release() {
         chain { [weak self] epoch in
             guard let self, !self.completed else { return }
+            // endTurn 직전에 비워둔다 — 이전 세션에서 남은 턴이 reset() 이후에 뒤늦게
+            // lastEvent를 써도, 그 값이 다음 세션 첫 발화의 완료 판정에 남지 않도록.
+            self.controller.lastEvent = ""
             await self.controller.endTurn()
             guard epoch == self.sessionEpoch else { return }   // 이전 세션의 잔여 턴은 무시
             // orderPlaced(주문 확정)·helpRequested(도움 요청) 모두 3단계 완료로 인정.
@@ -98,6 +104,7 @@ final class NPCOrderModel {
         guard !completed else { return }
         controller.userText = choice.label
         controller.npcSubtitle = choice.reply
+        completedReply = choice.reply
         Task { await voice.speak(sentences: [choice.reply]) { _ in } }   // 실패 시 자막만
         complete()
     }
@@ -131,6 +138,7 @@ final class NPCOrderModel {
         fallbackMode = false
         sttUnavailable = false
         completed = false
+        completedReply = nil
         consecutiveIncompleteTurns = 0
         controller.lastEvent = ""
         controller.userText = ""
