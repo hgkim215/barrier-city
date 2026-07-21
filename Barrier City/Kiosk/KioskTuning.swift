@@ -9,10 +9,18 @@
 import simd
 
 enum KioskTuning {
-    // MARK: 화면 존 경계(월드 y, m) — 서 있는 성인 기준 키오스크
-    /// 키오스크 화면 패널 중심 높이. [실측 조정]
+    // MARK: 화면 존 경계(y, m) — 서 있는 성인 기준 키오스크
+    //
+    // 주의: 아래 두 값은 서로 다른 좌표계에 있다.
+    //  - screenCenterY: 맵(worldRoot) 로컬 프레임. 패널을 맵에 배치할 때 쓴다.
+    //  - upperZoneMinY: 씬 루트(실공간) 프레임. ARKit 손 높이와 직접 비교한다.
+    // 지금 둘이 맞아떨어지는 것은 AppModel.viewHeightOffset == 0이고 평지 실내라
+    // 두 프레임의 y가 같기 때문이다. viewHeightOffset을 0이 아닌 값으로 바꾸거나
+    // 경사가 있는 곳에 키오스크를 두면 두 값을 함께 다시 맞춰야 한다.
+    /// 키오스크 화면 패널 중심 높이(맵 프레임). [실측 조정]
     static let screenCenterY: Float = 1.25
-    /// 이 높이 위는 '상단 존'(카테고리 탭·결제 버튼). 앉은 손은 못 닿는다. [실측 조정]
+    /// 이 높이 위는 '상단 존'(카테고리 탭·결제 버튼). 앉은 손은 못 닿는다.
+    /// 실공간 프레임 기준 — 손 월드 좌표와 직접 비교된다. [실측 조정]
     static let upperZoneMinY: Float = 1.4
     /// 리치 판정 여유(m). 존 경계보다 이만큼 아래까지는 닿은 것으로 인정.
     static let reachMargin: Float = 0.05
