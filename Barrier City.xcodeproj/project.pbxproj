@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0450740C2FED0B25008DEC5E /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 0450740B2FED0B25008DEC5E /* RealityKitContent */; };
+		3A72189CAC610064241C4D0B /* KioskFlowModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2B09BAFD28642AEEBB945F /* KioskFlowModelTests.swift */; };
 		DA1A000000000000000000B1 /* DialogueKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D1 /* DialogueKit */; };
 		DA1A000000000000000000B2 /* DialogueKitOpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D2 /* DialogueKitOpenAI */; };
 		F094D747456443A8485E5796 /* KioskFlowLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */; };
@@ -28,6 +29,7 @@
 		045074062FED0B25008DEC5E /* Barrier City.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Barrier City.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0450740A2FED0B25008DEC5E /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		133129D60519B94F0E46B29D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/XROS.platform/Developer/SDKs/XROS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		2B2B09BAFD28642AEEBB945F /* KioskFlowModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KioskFlowModelTests.swift; sourceTree = "<group>"; };
 		8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KioskFlowLogicTests.swift; sourceTree = "<group>"; };
 		94FFF2F9473BBA0A761CEF06 /* Barrier CityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Barrier CityTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA1A000000000000000000F1 /* DialogueKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DialogueKit; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 			isa = PBXGroup;
 			children = (
 				8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */,
+				2B2B09BAFD28642AEEBB945F /* KioskFlowModelTests.swift */,
 			);
 			name = "Barrier CityTests";
 			path = "Barrier CityTests";
@@ -245,6 +248,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F094D747456443A8485E5796 /* KioskFlowLogicTests.swift in Sources */,
+				3A72189CAC610064241C4D0B /* KioskFlowModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
