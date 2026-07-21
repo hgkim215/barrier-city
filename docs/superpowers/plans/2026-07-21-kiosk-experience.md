@@ -936,13 +936,14 @@ struct KioskScreenView: View {
         VStack(spacing: 14) {
             Text("결제 금액").font(.title3).foregroundStyle(.secondary)
             Text("\(m.cartTotal)원").font(.system(size: 54, weight: .bold))
+            // 결제 화면의 안내는 '결제 시도'에만 반응한다. showsReachHint는 카테고리
+            // 근접 실패와 카운터를 공유하므로, 그걸 쓰면 결제를 눌러보기도 전에
+            // "닿지 않는다"가 떠서 장벽 ③의 좌절 연출이 김빠진다.
             if m.paymentAttempts > 0 {
-                Text("결제가 진행되지 않았습니다 (\(m.paymentAttempts)/\(KioskTuning.paymentMaxAttempts))")
+                Label("손이 닿지 않아 결제가 진행되지 않았습니다 (\(m.paymentAttempts)/\(KioskTuning.paymentMaxAttempts))",
+                      systemImage: "hand.raised.slash")
                     .font(.callout).foregroundStyle(.orange)
-            }
-            if m.showsReachHint {
-                Label("손이 닿지 않습니다", systemImage: "hand.raised.slash")
-                    .font(.callout).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
             }
         }
         Spacer()
