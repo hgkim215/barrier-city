@@ -86,7 +86,6 @@ enum SceneSwitcher {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
         im.kioskPanelEntity?.isEnabled = false
 

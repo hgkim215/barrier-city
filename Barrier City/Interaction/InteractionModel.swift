@@ -118,9 +118,6 @@ final class InteractionModel {
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?
-    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
-    /// 트리거 이탈/재진입 시 리셋.
-    var kioskTooHighShown = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.

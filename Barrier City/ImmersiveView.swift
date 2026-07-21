@@ -177,9 +177,9 @@ struct ImmersiveView: View {
             Attachment(id: "entryPrompt") {
                 EntryPromptView()
             }
-            // [김현기] 키오스크 주문 화면(고정 높이 장벽은 InteractionSetup이 처리)
+            // [김현기] 키오스크 화면(실물 크기·월드 고정 — 배치는 InteractionSetup)
             Attachment(id: "kioskScreen") {
-                KioskOrderView()
+                KioskScreenView()
             }
             // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
