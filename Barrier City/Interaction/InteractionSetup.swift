@@ -32,6 +32,8 @@ enum InteractionSetup {
         im.dismissedTriggerID = nil
         im.isTransitioning = false
         im.transitionError = nil
+        KioskFlowModel.shared.reset()
+        kioskPlacedForTriggerID = nil
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
@@ -72,16 +74,16 @@ enum InteractionSetup {
             cancelLabel: "아니요")]
 
         // 3) 매 프레임 근접 판정 구독(구독 객체를 보관해야 해제되지 않는다).
-        im.updateSubscription = content.subscribe(to: SceneEvents.Update.self) { _ in
-            tick()
+        im.updateSubscription = content.subscribe(to: SceneEvents.Update.self) { event in
+            tick(dt: Float(event.deltaTime))
         }
 
         // 4) [김현기] 퀘스트 가이드 HUD 설치(HUD는 씬 루트에 붙고 head를 따라간다).
         QuestSetup.install(content: content, attachments: attachments, appModel: appModel)
     }
 
-    /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치·빌보드.
-    private static func tick() {
+    /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치 → 키오스크 리치·타이머.
+    private static func tick(dt: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
         guard !im.isTransitioning else { return }
@@ -98,16 +100,66 @@ enum InteractionSetup {
             if im.activeTrigger == nil { im.transitionError = nil }   // 닫힐 때 안내 문구도 정리
         }
         updatePanel(im)
+
+        // [키오스크] 활성 여부·리치 판정 갱신 후 상태 머신 진행.
+        let kfm = KioskFlowModel.shared
+        let kioskNowActive = (im.activeTrigger?.kind == .kioskScreen)
+        if kioskNowActive && !kfm.isActive { kfm.resumeAtTrigger() }   // 재진입: 유휴 타이머만 리셋
+        kfm.isActive = kioskNowActive
+        if kfm.isActive, let panel = im.kioskPanelEntity {
+            let world = panel.position(relativeTo: nil)
+            let kioskXZ = SIMD2(world.x, world.z)
+            func reaches(_ hand: SIMD3<Float>?) -> Bool {
+                KioskFlowLogic.canReach(hand: hand, kioskXZ: kioskXZ,
+                                        zoneMinY: KioskTuning.upperZoneMinY,
+                                        margin: KioskTuning.reachMargin,
+                                        maxXZ: KioskTuning.reachMaxXZ)
+            }
+            kfm.reachableUpper = reaches(app.handWorldLeft) || reaches(app.handWorldRight)
+        } else {
+            kfm.reachableUpper = false
+        }
+        kfm.tick(dt: dt, transitioning: im.isTransitioning)
     }
 
-    /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).
-    /// 키오스크는 박스에 묻히지 않도록 사용자 쪽으로 당겨(forwardOffset) 표면 앞에 띄운다.
+    /// 키오스크 화면을 월드에 고정한 트리거 id(활성화 시 1회 배치용).
+    private static var kioskPlacedForTriggerID: String?
+
+    /// 활성 트리거의 kind에 맞는 패널만 표시.
+    /// 문 패널: 기존 눈높이 빌보드. 키오스크: 활성화 순간 1회 월드 고정(실물 화면처럼
+    /// 접근 각도와 무관하게 공간에 붙박이 — 이후 프레임에는 위치를 건드리지 않는다).
     private static func updatePanel(_ im: InteractionModel) {
         let trigger = im.activeTrigger
         showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
                       trigger: trigger, forwardOffset: 0)
-        showBillboard(im.kioskPanelEntity, active: trigger?.kind == .kioskScreen,
-                      trigger: trigger, forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+
+        let kioskActive = trigger?.kind == .kioskScreen
+        if let kiosk = im.kioskPanelEntity {
+            kiosk.isEnabled = kioskActive
+            if kioskActive, let t = trigger, kioskPlacedForTriggerID != t.id {
+                placeKioskFixed(kiosk, trigger: t)
+                kioskPlacedForTriggerID = t.id
+            }
+            if !kioskActive { kioskPlacedForTriggerID = nil }
+        }
+    }
+
+    /// 키오스크 화면을 트리거 중심 위 화면 높이에 놓고, 사용자(세계 원점) 쪽으로
+    /// forwardOffset만큼 당긴 뒤 사용자를 향해 1회 회전(이후 고정).
+    private static func placeKioskFixed(_ panel: Entity, trigger t: ProximityTrigger) {
+        panel.setPosition([t.center.x, KioskTuning.screenCenterY, t.center.y],
+                          relativeTo: panel.parent)
+        var worldPos = panel.position(relativeTo: nil)
+        let horiz = SIMD2(worldPos.x, worldPos.z)
+        let dist = simd_length(horiz)
+        if dist > 0.001 {
+            let pulled = horiz - (horiz / dist) * InteractionTuning.kioskPanelForwardOffset
+            worldPos.x = pulled.x
+            worldPos.z = pulled.y
+            panel.setPosition(worldPos, relativeTo: nil)
+        }
+        let yaw = atan2(-worldPos.x, -worldPos.z)
+        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
     }
 
     /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, forwardOffset만큼 사용자(세계 원점)

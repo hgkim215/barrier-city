@@ -139,6 +139,11 @@ final class AppModel {
     /// System이 0이 아닌 충격량을 실제로 받은 횟수(엔진 측).
     var impulseApplied: Int = 0
 
+    // MARK: - 손 월드 좌표(키오스크 리치 판정용)
+    /// 마지막으로 추적된 손(손바닥 기준점)의 월드 좌표. 추적 안 되면 nil(시뮬레이터 포함).
+    var handWorldLeft: SIMD3<Float>?
+    var handWorldRight: SIMD3<Float>?
+
     // MARK: - 손 추적 진단
     /// 손 앵커 업데이트를 받은 총 횟수(0에서 안 변하면 데이터가 안 들어옴).
     var handUpdates: Int = 0

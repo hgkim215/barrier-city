@@ -83,6 +83,11 @@ final class HandTrackingManager {
         // 잡기 기준점: 손목이 아니라 '손바닥(중지 밑마디)' 월드 위치.
         // 손목은 실제 쥐는 지점보다 아래에 있어 잡기 영역이 처지므로 보정.
         let gripPos = gripWorldPosition(anchor)
+        // 리치 판정용 월드 좌표 기록(추적이 끊기면 nil로 지워 오판 방지).
+        switch chirality {
+        case .left:  model.handWorldLeft  = anchor.isTracked ? gripPos : nil
+        case .right: model.handWorldRight = anchor.isTracked ? gripPos : nil
+        }
         let z = gripPos.z
 
         // 해당 쪽 바퀴까지 거리.
