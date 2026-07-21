@@ -98,4 +98,29 @@ final class KioskFlowLogicTests: XCTestCase {
         XCTAssertFalse(KioskFlowLogic.standUpShown(currentlyShown: true, headY: 1.10,
                                                    baselineY: 1.0, enter: 0.25, exit: 0.15))
     }
+
+    // MARK: 기준 높이 갱신(최솟값 트래킹)
+
+    func testUpdatedBaseline_nilCurrentReturnsHeadY() {
+        XCTAssertEqual(KioskFlowLogic.updatedBaseline(current: nil, headY: 1.6), 1.6)
+    }
+    func testUpdatedBaseline_lowerHeadYLowersBaseline() {
+        XCTAssertEqual(KioskFlowLogic.updatedBaseline(current: 1.6, headY: 1.0), 1.0)
+    }
+    func testUpdatedBaseline_higherHeadYKeepsBaseline() {
+        XCTAssertEqual(KioskFlowLogic.updatedBaseline(current: 1.0, headY: 1.6), 1.0)
+    }
+    func testUpdatedBaseline_standingAtEntryThenSittingThenStandingTriggersGuard() {
+        // 입장 시 서 있는 상태(1.6m)로 기준이 굳지 않아야 한다.
+        var baseline: Float? = nil
+        baseline = KioskFlowLogic.updatedBaseline(current: baseline, headY: 1.6)
+        // 이후 앉음(1.0m) → 최솟값 트래킹으로 기준이 앉은 높이까지 내려감.
+        baseline = KioskFlowLogic.updatedBaseline(current: baseline, headY: 1.0)
+        // 다시 일어섬(1.6m) → 기준(1.0) 대비 rise 0.6m가 enter(0.25)를 초과해 가드가 발동해야 한다.
+        let standing = KioskFlowLogic.standUpShown(currentlyShown: false, headY: 1.6,
+                                                    baselineY: baseline!,
+                                                    enter: KioskTuning.standUpEnter,
+                                                    exit: KioskTuning.standUpExit)
+        XCTAssertTrue(standing)
+    }
 }

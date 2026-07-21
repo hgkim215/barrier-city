@@ -55,4 +55,16 @@ enum KioskFlowLogic {
         let rise = headY - baselineY
         return currentlyShown ? rise > exit : rise > enter
     }
+
+    /// 기준 높이 갱신: 관측된 머리 높이의 최솟값을 기준으로 삼는다.
+    /// 최초 샘플만 쓰면 사용자가 '서 있는 상태로 입장'했을 때 기준이 서 있는 높이로
+    /// 굳어 가드가 영영 발동하지 않는다(= 배리어 무력화). 최솟값을 쓰면 앉는 순간
+    /// 기준이 다시 내려간다.
+    /// 트레이드오프: 사용자가 한 번 크게 고개를 숙이면 기준이 그만큼 낮아져
+    /// 바로 앉은 자세가 '일어섬'으로 잡힐 수 있다. 무음으로 배리어가 사라지는 것보다
+    /// 눈에 보이는 오탐이 낫다고 판단해 최솟값을 택한다.
+    static func updatedBaseline(current: Float?, headY: Float) -> Float {
+        guard let current else { return headY }
+        return min(current, headY)
+    }
 }

@@ -38,11 +38,18 @@ final class StandUpGuard {
     func tick() {
         guard running,
               let anchor = provider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime())
-        else { return }
+        else {
+            // 추적 유실 시 오버레이를 그대로 두면 화면에 고정된 채 남고,
+            // KioskFlowModel.tick의 !standUpShown 게이트 때문에 유휴 타이머까지
+            // 함께 멈춘다. 가드를 비활성 상태로 되돌려 체험이 계속되게 한다.
+            KioskFlowModel.shared.standUpShown = false
+            overlayEntity?.isEnabled = false
+            return
+        }
         let m = anchor.originFromAnchorTransform
         let headY = m.columns.3.y
-        if baselineY == nil { baselineY = headY }
-        guard let base = baselineY else { return }
+        let base = KioskFlowLogic.updatedBaseline(current: baselineY, headY: headY)
+        baselineY = base
 
         let kfm = KioskFlowModel.shared
         kfm.standUpShown = KioskFlowLogic.standUpShown(
