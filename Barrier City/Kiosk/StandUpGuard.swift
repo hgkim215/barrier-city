@@ -54,9 +54,12 @@ final class StandUpGuard {
         baselineY = base
 
         let kfm = KioskFlowModel.shared
-        kfm.standUpShown = KioskFlowLogic.standUpShown(
+        // 위 추적 유실 경로와 같은 이유로, 값이 실제로 바뀔 때만 쓴다(@Observable의 setter는
+        // 같은 값을 넣어도 변경을 발생시켜 매 프레임 불필요한 옵저버 갱신을 일으킨다).
+        let shown = KioskFlowLogic.standUpShown(
             currentlyShown: kfm.standUpShown, headY: headY, baselineY: base,
             enter: KioskTuning.standUpEnter, exit: KioskTuning.standUpExit)
+        if kfm.standUpShown != shown { kfm.standUpShown = shown }
 
         guard let overlay = overlayEntity else { return }
         overlay.isEnabled = kfm.standUpShown
