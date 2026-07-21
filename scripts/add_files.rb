@@ -1,5 +1,10 @@
 # 사용: ruby scripts/add_files.rb <target명> <파일경로>...
 # 파일을 그룹 트리에 만들고 지정 타깃의 컴파일 소스에 추가한다(이미 있으면 건너뜀).
+#
+# 주의: 테스트 타깃("Barrier CityTests") 전용이다. 앱 타깃("Barrier City")에는
+# 쓰지 말 것 — 앱 타깃 그룹은 PBXFileSystemSynchronizedRootGroup이라
+# `Barrier City/` 아래에 파일을 만들기만 하면 자동으로 포함되고, 이 스크립트를
+# 실행하면 set_source_tree 미지원으로 예외가 난다.
 require 'xcodeproj'
 
 target_name = ARGV.shift or abort '타깃명 필요'
