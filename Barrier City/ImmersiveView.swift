@@ -181,6 +181,12 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskScreenView()
             }
+            // [김현기] NPC 주문 대화 패널(빌보드는 InteractionSetup이 처리)
+            Attachment(id: "npcOrder") {
+                Text("직원")   // Task 9에서 NPCOrderView로 교체
+                    .padding(40)
+                    .glassBackgroundEffect()
+            }
             // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
                 QuestHUDView()

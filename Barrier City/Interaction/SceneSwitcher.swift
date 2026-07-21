@@ -77,12 +77,23 @@ enum SceneSwitcher {
             print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
         }
         im.scene = .indoor
-        im.triggers = [ProximityTrigger(
+        var indoorTriggers = [ProximityTrigger(
             id: "kiosk.order",
             center: kioskCenter,
             radius: InteractionTuning.kioskTriggerRadius,
             kind: .kioskScreen,
             prompt: InteractionTuning.kioskTitle)]
+
+        // [김현기] NPC 직원 배치 + 대화 트리거(항상 활성 — 퀘스트는 3단계에서만 반응).
+        NPCSetup.reset()
+        let npcCenter = await NPCSetup.placeStaff(in: indoorVisible, worldRoot: worldRoot)
+        indoorTriggers.append(ProximityTrigger(
+            id: "npc.staff",
+            center: npcCenter,
+            radius: KioskTuning.npcTriggerRadius,
+            kind: .npcDialogue,
+            prompt: "직원에게 주문하기"))
+        im.triggers = indoorTriggers
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil

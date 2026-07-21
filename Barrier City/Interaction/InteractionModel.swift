@@ -23,6 +23,8 @@ enum TriggerKind {
     case yesNoPrompt
     /// 키오스크 주문 화면(고정 높이 장벽)
     case kioskScreen
+    /// NPC 직원 대화 패널
+    case npcDialogue
 }
 
 /// 근접 인터랙션 트리거 하나(문·키오스크 등). 순수 값 타입.
@@ -118,6 +120,8 @@ final class InteractionModel {
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?
+    /// NPC 주문 대화 패널 attachment 엔티티(worldRoot 자식).
+    @ObservationIgnored var npcPanelEntity: Entity?
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.

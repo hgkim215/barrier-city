@@ -36,6 +36,7 @@ enum InteractionSetup {
         im.isTransitioning = false
         im.transitionError = nil
         KioskFlowModel.shared.reset()
+        NPCSetup.reset()
         kioskPlacedForTriggerID = nil
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
@@ -53,6 +54,13 @@ enum InteractionSetup {
                 im.kioskPanelEntity = kiosk
             } else {
                 print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
+            }
+            if let npc = attachments.entity(for: "npcOrder") {
+                npc.isEnabled = false
+                worldRoot.addChild(npc)
+                im.npcPanelEntity = npc
+            } else {
+                print("⚠️ npcOrder attachment 없음 — NPC 대화 패널 비활성")
             }
         } else {
             print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
@@ -150,6 +158,8 @@ enum InteractionSetup {
         let trigger = im.activeTrigger
         showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
                       trigger: trigger, forwardOffset: 0)
+        showBillboard(im.npcPanelEntity, active: trigger?.kind == .npcDialogue,
+                      trigger: trigger, forwardOffset: 0.5)
 
         let kioskActive = trigger?.kind == .kioskScreen
         if let kiosk = im.kioskPanelEntity {
