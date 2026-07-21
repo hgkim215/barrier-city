@@ -3,9 +3,13 @@
 //  Barrier City
 //
 //  실물 크기 키오스크 화면(월드 고정 attachment — 배치는 InteractionSetup).
-//  세로 1090pt ≈ 0.8m. 상단 영역(카테고리·결제 확인)은 공간상 1.4m+ 높이에 놓여
-//  앉은 사용자의 손이 닿지 않는다. 상단 버튼 탭은 KioskFlowModel이
-//  리치 판정에 따라 근접 실패로 라우팅한다.
+//  세로 1090pt ≈ 0.801m. screenCenterY 1.25m에 중심을 두면 상단 영역
+//  (카테고리·결제 확인)의 아래 모서리가 1.504m에 온다 — 앉은 사용자의 손이 닿지 않는 높이.
+//  상단 버튼 탭은 KioskFlowModel이 리치 판정에 따라 근접 실패로 라우팅한다.
+//
+//  주의: 이 화면의 치수(1090pt, 상단 존 200pt)는 스타일이 아니라 '도달 불가'를
+//  만들어내는 값이고, KioskTuning.upperZoneMinY(1.50)가 여기서 역산된다.
+//  치수를 바꾸면 그 상수도 함께 다시 계산할 것(계산식은 KioskTuning에 있다).
 //
 
 import SwiftUI
@@ -165,7 +169,8 @@ struct KioskScreenView: View {
 
     // MARK: 공통 조각
 
-    /// 상단 존 컨테이너: 높이를 고정해 화면 위쪽(공간상 1.4m+)에 온다.
+    /// 상단 존 컨테이너: 높이(200pt)를 고정해 아래 모서리가 공간상 1.504m에 오게 한다.
+    /// 이 높이가 KioskTuning.upperZoneMinY(1.50)의 근거다 — 함께 바꿔야 한다.
     @ViewBuilder
     private func upperZone<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
