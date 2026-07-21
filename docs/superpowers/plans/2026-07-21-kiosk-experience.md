@@ -126,6 +126,7 @@ git commit -m "test: Barrier CityTests 유닛 테스트 타깃 신설"
 - Create: `Barrier City/Kiosk/KioskTuning.swift`
 - Create: `Barrier City/Kiosk/KioskFlowLogic.swift`
 - Test: `Barrier CityTests/KioskFlowLogicTests.swift`
+- Delete: `Barrier CityTests/SmokeTests.swift` (Step 6 참조)
 
 새 파일을 앱 타깃에 추가하는 법: Xcode가 폴더 동기화(fileSystemSynchronizedGroups)를 쓰지 않는 프로젝트이므로, 파일 생성 후 `ruby scripts/add_files.rb` 헬퍼로 추가한다(Step 1에서 작성). 이후 태스크도 동일 헬퍼를 쓴다.
 
@@ -405,10 +406,28 @@ xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator
 ```
 Expected: `** TEST SUCCEEDED **`, KioskFlowLogicTests 17개 전부 PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 스모크 테스트 제거**
+
+Task 1의 `SmokeTests.swift`는 `XCTAssertTrue(true)`로 아무 동작도 검증하지 않는
+자리표시였다(테스트 타깃이 빌드·실행되는지만 확인하는 용도). 이제
+KioskFlowLogicTests가 실제 동작을 검증하며 같은 역할을 대신하므로 제거한다.
 
 ```bash
-git add "Barrier City/Kiosk" "Barrier CityTests/KioskFlowLogicTests.swift" scripts/add_files.rb "Barrier City.xcodeproj"
+git rm "Barrier CityTests/SmokeTests.swift"
+ruby - <<'RB'
+require 'xcodeproj'
+proj = Xcodeproj::Project.open('Barrier City.xcodeproj')
+proj.files.select { |f| f.path.to_s.include?('SmokeTests') }.each(&:remove_from_project)
+proj.save
+RB
+xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
+```
+Expected: `** TEST SUCCEEDED **`, KioskFlowLogicTests만 실행(SmokeTests 없음)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A "Barrier City/Kiosk" "Barrier CityTests" scripts/add_files.rb "Barrier City.xcodeproj"
 git commit -m "feat(kiosk): 상태 전이·리치·일어서기 판정 순수 함수 + 튜닝 상수 (TDD)"
 ```
 
