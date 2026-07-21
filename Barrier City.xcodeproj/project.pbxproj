@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		0450740C2FED0B25008DEC5E /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 0450740B2FED0B25008DEC5E /* RealityKitContent */; };
-		7C46444DEF1FE0CB8F7E8842 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */; };
 		DA1A000000000000000000B1 /* DialogueKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D1 /* DialogueKit */; };
 		DA1A000000000000000000B2 /* DialogueKitOpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A000000000000000000D2 /* DialogueKitOpenAI */; };
+		F094D747456443A8485E5796 /* KioskFlowLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */; };
 		FED24DEDB81DA93D107030D1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 133129D60519B94F0E46B29D /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -28,9 +28,9 @@
 		045074062FED0B25008DEC5E /* Barrier City.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Barrier City.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0450740A2FED0B25008DEC5E /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		133129D60519B94F0E46B29D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/XROS.platform/Developer/SDKs/XROS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KioskFlowLogicTests.swift; sourceTree = "<group>"; };
 		94FFF2F9473BBA0A761CEF06 /* Barrier CityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Barrier CityTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA1A000000000000000000F1 /* DialogueKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DialogueKit; sourceTree = "<group>"; };
-		F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -116,7 +116,7 @@
 		D91E909C00FE20427874A558 /* Barrier CityTests */ = {
 			isa = PBXGroup;
 			children = (
-				F27D1F49A28E9E9CEBFCAD11 /* SmokeTests.swift */,
+				8FD6F5CF26C4685F44F385BC /* KioskFlowLogicTests.swift */,
 			);
 			name = "Barrier CityTests";
 			path = "Barrier CityTests";
@@ -244,7 +244,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7C46444DEF1FE0CB8F7E8842 /* SmokeTests.swift in Sources */,
+				F094D747456443A8485E5796 /* KioskFlowLogicTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
