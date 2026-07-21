@@ -732,6 +732,9 @@ git commit -m "feat(kiosk): KioskFlowModel 상태 머신 — 유휴 타이머·�
 - Create: `Barrier City/Kiosk/KioskMenu.swift`
 - Create: `Barrier City/Kiosk/KioskScreenView.swift`
 - Modify: `Barrier City/ImmersiveView.swift` (attachment 교체: `KioskOrderView()` → `KioskScreenView()`)
+- Modify: `Barrier City/Interaction/InteractionModel.swift` (`kioskTooHighShown` 제거)
+- Modify: `Barrier City/Interaction/InteractionSetup.swift` (`kioskTooHighShown` 참조 2곳 제거)
+- Modify: `Barrier City/Interaction/SceneSwitcher.swift` (`kioskTooHighShown` 참조 제거)
 - Delete: `Barrier City/Interaction/KioskOrderView.swift`
 
 **Interfaces:**
@@ -1024,9 +1027,24 @@ proj.save
 RB
 ```
 
-주의: `KioskOrderView`가 쓰던 `InteractionModel.kioskTooHighShown`은 Task 5에서 제거한다(이 시점에는 다른 참조가 남아 있으므로 두기).
+- [ ] **Step 4: kioskTooHighShown 제거(유일한 소비자였던 KioskOrderView와 함께)**
 
-- [ ] **Step 4: 소스 추가·전체 빌드/테스트 확인**
+`KioskOrderView`가 유일하게 읽던 프로퍼티이므로 같은 커밋에서 정리한다(쓰기만 하고 아무도 읽지 않는 상태를 남기지 않는다).
+
+`Barrier City/Interaction/InteractionModel.swift`에서 다음 프로퍼티를 삭제:
+```swift
+    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
+    /// 트리거 이탈/재진입 시 리셋.
+    var kioskTooHighShown = false
+```
+
+`Barrier City/Interaction/SceneSwitcher.swift`에서 `im.kioskTooHighShown = false` 줄 삭제.
+
+`Barrier City/Interaction/InteractionSetup.swift`에서 `im.kioskTooHighShown = false` 두 곳 삭제:
+- `install`의 0단계 리셋 목록에 있는 줄
+- `tick`의 트리거 변경 처리 블록 안에 있는 줄(주석 `// 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋` 포함)
+
+- [ ] **Step 5: 소스 추가·전체 빌드/테스트 확인**
 
 Run:
 ```bash
@@ -1035,7 +1053,7 @@ xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator
 ```
 Expected: `** TEST SUCCEEDED **`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A "Barrier City" "Barrier City.xcodeproj"
@@ -1044,14 +1062,12 @@ git commit -m "feat(kiosk): 실물 키오스크 화면 — 4단계 UI(탐색·�
 
 ---
 
-### Task 5: 배선 — 손 월드 좌표 + 리치 틱 + 패널 월드 고정 + kioskTooHighShown 제거
+### Task 5: 배선 — 손 월드 좌표 + 리치 틱 + 패널 월드 고정
 
 **Files:**
 - Modify: `Barrier City/AppModel.swift` (프로퍼티 2개 추가)
 - Modify: `Barrier City/HandTrackingManager.swift` (좌표 기록)
 - Modify: `Barrier City/Interaction/InteractionSetup.swift` (틱 확장·월드 고정 배치·리셋 목록)
-- Modify: `Barrier City/Interaction/InteractionModel.swift` (`kioskTooHighShown` 제거)
-- Modify: `Barrier City/Interaction/SceneSwitcher.swift` (`kioskTooHighShown` 참조 제거)
 
 **Interfaces:**
 - Consumes: `KioskFlowModel.shared`, `KioskFlowLogic.canReach`, `KioskTuning`
@@ -1078,22 +1094,13 @@ git commit -m "feat(kiosk): 실물 키오스크 화면 — 4단계 UI(탐색·�
         }
 ```
 
-- [ ] **Step 3: InteractionModel·SceneSwitcher에서 kioskTooHighShown 제거**
+- [ ] **Step 3: InteractionSetup 재작성(설치 리셋·dt 전달·리치 틱·월드 고정 배치)**
 
-`Barrier City/Interaction/InteractionModel.swift`에서 다음 프로퍼티를 삭제:
-```swift
-    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
-    /// 트리거 이탈/재진입 시 리셋.
-    var kioskTooHighShown = false
-```
-`Barrier City/Interaction/SceneSwitcher.swift`에서 `im.kioskTooHighShown = false` 줄 삭제.
-`Barrier City/Interaction/InteractionSetup.swift`에서 `im.kioskTooHighShown = false` 두 곳(install의 0단계, tick의 트리거 변경 처리) 삭제 — tick 쪽은 Step 4에서 함께 재작성한다.
-
-- [ ] **Step 4: InteractionSetup 재작성(설치 리셋·dt 전달·리치 틱·월드 고정 배치)**
+전제: Task 4에서 `kioskTooHighShown`이 이미 제거되어 있다.
 
 `Barrier City/Interaction/InteractionSetup.swift`에 다음 변경을 적용:
 
-(a) `install`의 0단계 리셋 목록에서 `im.kioskTooHighShown = false`를 다음으로 교체:
+(a) `install`의 0단계 리셋 목록(`im.transitionError = nil` 다음)에 추가:
 ```swift
         KioskFlowModel.shared.reset()
         kioskPlacedForTriggerID = nil
@@ -1192,12 +1199,12 @@ git commit -m "feat(kiosk): 실물 키오스크 화면 — 4단계 UI(탐색·�
     }
 ```
 
-- [ ] **Step 5: 빌드·전체 테스트 확인**
+- [ ] **Step 4: 빌드·전체 테스트 확인**
 
 Run: `xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20`
 Expected: `** TEST SUCCEEDED **`
 
-- [ ] **Step 6: 시뮬레이터 수동 확인(핵심 흐름)**
+- [ ] **Step 5: 시뮬레이터 수동 확인(핵심 흐름)**
 
 시뮬레이터에서 앱 실행 → 몰입 진입 → 문으로 이동해 "예" → 실내에서 키오스크 접근:
 - 키오스크 화면이 공간에 고정되어 뜨는가(빌보드처럼 돌지 않는가)
@@ -1206,11 +1213,11 @@ Expected: `** TEST SUCCEEDED **`
 - 메뉴 담기 → "주문하기" → 결제 화면 → "결제 확인" 3회 → 최종 실패 + 퀘스트 3단계 전환
 확인 후 이상 있으면 수정하고 다시 확인.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add "Barrier City"
-git commit -m "feat(kiosk): 리치 판정 틱·화면 월드 고정 배선 + kioskTooHighShown 제거"
+git commit -m "feat(kiosk): 리치 판정 틱·화면 월드 고정 배선"
 ```
 
 ---
@@ -1401,11 +1408,12 @@ git commit -m "feat(kiosk): 일어서기 가드 — head 높이 감지 + 안내 
 
 **Files:**
 - Create: `Barrier City/Kiosk/PressureAudio.swift`
-- Modify: `Barrier City/Kiosk/KioskFlowModel.swift` (오디오 훅 3줄)
+- Modify: `Barrier City/Kiosk/KioskFlowModel.swift` (오디오 훅 4곳)
+- Modify: `Barrier CityTests/KioskFlowModelTests.swift` (setUp에서 오디오 비활성화)
 
 **Interfaces:**
 - Consumes: `VoiceOutput(config: AppConfig.proxy)` — `await voice.speak(sentences: [String]) { line in }` (DialogueKitOpenAI, NPCDialogueController와 동일 사용법), `ImpactAudio`의 합성 패턴
-- Produces: `PressureAudio.shared` — `func onFirstReset()`, `func onPaymentStruggle()`, `func tick(dt: Float)`, `func reset()`
+- Produces: `PressureAudio.shared` — `func onFirstReset()`, `func onPaymentStruggle()`, `func tick(dt: Float)`, `func reset()`; `static var isEnabled` (테스트에서 false로 꺼서 오디오·네트워크 부수 효과 차단)
 - 사운드 구성(스펙 대비): 발소리=코드 합성(에셋 불필요), 한숨·대사=프록시 TTS(네트워크 실패 시 조용히 생략 — fail-open). 헛기침은 생략(선택 확장).
 
 - [ ] **Step 1: PressureAudio 작성**
@@ -1430,6 +1438,10 @@ final class PressureAudio {
 
     static let shared = PressureAudio()
 
+    /// false면 모든 재생 요청을 무시한다. 단위 테스트가 오디오 엔진·TTS 네트워크
+    /// 호출을 일으키지 않도록 끄는 용도(KioskFlowModelTests.setUp).
+    static var isEnabled = true
+
     private let engine = AVAudioEngine()
     private let stepPlayer = AVAudioPlayerNode()
     private var stepBuffer: AVAudioPCMBuffer?
@@ -1448,7 +1460,7 @@ final class PressureAudio {
 
     /// 첫 시간 초과 리셋: 압박 시작(발소리 + 한숨 1회).
     func onFirstReset() {
-        guard level < 1 else { return }
+        guard Self.isEnabled, level < 1 else { return }
         level = 1
         prepare()
         if !sighSpoken {
@@ -1459,6 +1471,7 @@ final class PressureAudio {
 
     /// 결제 실패 시작: 재촉 대사 1회.
     func onPaymentStruggle() {
+        guard Self.isEnabled else { return }
         level = max(level, 2)
         prepare()
         if !lineSpoken {
@@ -1469,7 +1482,7 @@ final class PressureAudio {
 
     /// 매 프레임(KioskFlowModel.tick에서 호출). 발소리를 불규칙 간격으로 재생.
     func tick(dt: Float) {
-        guard level >= 1, started else { return }
+        guard Self.isEnabled, level >= 1, started else { return }
         stepCooldown -= dt
         if stepCooldown <= 0 {
             stepCooldown = Float.random(in: 1.0...2.2) / Float(level)   // 단계↑ → 잦아짐
@@ -1556,20 +1569,34 @@ final class PressureAudio {
         PressureAudio.shared.reset()
 ```
 
-- [ ] **Step 3: 소스 추가·테스트 확인**
+- [ ] **Step 3: 테스트에서 오디오 비활성화**
+
+KioskFlowModel의 타이머·결제 경로가 이제 PressureAudio를 호출하므로, 단위 테스트가
+오디오 엔진을 켜고 TTS 네트워크 호출을 일으키지 않도록 끈다.
+
+`Barrier CityTests/KioskFlowModelTests.swift`의 `setUp`에 한 줄 추가:
+```swift
+    override func setUp() async throws {
+        PressureAudio.isEnabled = false   // 오디오·네트워크 부수 효과 차단
+        KioskFlowModel.shared.reset()
+        KioskFlowModel.shared.isActive = true
+    }
+```
+
+- [ ] **Step 4: 소스 추가·테스트 확인**
 
 Run:
 ```bash
 ruby scripts/add_files.rb "Barrier City" "Barrier City/Kiosk/PressureAudio.swift"
 xcodebuild test -scheme "Barrier City" -destination 'platform=visionOS Simulator,name=Apple Vision Pro' 2>&1 | tail -20
 ```
-Expected: `** TEST SUCCEEDED **` (기존 KioskFlowModelTests가 오디오 훅 경유해도 통과 — PressureAudio는 부수 효과만 있고 상태 전이에 관여하지 않는다)
+Expected: `** TEST SUCCEEDED **`
 
-- [ ] **Step 4: 시뮬레이터 확인**
+- [ ] **Step 5: 시뮬레이터 확인**
 
 키오스크에서 방치 → 첫 리셋 후 발소리가 반복되는지, 결제 실패 후 대사가 나오는지(네트워크 연결 시). 소리 크기·간격이 거슬리면 `playStep`의 volume·`tick`의 간격 범위 조정.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add "Barrier City" "Barrier City.xcodeproj"
