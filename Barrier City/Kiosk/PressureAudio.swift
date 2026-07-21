@@ -4,7 +4,8 @@
 //
 //  키오스크 뒤 대기줄의 사회적 압박 사운드.
 //  - 발소리: ImpactAudio 패턴의 합성음(에셋 불필요, 오프라인 동작)
-//  - 한숨·재촉 대사: 프록시 TTS(VoiceOutput). 실패하면 조용히 생략(fail-open).
+//  - 한숨·재촉 대사: 프록시 TTS(VoiceOutput) 우선 시도, 실패 시 온디바이스 음성 합성으로
+//    폴백(VoiceOutput 내부 처리). 실패해도 대사는 생략되지 않고 다른 목소리로 들린다.
 //  강도 단계: 0=무음 → 1(첫 리셋: 발소리+한숨) → 2(결제 실패: 재촉 대사).
 //
 
@@ -33,6 +34,7 @@ final class PressureAudio {
     private var sighSpoken = false
     private var lineSpoken = false
     private var stepCooldown: Float = 0
+    private var speechTask: Task<Void, Never>?
 
     private init() {}
 
@@ -43,7 +45,7 @@ final class PressureAudio {
         prepare()
         if !sighSpoken {
             sighSpoken = true
-            Task { await voice.speak(sentences: ["하아…"]) { _ in } }   // 실패 시 무음(fail-open)
+            enqueueSpeech("하아…")   // 프록시 TTS 실패 시 VoiceOutput이 온디바이스 음성으로 대신 말함
         }
     }
 
@@ -54,7 +56,17 @@ final class PressureAudio {
         prepare()
         if !lineSpoken {
             lineSpoken = true
-            Task { await voice.speak(sentences: ["저기… 얼마나 걸릴까요?"]) { _ in } }
+            enqueueSpeech("저기… 얼마나 걸릴까요?")   // 프록시 TTS 실패 시 VoiceOutput이 온디바이스 음성으로 대신 말함
+        }
+    }
+
+    /// `voice`는 한 번에 한 발화만 처리하도록 설계되어 있으므로(재생 상태를 인스턴스에 저장),
+    /// 이전 발화가 끝난 뒤에 다음 발화를 시작하도록 하나의 체인으로 직렬화한다.
+    private func enqueueSpeech(_ line: String) {
+        let previous = speechTask
+        speechTask = Task { @MainActor in
+            await previous?.value
+            await voice.speak(sentences: [line]) { _ in }
         }
     }
 
@@ -73,6 +85,8 @@ final class PressureAudio {
         sighSpoken = false
         lineSpoken = false
         stepCooldown = 0
+        speechTask?.cancel()   // 재생 중인 오디오 자체는 멈추지 않지만, 대기 중인 다음 발화는 남기지 않는다
+        speechTask = nil
     }
 
     // MARK: - 내부(ImpactAudio 패턴)
