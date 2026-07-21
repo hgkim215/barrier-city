@@ -85,8 +85,12 @@ final class PressureAudio {
         sighSpoken = false
         lineSpoken = false
         stepCooldown = 0
-        speechTask?.cancel()   // 재생 중인 오디오 자체는 멈추지 않지만, 대기 중인 다음 발화는 남기지 않는다
-        speechTask = nil
+        // speechTask는 일부러 취소하거나 nil로 비우지 않는다.
+        // 취소해도 무음이 되지 않는다 — VoiceOutput.speak()이 오류를 모두 잡아서
+        // 온디바이스 합성으로 폴백하므로, 취소된 발화도 결국 다른 목소리로 재생된다.
+        // 또한 여기서 nil로 비우면 다음 세션의 enqueueSpeech가 이전 발화를 기다리지 않고
+        // 바로 시작해, 아직 재생 중인 발화와 겹치며 VoiceOutput의 공유 delegate를 다시 경합시킨다.
+        // 참조를 남겨 두면 다음 세션도 이 발화가 끝날 때까지 체인으로 이어서 기다린다.
     }
 
     // MARK: - 내부(ImpactAudio 패턴)
