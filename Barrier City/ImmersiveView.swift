@@ -185,6 +185,10 @@ struct ImmersiveView: View {
             Attachment(id: "questHUD") {
                 QuestHUDView()
             }
+            // [김현기] 일어서기 가드 오버레이(배치는 StandUpGuard가 처리)
+            Attachment(id: "standUpOverlay") {
+                StandUpOverlayView()
+            }
         }
         .onAppear {
             model.isImmersive = true

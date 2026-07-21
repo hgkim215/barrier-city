@@ -16,6 +16,9 @@ import simd
 @MainActor
 enum InteractionSetup {
 
+    /// 일어서기 가드(설치 시 시작, 씬 루트의 오버레이를 관리).
+    private static var standUpGuard: StandUpGuard?
+
     /// ImmersiveView make 클로저 끝에서 호출. 전제: model.worldRoot와
     /// InteractionModel.shared.visibleMap이 설정된 뒤여야 한다.
     static func install(content: RealityViewContent,
@@ -54,6 +57,18 @@ enum InteractionSetup {
         } else {
             print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
         }
+
+        // 1.5) 일어서기 가드: 오버레이는 씬 루트에(맵과 함께 움직이면 안 된다).
+        let guardInstance = StandUpGuard()
+        if let overlay = attachments.entity(for: "standUpOverlay") {
+            overlay.isEnabled = false
+            content.add(overlay)
+            guardInstance.overlayEntity = overlay
+        } else {
+            print("⚠️ standUpOverlay attachment 없음 — 일어서기 안내 비활성")
+        }
+        standUpGuard = guardInstance
+        Task { await guardInstance.start() }
 
         // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
         var center = InteractionTuning.doorFallbackCenter
@@ -120,6 +135,7 @@ enum InteractionSetup {
             kfm.reachableUpper = false
         }
         kfm.tick(dt: dt, transitioning: im.isTransitioning)
+        standUpGuard?.tick()
     }
 
     /// 키오스크 화면을 월드에 고정한 트리거 id(활성화 시 1회 배치용).
