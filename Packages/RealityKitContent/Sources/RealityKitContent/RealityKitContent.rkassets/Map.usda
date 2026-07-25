@@ -89,10 +89,39 @@ def Xform "Root"
         }
     )
     {
-        reorder nameChildren = ["_coffee_1", "Ground"]
+        reorder nameChildren = ["OutdoorCollision", "EntranceBarrier", "Ground"]
         quatf xformOp:orient = (1, 0, 0, 0)
         float3 xformOp:translate = (0, 0, 10)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def "OutdoorCollision" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (-1.5707964, 0, 0)
+            }
+            references = @OutdoorCollision.usdz@
+        )
+        {
+            quatf xformOp:orient = (0.70710677, -0.7071067, 0, 0)
+            float3 xformOp:scale = (0.99999994, 0.99999994, 0.99999994)
+            float3 xformOp:translate = (0, 0.3, 10)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "EntranceBarrier" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = None (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            double size = 0.2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (80, 20, 1)
+            float3 xformOp:translate = (0, 2.2442904, 4.0967484)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
 
         def Cube "Ground" (
             active = true

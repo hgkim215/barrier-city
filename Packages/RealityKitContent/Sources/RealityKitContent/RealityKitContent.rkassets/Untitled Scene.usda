@@ -1,0 +1,206 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "Reality Composer Pro Version 2.0 (494.60.2)"
+    }
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    reorder nameChildren = ["NPCTest", "Happy", "Greeting", "Upset"]
+    def "NPCTest" (
+        active = true
+        references = @Skull.usdz@
+    )
+    {
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (0, 0.38435876, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            uniform token info:id = "RealityKit.AnimationLibrary"
+        }
+    }
+
+    def RealityKitTimeline "Happy"
+    {
+        def RealityKitTrack "Track"
+        {
+            def RealityKitAction "Spin"
+            {
+                string actionKind = "spin"
+                int blendLayer = 400
+                double duration = 1
+                uniform token info:id = "D0E2DCC3-ACD3-4B9B-82D0-FE2F6E6CF3E5"
+                double startTime = 0
+                rel target = </Root/NPCTest>
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+        }
+    }
+
+    def RealityKitTimeline "Greeting"
+    {
+        reorder nameChildren = ["Track", "Track2", "Track2", "Track2"]
+        def RealityKitTrack "Track"
+        {
+            def RealityKitAction "Transform_To2"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 0.2
+                uniform token info:id = "80D0EF36-9157-40C6-B0A9-7E5F64102920"
+                float3 position = (0, 0.30630246, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 0
+                rel target = </Root/NPCTest>
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+
+            def RealityKitAction "Transform_To"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 0.2
+                uniform token info:id = "964FC9C9-F6D4-4775-B380-1F23CE961322"
+                float3 position = (0, 0.38435876, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 0.2
+                rel target = </Root/NPCTest>
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+
+            def RealityKitAction "Transform_To22"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 0.2
+                uniform token info:id = "80D0EF36-9157-40C6-B0A9-7E5F64102920"
+                float3 position = (0, 0.30630246, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 0.4000000001
+                rel target = </Root/NPCTest>
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+
+            def RealityKitAction "Transform_To3"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 0.2
+                uniform token info:id = "964FC9C9-F6D4-4775-B380-1F23CE961322"
+                float3 position = (0, 0.38435876, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 0.6000000002
+                rel target = </Root/NPCTest>
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+        }
+    }
+
+    def RealityKitTimeline "Upset"
+    {
+        reorder nameChildren = ["Track2", "Track3", "Track"]
+        def RealityKitTrack "Track3"
+        {
+            reorder nameChildren = ["Transform_To", "Transform_To2"]
+            def RealityKitAction "Transform_To"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 1
+                uniform token info:id = "F02B1C64-8D11-4451-94CF-16B0C5EB7788"
+                float3 position = (0, 0.047266394, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 0
+                rel target = </Root/NPCTest>
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+
+            def RealityKitAction "Transform_To2"
+            {
+                string actionKind = "moveTo"
+                int blendLayer = 300
+                double duration = 0.3675085616438356
+                uniform token info:id = "E880F4A2-F9D5-4269-AD64-EE3D5BF6A563"
+                float3 position = (0, 0.38435876, 0)
+                quatf rotation = (1, 0, 0, 0)
+                float3 scale = (1, 1, 1)
+                double startTime = 1.0000000001
+                rel target = </Root/NPCTest>
+
+                def RealityKitStruct "transformMode"
+                {
+                    rel referenceEntity = </Root>
+                    token type = "parent"
+                }
+
+                def RealityKitStruct "timingFunction"
+                {
+                }
+            }
+        }
+    }
+}
+
