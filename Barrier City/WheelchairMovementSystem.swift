@@ -29,6 +29,7 @@ struct WheelchairMovementSystem: System {
     private static let bodyRear: Float = 0.20
     private static let bodyHalfWidth: Float = 0.30   // 벽 광선 좌우 오프셋
     private static let wallRayY: Float = 0.45         // 벽 광선 높이(바닥 위)
+    private static let collisionSkin: Float = 0.02   // 프레임 경계·부동소수 오차용 여유
     private static let climbLimit: Float = AppModel.wheelRadius * 0.15   // ≈0.05
     private static let climbDrag: Float = 6.0
     private static let stepProbe: Float = 0.10
@@ -88,8 +89,9 @@ struct WheelchairMovementSystem: System {
                     let ox = fromX + px * off, oz = fromZ + pz * off
                     let hits = scene.raycast(origin: [ox, baseY + Self.wallRayY, oz],
                                              direction: [dxn, 0, dzn], length: dist,
-                                             query: .nearest, mask: AppModel.groundGroup)
-                    if let h = hits.first, abs(h.normal.y) < 0.5 { return true }
+                                             query: .all, mask: AppModel.groundGroup)
+                    // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
+                    if hits.contains(where: { abs($0.normal.y) < 0.5 }) { return true }
                 }
                 return false
             }
@@ -159,8 +161,11 @@ struct WheelchairMovementSystem: System {
             let leadDirZ = movingFwd ? dirZ : -dirZ
             let leadExtent = movingFwd ? Self.bodyFront : Self.bodyRear
 
+            // 몸체 앞/뒤 끝뿐 아니라 이번 프레임에 이동할 구간까지 훑어 저프레임에서도
+            // 얇은 벽을 한 번에 통과(tunneling)하지 않게 한다.
+            let sweepDistance = leadExtent + abs(forward) * dt + Self.collisionSkin
             if wallAhead(fromX: model.posX, fromZ: model.posZ, dxn: leadDirX, dzn: leadDirZ,
-                         dist: leadExtent, baseY: model.chairY) {
+                         dist: sweepDistance, baseY: model.chairY) {
                 // 수직 벽: 하드 스톱
                 if !model.blocked {
                     model.surgeVel = forward * Self.surgeGain
