@@ -51,7 +51,7 @@ private struct EvalView: View {
         .init(text: "여기 인테리어 예쁘네요", expect: "smalltalk"),
         .init(text: "음 그게 저기 좀 그래서", expect: "unknown"),
     ]
-    private let judgeSamples = ["아메리카노 주세요", "야 빨리 안 줘?", "경사로 좀 밀어주세요"]
+    private let judgeSamples = ["아메리카노 주세요", "야 빨리 안 줘?", "키오스크가 너무 높아서 주문하기 어려워요"]
 
     @State private var running = false
     @State private var log = ""
@@ -132,8 +132,8 @@ private struct MultiTurnView: View {
     @State private var history: [Message] = []
     @State private var transcript: [(String, String)] = []   // (화자, 내용)
     @State private var input = ""
-    @State private var rapport: Float = 0
-    @State private var tone = "neutral"
+    @State private var rapport: Float = AccessibilityAttitude.ableist.initialRapport
+    @State private var tone = "dismissive"
     @State private var rapportTrend: [Float] = []
     @State private var busy = false
 
@@ -174,9 +174,9 @@ private struct MultiTurnView: View {
         busy = true; defer { busy = false }
         input = ""
         transcript.append(("나", utterance))
-        history.append(Message(role: .user, content: utterance))
         let result = await orchestrator.handle(utterance: utterance, history: history)
         let reply = result.spokenSentences.joined(separator: " ")
+        history.append(Message(role: .user, content: utterance))
         if !reply.isEmpty {
             transcript.append(("직원", reply + (result.event.map { "  [\($0)]" } ?? "")))
             history.append(Message(role: .assistant, content: reply))
@@ -188,14 +188,18 @@ private struct MultiTurnView: View {
 
     private func reset() {
         orchestrator = MultiTurnView.makeOrchestrator()
-        history = []; transcript = []; rapport = 0; tone = "neutral"; rapportTrend = []
+        history = []
+        transcript = []
+        rapport = AccessibilityAttitude.ableist.initialRapport
+        tone = "dismissive"
+        rapportTrend = []
     }
 
     static func makeOrchestrator() -> DialogueOrchestrator {
         DialogueOrchestrator(
             persona: NPCPersona(id: "staff", role: "cafe staff",
-                englishSystemBase: "You are a busy but kind cafe staff member. Remember what the customer said earlier in this conversation. Keep replies to 1-2 short sentences."),
-            climate: SocialClimate(),
+                englishSystemBase: "You are a busy cafe employee near an ordering kiosk that is too high for wheelchair users. Remember the conversation.",
+                accessibilityAttitude: .ableist),
             llm: OpenAILLMClient(config: AppConfig.proxy),
             guardian: SafetyGuard(bannedKeywords: [], maxTurns: 30),
             cache: DialogueCache(lines: [.timeout: CannedLine(text: "잠시만요…", audioKey: "t")]),

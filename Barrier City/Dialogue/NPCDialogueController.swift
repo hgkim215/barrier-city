@@ -2,7 +2,7 @@
 //  NPCDialogueController.swift
 //  WheelchairXR
 //
-//  T6 — 앱-측 코디네이터: 발화(STT) → DialogueOrchestrator(AI) → 음성+자막(TTS).
+//  T6 — 앱-측 코디네이터: 발화(STT) → DialogueOrchestrator(AI) → 스트리밍 자막+음성.
 //  MissionEvent / SocialClimate(태도 반영)도 노출. iOS·visionOS 공용.
 //
 
@@ -20,22 +20,25 @@ final class NPCDialogueController {
     var userText: String = ""      // 내 확정 발화
     var npcSubtitle: String = ""   // NPC 자막(현재 문장)
     var lastEvent: String = ""     // orderPlaced / helpRequested / exited
-    var rapport: Float = 0         // 누적 호감도(AI#4)
+    var rapport: Float             // NPC 성향 기반 초기값 + 대화별 변화(AI#4)
 
     var liveText: String { speech.partialText }  // 듣는 중 실시간 부분 결과
 
     private let speech = SpeechInput()
-    private let voice = VoiceOutput(config: AppConfig.proxy)
+    private let voice: VoiceOutput
     private let orchestrator: DialogueOrchestrator
     private var history: [Message] = []
 
-    init() {
+    init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
+        let persona = NPCPersona(
+            id: "staff",
+            role: "cafe staff",
+            englishSystemBase: "You are a busy cafe employee standing near an ordering kiosk whose touchscreen is too high for wheelchair users.",
+            accessibilityAttitude: accessibilityAttitude)
+        rapport = accessibilityAttitude.initialRapport
+        voice = VoiceOutput(config: AppConfig.proxy, mode: .lowLatency)
         orchestrator = DialogueOrchestrator(
-            persona: NPCPersona(
-                id: "staff",
-                role: "cafe staff",
-                englishSystemBase: "You are a busy but kind cafe staff member taking a customer's order. Keep replies to 1-2 short sentences."),
-            climate: SocialClimate(),
+            persona: persona,
             llm: OpenAILLMClient(config: AppConfig.proxy),
             guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
             cache: DialogueCache(lines: [
@@ -68,18 +71,33 @@ final class NPCDialogueController {
         guard !utterance.isEmpty else { status = .idle; return }
 
         status = .thinking
-        history.append(Message(role: .user, content: utterance))
-        let result = await orchestrator.handle(utterance: utterance, history: history)
+        let pair = AsyncStream.makeStream(of: String.self)
+        let speechTask = Task { @MainActor [weak self] in
+            for await sentence in pair.stream {
+                guard let self else { return }
+                self.status = .speaking
+                await self.voice.speak(sentence) { [weak self] line in
+                    self?.npcSubtitle = line
+                }
+            }
+        }
+        let result = await orchestrator.handle(
+            utterance: utterance,
+            history: history,
+            onSentence: { pair.continuation.yield($0) })
+        if result.usedFallback {
+            result.spokenSentences.forEach { pair.continuation.yield($0) }
+        }
+        pair.continuation.finish()
+
         rapport = await orchestrator.climate.rapport
         if let ev = result.event { lastEvent = String(describing: ev) }
 
-        let full = result.spokenSentences.joined()
+        let full = result.spokenSentences.joined(separator: " ")
+        history.append(Message(role: .user, content: utterance))
         if !full.isEmpty { history.append(Message(role: .assistant, content: full)) }
 
-        status = .speaking
-        await voice.speak(sentences: result.spokenSentences) { [weak self] line in
-            self?.npcSubtitle = line
-        }
+        await speechTask.value
         status = .idle
     }
 }

@@ -2,8 +2,8 @@
 //  VoiceOutput.swift
 //  WheelchairXR
 //
-//  T5 — NPC 음성 출력. 문장 단위로 신경망 TTS(/tts gpt-4o-mini-tts)를 받아 순차 재생,
-//  실패 시 온디바이스 AVSpeechSynthesizer 폴백. 재생과 동시에 자막 콜백.
+//  T5 — NPC 음성 출력. 본편은 지연이 짧은 온디바이스 음성을 사용하고,
+//  품질 비교용 cloud 모드는 /tts를 사용한다. 재생과 동시에 자막 콜백.
 //  iOS/visionOS 공용(AVFoundation). T6에서 DialogueOrchestrator.spokenSentences를 문장별로 speak.
 //
 
@@ -11,18 +11,22 @@ import Foundation
 import AVFoundation
 import DialogueKitOpenAI
 
+enum VoiceMode { case lowLatency, cloud }
+
 @MainActor
 final class VoiceOutput {
     private let config: ProxyConfig
     private let session: URLSession
+    private let mode: VoiceMode
     private let synth = AVSpeechSynthesizer()
     private var player: AVAudioPlayer?
     private var playerDelegate: PlayerDoneDelegate?
     private var synthDelegate: SynthDoneDelegate?
 
-    init(config: ProxyConfig, session: URLSession = .shared) {
+    init(config: ProxyConfig, session: URLSession = .shared, mode: VoiceMode = .cloud) {
         self.config = config
         self.session = session
+        self.mode = mode
     }
 
     /// 한 문장을 말한다. 자막을 먼저 갱신하고, 재생이 끝날 때까지 대기(순차 재생 보장).
@@ -30,6 +34,10 @@ final class VoiceOutput {
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         subtitle(trimmed)
+        if mode == .lowLatency {
+            await speakOnDevice(trimmed)
+            return
+        }
         do {
             let data = try await fetchTTS(trimmed)
             try await playData(data)

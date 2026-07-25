@@ -11,15 +11,40 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertEqual(msgs.first?.role, .system)
         let sys = msgs.first!.content
         XCTAssertTrue(sys.contains("You are a busy cafe staff member."))
-        XCTAssertTrue(sys.contains("Respond ONLY in Korean"))   // 한국어 출력 강제
-        XCTAssertTrue(sys.contains("Keep the first sentence short")) // 첫 문장 짧게(지연↓)
+        XCTAssertTrue(sys.contains("Respond ONLY in natural spoken Korean"))
+        XCTAssertTrue(sys.contains("Put the important reaction first"))
     }
 
-    func test_curtTone_isInjectedIntoSystem() {
+    func test_dismissiveTone_isInjectedIntoSystem() {
         var c = SocialClimate(); c.rapport = -0.6
         let msgs = PromptBuilder().build(persona: persona, climate: c,
             history: [], userUtterance: "야", turnLimit: 8)
-        XCTAssertTrue(msgs.first!.content.contains("curt"))
+        XCTAssertTrue(msgs.first!.content.contains("hostile"))
+    }
+
+    func test_ableistPersona_andKioskRefusal_areExplicit() {
+        let ableist = NPCPersona(id: "staff", role: "cafe staff",
+            englishSystemBase: "You are staff.", accessibilityAttitude: .ableist)
+        let climate = SocialClimate(rapport: ableist.accessibilityAttitude.initialRapport)
+        let msgs = PromptBuilder().build(persona: ableist, climate: climate,
+            history: [], userUtterance: "키오스크가 너무 높아요", turnLimit: 8,
+            orderDecision: .refuseKioskOnly)
+        let system = msgs.first!.content
+        XCTAssertTrue(system.contains("ableist"))
+        XCTAssertTrue(system.contains("kiosk touchscreen is mounted too high"))
+        XCTAssertTrue(system.contains("refuseKioskOnly"))
+        XCTAssertTrue(system.contains("accepts orders only through the kiosk"))
+        XCTAssertTrue(system.contains("죄송 or 미안"))
+        XCTAssertTrue(system.contains("Never use slurs"))
+    }
+
+    func test_reluctantAcceptance_requiresTakingOrder_andNeverReturningToKiosk() {
+        let msgs = PromptBuilder().build(persona: persona, climate: SocialClimate(),
+            history: [], userUtterance: "주문 받아주세요", turnLimit: 8,
+            orderDecision: .acceptReluctantly)
+        let system = msgs.first!.content
+        XCTAssertTrue(system.contains("only this once"))
+        XCTAssertTrue(system.contains("Do not send them back to the kiosk"))
     }
 
     func test_history_thenUserUtterance_appendedInOrder() {
@@ -36,5 +61,16 @@ final class PromptBuilderTests: XCTestCase {
         let msgs = PromptBuilder().build(persona: persona, climate: SocialClimate(),
             history: [], userUtterance: "x", turnLimit: 8)
         XCTAssertTrue(msgs.first!.content.contains("8"))
+    }
+
+    func test_onlyFourRecentTurns_areSent() {
+        let history = (0..<12).map { index in
+            Message(role: index.isMultiple(of: 2) ? .user : .assistant, content: "m\(index)")
+        }
+        let msgs = PromptBuilder().build(persona: persona, climate: SocialClimate(),
+            history: history, userUtterance: "latest", turnLimit: 30)
+        XCTAssertEqual(msgs.count, 10) // system + 최근 8개 + 현재 발화
+        XCTAssertEqual(msgs[1].content, "m4")
+        XCTAssertEqual(msgs.last?.content, "latest")
     }
 }
