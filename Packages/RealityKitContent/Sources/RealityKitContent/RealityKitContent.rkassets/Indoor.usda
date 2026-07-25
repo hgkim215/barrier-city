@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Indoor", "Kiosk", "Door", "Collision", "wall", "kiosk"]
+    reorder nameChildren = ["Indoor", "Kiosk", "Door", "collision", "wall", "kiosk"]
     def Material "wall"
     {
         token outputs:mtlx:surface
@@ -94,7 +94,7 @@ def Xform "Root"
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
-    def Xform "Collision" (
+    def Xform "collision" (
         active = true
     )
     {
@@ -104,7 +104,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_4T/DefaultMaterial>
+            rel material:binding = </Root/collision/_4T/DefaultMaterial>
             double size = 0.2
             quatf xformOp:orient = (1, 0, 0, 0)
             float3 xformOp:scale = (11.5, 3, 6)
@@ -117,7 +117,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_4T_2/DefaultMaterial>
+            rel material:binding = </Root/collision/_4T_2/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (20, 20)
             int ui:nodegraph:node:stackingOrder = 1
@@ -132,7 +132,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T_1/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T_1/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (40, 40)
             int ui:nodegraph:node:stackingOrder = 2
@@ -147,7 +147,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T_2/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T_2/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (40, 40)
             int ui:nodegraph:node:stackingOrder = 2
@@ -162,7 +162,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T_3/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T_3/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (40, 40)
             int ui:nodegraph:node:stackingOrder = 2
@@ -177,7 +177,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T_4/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T_4/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (60, 60)
             int ui:nodegraph:node:stackingOrder = 3
@@ -192,7 +192,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T_5/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T_5/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (60, 60)
             int ui:nodegraph:node:stackingOrder = 3
@@ -207,7 +207,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/_2T/DefaultMaterial>
+            rel material:binding = </Root/collision/_2T/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (60, 60)
             int ui:nodegraph:node:stackingOrder = 3
@@ -222,7 +222,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/BT/DefaultMaterial>
+            rel material:binding = </Root/collision/BT/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (40, 40)
             int ui:nodegraph:node:stackingOrder = 2
@@ -240,7 +240,7 @@ def Xform "Root"
             }
         )
         {
-            rel material:binding = </Root/Collision/_4T_4/DefaultMaterial>
+            rel material:binding = </Root/collision/_4T_4/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (40, 40)
             int ui:nodegraph:node:stackingOrder = 2
@@ -256,7 +256,7 @@ def Xform "Root"
             customData = {
                 float3 rotationEulerHint = (-1.5707964, 0, 0)
             }
-            prepend references = @Wall.usdz@
+            references = @Wall.usdz@
         )
         {
             rel material:binding = </Root/wall> (
@@ -273,7 +273,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/Collision/BT_1/DefaultMaterial>
+            rel material:binding = </Root/collision/BT_1/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (60, 60)
             int ui:nodegraph:node:stackingOrder = 3
@@ -291,7 +291,7 @@ def Xform "Root"
             }
         )
         {
-            rel material:binding = </Root/Collision/_4T_5/DefaultMaterial>
+            rel material:binding = </Root/collision/_4T_5/DefaultMaterial>
             double size = 0.2
             float2 ui:nodegraph:node:pos = (60, 60)
             int ui:nodegraph:node:stackingOrder = 3
