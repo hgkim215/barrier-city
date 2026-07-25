@@ -1,38 +1,88 @@
-// CloudFlare Worker — OpenAI 키 은닉 프록시 (제네릭 패스스루). 스트림은 버퍼링 없이 그대로 전달.
-// 별칭(/chat·/tts·/embeddings)은 유지하고, 그 외 /v1/* 경로는 그대로 OpenAI로 전달한다.
-// → 새 엔드포인트를 쓸 때 Worker 재배포 불필요. "무엇을 허용할지"는 OpenAI 키 권한이 단독 통제.
-// 보안 강화(레이트리밋·App Attest·월상한)는 제출 후. MVP는 키 은닉만.
-// 시크릿: OPENAI_API_KEY (wrangler secret put OPENAI_API_KEY) — git/앱 미포함.
+// Barrier City 전용 OpenAI 프록시.
+// 앱이 실제로 사용하는 경로와 모델만 허용해 개인 API 키의 오용 범위를 줄인다.
+// 시크릿: OPENAI_API_KEY (wrangler secret put OPENAI_API_KEY) — 소스/앱에 저장하지 않는다.
+
+const MAX_BODY_BYTES = 128 * 1024;
+
+const ROUTES = {
+  "/chat": {
+    upstreamPath: "/v1/chat/completions",
+    models: new Set(["gpt-4o-mini"]),
+  },
+  "/tts": {
+    upstreamPath: "/v1/audio/speech",
+    models: new Set(["gpt-4o-mini-tts"]),
+  },
+  "/embeddings": {
+    upstreamPath: "/v1/embeddings",
+    models: new Set(["text-embedding-3-small"]),
+  },
+};
+
+function jsonResponse(body, status) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method !== "POST") return new Response("POST only", { status: 405 });
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "POST only" }, 405);
+    }
 
-    const alias = {
-      "/chat": "/v1/chat/completions",
-      "/tts": "/v1/audio/speech",
-      "/embeddings": "/v1/embeddings",
-    };
-    // 별칭이면 매핑, 아니면 /v1/* 경로를 그대로 통과 (예: /v1/audio/transcriptions)
-    const path = alias[url.pathname]
-      ?? (url.pathname.startsWith("/v1/") ? url.pathname : null);
-    if (!path) return new Response("not found", { status: 404 });
+    const route = ROUTES[url.pathname];
+    if (!route) return jsonResponse({ error: "Not found" }, 404);
+    if (!env.OPENAI_API_KEY) {
+      return jsonResponse({ error: "Server is not configured" }, 503);
+    }
 
-    const upstream = await fetch("https://api.openai.com" + path, {
+    const contentType = request.headers.get("Content-Type") || "";
+    if (!contentType.toLowerCase().startsWith("application/json")) {
+      return jsonResponse({ error: "application/json required" }, 415);
+    }
+
+    const declaredLength = Number(request.headers.get("Content-Length") || 0);
+    if (declaredLength > MAX_BODY_BYTES) {
+      return jsonResponse({ error: "Request too large" }, 413);
+    }
+
+    const body = await request.arrayBuffer();
+    if (body.byteLength > MAX_BODY_BYTES) {
+      return jsonResponse({ error: "Request too large" }, 413);
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(body));
+    } catch {
+      return jsonResponse({ error: "Invalid JSON" }, 400);
+    }
+
+    if (!route.models.has(payload?.model)) {
+      return jsonResponse({ error: "Model not allowed" }, 400);
+    }
+
+    const upstream = await fetch("https://api.openai.com" + route.upstreamPath, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${env.OPENAI_API_KEY}`, // Worker secret
-        // 클라이언트 Content-Type 그대로 전달 (multipart/form-data 등도 지원)
-        "Content-Type": request.headers.get("Content-Type") || "application/json",
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      body: request.body, // 클라이언트 바디 그대로 전달
+      body,
     });
 
-    // 스트림 패스스루 — body를 읽지 말 것(버퍼링 금지)
+    // 응답 본문은 읽지 않아 Chat Completions SSE 스트림을 그대로 전달한다.
     return new Response(upstream.body, {
       status: upstream.status,
       headers: {
         "Content-Type": upstream.headers.get("Content-Type") || "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   },
