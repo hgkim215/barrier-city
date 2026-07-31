@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Kiosk", "Indoor", "Kiosk", "Door", "collision", "wall", "kiosk"]
+    reorder nameChildren = ["Barista", "Kiosk", "Screen", "Indoor", "Door", "collision", "wall", "kiosk"]
     def Material "wall"
     {
         token outputs:mtlx:surface
@@ -322,13 +322,43 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.2258023, 3.3225518e-7, -4.3474127e-8)
         }
-        prepend references = @Screen.usdz@
+        references = @Screen.usdz@
     )
     {
         quatf xformOp:orient = (0.8179826, -0.575243, 1.4839358e-7, 7.77832e-8)
         float3 xformOp:scale = (1.8, 1.8, 1.8)
         float3 xformOp:translate = (0.40010247, 1.3601549, 1.4690963)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def "Barista" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @Barista/Default.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "Walk"
+            {
+                uniform asset file = @Barista/Walk.usdz@
+                uniform string name = "Walk"
+            }
+
+            def RealityKitAnimationFile "Greet"
+            {
+                uniform asset file = @Barista/Greet.usdz@
+                uniform string name = "Greet"
+            }
+        }
     }
 }
 
