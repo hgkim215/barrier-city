@@ -91,7 +91,15 @@ enum InteractionSetup {
     private static func tick(deltaTime: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
+        if GuideFlowModel.shared.isInteractionLocked {
+            im.activeTrigger = nil
+            im.panelEntity?.isEnabled = false
+            im.kioskPanelEntity?.isEnabled = false
+            app.npcClerk.setGuideInteractionLocked(true)
+            return
+        }
         guard !im.isTransitioning else { return }
+        app.npcClerk.setGuideInteractionLocked(false)
 
         let verdict = InteractionModel.evaluate(
             playerX: app.posX, playerZ: app.posZ,

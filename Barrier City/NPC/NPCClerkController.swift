@@ -104,6 +104,12 @@ final class NPCClerkController {
         self.worldRoot = worldRoot
     }
 
+    func setGuideInteractionLocked(_ locked: Bool) {
+        guard locked else { return }
+        dialoguePanel?.isEnabled = false
+        isDialogueVisible = false
+    }
+
     /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
     func resetForOutdoor() {
         greetingTask?.cancel()

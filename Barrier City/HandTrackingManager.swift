@@ -147,6 +147,11 @@ final class HandTrackingManager {
             resetAllTrackingState(allowImmediateFistCapture: false)
             return
         }
+        guard !GuideFlowModel.shared.isInteractionLocked else {
+            model.discardGuideLockedInput()
+            resetAllTrackingState(allowImmediateFistCapture: false)
+            return
+        }
 
         let chirality = anchor.chirality
         let (strength, rawD) = grabStrength(anchor)
