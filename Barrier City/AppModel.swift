@@ -22,6 +22,11 @@ final class AppModel {
     /// 보이는 카페 루트. 캡슐 위치의 역(inverse)으로 매 프레임 배치(world-inverse 시야).
     @ObservationIgnored var worldRoot: Entity?
 
+    /// 실내 점원 대화와 공간 상태는 앱 수명 동안 한 인스턴스를 공유한다.
+    /// 테스트 창과 몰입 공간이 서로 다른 호감도/대화를 갖는 문제를 방지한다.
+    let npcDialogue: NPCDialogueController
+    let npcClerk: NPCClerkController
+
     /// 캐릭터 캡슐 전체 높이(m). 바닥 접지 = 중심.y - charHeight/2.
     static let charHeight: Float = 1.0
     static let charRadius: Float = 0.34
@@ -36,6 +41,10 @@ final class AppModel {
     static let viewHeightOffset: Float = 0.0
 
     init() {
+        let dialogue = NPCDialogueController()
+        npcDialogue = dialogue
+        npcClerk = NPCClerkController(dialogue: dialogue)
+
         // System/Component는 씬이 만들어지기 전, 앱 시작 시점에 등록해야 안전하다.
         // AppModel은 @State로 앱 시작 시 생성되므로 여기서 등록하면 타이밍이 이르다.
         WheelchairComponent.registerComponent()
@@ -47,6 +56,31 @@ final class AppModel {
 
     /// 손 추적을 쓸지(실기), 버튼 입력을 쓸지(시뮬레이터).
     var useHandTracking = false
+
+    // MARK: - 테스트용 주먹 드론 조작
+    /// true면 바퀴 근처에서 양손을 잡는 대신, 주먹 하나를 가상 스틱처럼 사용한다.
+    /// 손 추적 자체(`useHandTracking`)와 분리해 기존 바퀴 밀기 조작을 그대로 보존한다.
+    var testFistDriveEnabled = false
+    /// 테스트 모드가 손 추적을 자동으로 켰다면 OFF 때 원래 설정으로 복원한다.
+    @ObservationIgnored private var handTrackingBeforeFistDrive = false
+    /// 현재 어느 한 손이 주먹을 쥐고 테스트 조작권을 가진 상태.
+    var fistDriveActive = false
+    /// 창에 표시할 정규화 입력값. 전진은 0...1, 회전은 -1...1(음수=왼쪽).
+    var fistDriveForwardAxis: Float = 0
+    var fistDriveTurnAxis: Float = 0
+    /// 차동 구동 System이 추종할 좌/우 바퀴 목표 속도(m/s).
+    var fistDriveTargetLeft: Float = 0
+    var fistDriveTargetRight: Float = 0
+    /// 마지막으로 유효한 조작 손 샘플을 받은 시각. 추적 유실 안전 정지에 사용한다.
+    var fistDriveLastUpdate: TimeInterval = 0
+    /// UI에 표시할 현재 조작 손 이름.
+    var fistDriveHand = ""
+    /// 토글·재시작·추적 유실 때 HandTrackingManager에 재보정을 요청하는 세대 값.
+    var fistDriveResetID = 0
+    /// 다음 물리 프레임에서 관성까지 제거하는 테스트 조작 전용 하드 스톱.
+    private var fistDriveHardStopRequested = false
+    /// 권한/연결/보정 상태를 테스트 창에서 바로 확인하기 위한 문구.
+    var handTrackingStatus = "꺼짐"
 
     // MARK: - 누적 충격량(매 프레임 System이 소비 후 0으로 리셋)
     var pendingImpulseLeft: Float = 0
@@ -163,6 +197,97 @@ final class AppModel {
     func pushBoth(_ amount: Float = AppModel.strokeAmount)  { pushLeft(amount); pushRight(amount) }
     func brake() { brakeRequested = true }
 
+    /// 창의 일반 손 추적 토글. 끌 때 테스트 조작도 함께 안전하게 해제한다.
+    func setHandTrackingEnabled(_ enabled: Bool) {
+        useHandTracking = enabled
+        if enabled {
+            handTrackingStatus = isImmersive ? "손 추적 연결 중…" : "체험을 시작하면 손 추적을 연결합니다"
+        } else {
+            testFistDriveEnabled = false
+            handTrackingBeforeFistDrive = false
+            releaseWheelHandInput()
+            stopFistDrive(requestRecenter: true)
+            handTrackingStatus = "꺼짐"
+        }
+    }
+
+    /// 테스트용 가상 스틱 모드 토글. ON이면 손 추적도 자동으로 켠다.
+    func setTestFistDriveEnabled(_ enabled: Bool) {
+        guard testFistDriveEnabled != enabled else { return }
+        if enabled {
+            handTrackingBeforeFistDrive = useHandTracking
+        }
+
+        testFistDriveEnabled = enabled
+        releaseWheelHandInput()
+        stopFistDrive(requestRecenter: true)
+
+        if enabled {
+            useHandTracking = true
+            handTrackingStatus = isImmersive
+                ? "손 추적 연결 중…"
+                : "체험을 시작한 뒤 주먹을 쥐세요"
+        } else {
+            useHandTracking = handTrackingBeforeFistDrive
+            handTrackingBeforeFistDrive = false
+            handTrackingStatus = useHandTracking
+                ? "기존 바퀴 손 추적 모드"
+                : "꺼짐"
+        }
+    }
+
+    /// HandTrackingManager가 계산한 정규화 축을 테스트 전용 차동 구동 명령으로 바꾼다.
+    func updateFistDrive(forwardAxis: Float,
+                         turnAxis: Float,
+                         hand: String,
+                         timestamp: TimeInterval) {
+        guard testFistDriveEnabled else { return }
+
+        let forwardAxis = max(0, min(1, forwardAxis))
+        let turnAxis = max(-1, min(1, turnAxis))
+        let forward = forwardAxis * 1.0
+        // 중앙에서 미세 조향이 쉽도록 부호를 유지한 제곱 커브를 사용한다.
+        let turn = turnAxis * abs(turnAxis) * 0.35
+
+        fistDriveActive = true
+        fistDriveForwardAxis = forwardAxis
+        fistDriveTurnAxis = turnAxis
+        fistDriveTargetLeft = forward + turn
+        fistDriveTargetRight = forward - turn
+        fistDriveLastUpdate = timestamp
+        fistDriveHand = hand
+        handTrackingStatus = "\(hand)으로 조작 중"
+    }
+
+    /// 테스트 조작 명령을 해제한다. 실제 속도 제거는 System이 다음 프레임에 처리한다.
+    func stopFistDrive(requestRecenter: Bool,
+                       status: String? = nil) {
+        fistDriveActive = false
+        fistDriveForwardAxis = 0
+        fistDriveTurnAxis = 0
+        fistDriveTargetLeft = 0
+        fistDriveTargetRight = 0
+        fistDriveLastUpdate = 0
+        fistDriveHand = ""
+        fistDriveHardStopRequested = true
+        if requestRecenter { fistDriveResetID &+= 1 }
+        if let status { handTrackingStatus = status }
+    }
+
+    /// 테스트 입력이 사라졌는데 관성으로 계속 달리는 일을 막는 one-shot 신호.
+    func consumeFistDriveHardStop() -> Bool {
+        defer { fistDriveHardStopRequested = false }
+        return fistDriveHardStopRequested
+    }
+
+    /// 일반 바퀴 잡기 경로의 잔여 입력을 지운다(두 손 입력 모드 충돌 방지).
+    func releaseWheelHandInput() {
+        leftGrabbed = false
+        rightGrabbed = false
+        handSpeedLeft = 0
+        handSpeedRight = 0
+    }
+
     /// System이 호출: 누적 충격량을 가져오고 리셋.
     func consumeImpulses() -> (left: Float, right: Float) {
         defer { pendingImpulseLeft = 0; pendingImpulseRight = 0 }
@@ -177,7 +302,9 @@ final class AppModel {
         bumpOffset = 0; bumpVel = 0
         surgeOffset = 0; surgeVel = 0
         wheelAngleLeft = 0; wheelAngleRight = 0
-        handSpeedLeft = 0; handSpeedRight = 0
+        releaseWheelHandInput()
+        stopFistDrive(requestRecenter: true,
+                      status: testFistDriveEnabled ? "다시 주먹을 쥐어 중립점을 잡으세요" : nil)
         pendingImpulseLeft = 0; pendingImpulseRight = 0
         blocked = false; reachedGoal = false; groundY = 0
         chairY = 0; fallVelY = 0

@@ -30,6 +30,12 @@ public actor DialogueOrchestrator {
         self.forcedOrderAcceptanceAttempt = max(1, forcedOrderAcceptanceAttempt)
     }
 
+    /// 거리 이탈 후 다시 만난 새 대화의 턴 제한만 초기화한다.
+    /// 같은 점원의 호감도와 누적 주문 요청 횟수는 유지해 미션 진행이 되돌아가지 않는다.
+    public func beginEncounter() {
+        turnCount = 0
+    }
+
     public func handle(utterance: String, history: [Message],
                        onSentence: @Sendable (String) -> Void = { _ in }) async -> TurnResult {
         // 1) 입력 가드

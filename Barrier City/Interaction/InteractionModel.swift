@@ -68,10 +68,12 @@ enum InteractionTuning {
     /// DOOR1 프림을 못 찾을 때의 문 트리거 폴백 좌표(맵 좌표 x, z).
     /// _coffee 건물이 (0, 0.3, 20)에 배치돼 있어 문은 그 앞쪽으로 추정. 수동 검증에서 확정.
     static let doorFallbackCenter = SIMD2<Float>(0, 15)
-    /// Indoor 전환 직후 스폰 포즈(실내 문 앞, 카운터를 바라봄). 수동 검증에서 확정.
+    /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
+    /// 실제 포즈는 SceneSwitcher가 DOOR1→Kiosk 방향으로 동적으로 계산한다.
     static let indoorSpawnX: Float = 0
-    static let indoorSpawnZ: Float = 4
-    static let indoorSpawnHeading: Float = 0
+    static let indoorSpawnZ: Float = -4.5
+    static let indoorSpawnHeading: Float = .pi
+    static let indoorSpawnDistanceFromDoor: Float = 1.2
     /// 문 패널 문구
     static let doorPrompt = "안으로 입장하시겠습니까?"
 
@@ -79,8 +81,8 @@ enum InteractionTuning {
     static let kioskTriggerRadius: Float = 3.0
     /// 키오스크 패널을 키오스크 표면에서 사용자 쪽으로 당기는 거리(m). 박스에 안 묻히게.
     static let kioskPanelForwardOffset: Float = 0.8
-    /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(카운터 좌측 부근 추정. 실측 조정).
-    static let kioskFallbackCenter = SIMD2<Float>(-4, -4)
+    /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(Indoor 자산 기준).
+    static let kioskFallbackCenter = SIMD2<Float>(0.85, 1.65)
     /// 키오스크 화면 타이틀 겸 트리거 prompt 값.
     static let kioskTitle = "주문하기"
 }

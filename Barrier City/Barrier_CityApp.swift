@@ -20,7 +20,7 @@ struct Barrier_CityApp: App {
         .windowResizability(.contentSize)
 
         WindowGroup(id: "npc-dialogue-test") {
-            DialogueTurnView()
+            DialogueTurnView(controller: appModel.npcDialogue)
         }
         .windowResizability(.contentSize)
 

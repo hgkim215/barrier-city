@@ -158,4 +158,28 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertTrue(r.usedFallback)
         XCTAssertEqual(r.spokenSentences, ["이만 가볼게요."])
     }
+
+    func test_beginEncounter_resetsTurnLimit_butKeepsOrderAttempts() async {
+        let sut = DialogueOrchestrator(
+            persona: NPCPersona(id: "staff", role: "cafe staff", englishSystemBase: "You are staff.",
+                                accessibilityAttitude: .ableist),
+            llm: MockLLM([.token("응답."), .done]),
+            guardian: SafetyGuard(bannedKeywords: [], maxTurns: 1),
+            cache: DialogueCache(lines: [
+                .turnLimitReached: CannedLine(text: "대화 종료", audioKey: "turnlimit"),
+            ]),
+            turnLimit: 1)
+
+        let first = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
+        let blocked = await sut.handle(utterance: "다시 부탁드려요", history: [])
+        await sut.beginEncounter()
+        let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
+        await sut.beginEncounter()
+        let third = await sut.handle(utterance: "직접 주문 받아주세요", history: [])
+
+        XCTAssertNil(first.event)
+        XCTAssertTrue(blocked.usedFallback)
+        XCTAssertNil(second.event)
+        XCTAssertEqual(third.event, .orderPlaced)
+    }
 }

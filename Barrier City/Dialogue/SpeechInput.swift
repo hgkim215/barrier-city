@@ -35,6 +35,7 @@ final class SpeechInput {
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var isInputTapInstalled = false
 
     /// 음성인식 + 마이크 권한 요청
     func requestPermission() async -> Bool {
@@ -67,8 +68,17 @@ final class SpeechInput {
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buffer, _ in
             req?.append(buffer)
         }
+        isInputTapInstalled = true
         engine.prepare()
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            isInputTapInstalled = false
+            self.request = nil
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
         isRecording = true
 
         task = recognizer.recognitionTask(with: req) { [weak self] result, _ in
@@ -107,8 +117,13 @@ final class SpeechInput {
     /// push-to-talk 종료 — 확정 텍스트 반환.
     @discardableResult
     func stop() async -> String {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        if isInputTapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            isInputTapInstalled = false
+        }
+        if engine.isRunning {
+            engine.stop()
+        }
         request?.endAudio()
         task?.finish()
         task = nil

@@ -12,9 +12,8 @@ struct ControlPanelView: View {
     @State private var immersiveError: String?
 
     var body: some View {
-        @Bindable var model = model
-
-        VStack(spacing: 20) {
+        ScrollView {
+            VStack(spacing: 20) {
             Text("휠체어 체험 시뮬레이터")
                 .font(.title2).bold()
 
@@ -39,9 +38,49 @@ struct ControlPanelView: View {
                 .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
             }
 
-            Toggle("손 추적 사용(실기 Vision Pro)", isOn: $model.useHandTracking)
+            Toggle("손 추적 사용(실기 Vision Pro)", isOn: handTrackingBinding)
                 .toggleStyle(.switch)
                 .fixedSize()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: testFistDriveBinding) {
+                    HStack(spacing: 8) {
+                        Label("테스트용 주먹 드론 조작", systemImage: "move.3d")
+                        Spacer()
+                        Text(model.testFistDriveEnabled ? "ON" : "OFF")
+                            .font(.caption.bold())
+                            .foregroundStyle(model.testFistDriveEnabled ? Color.green : Color.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                Text("ON 후 손을 편 다음 주먹 쥐기(자동 중립) · 앞으로 밀면 전진 · 손을 좌우로 움직이면 회전 · 펴면 즉시 정지")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if model.testFistDriveEnabled {
+                    Divider()
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(model.fistDriveActive ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(model.handTrackingStatus)
+                            .font(.caption)
+                            .lineLimit(2)
+                    }
+
+                    HStack(spacing: 24) {
+                        stat("전진 입력", String(format: "%.0f%%", model.fistDriveForwardAxis * 100))
+                        stat("회전 입력", fistTurnLabel)
+                        stat("조작 손", model.fistDriveHand.isEmpty ? "-" : model.fistDriveHand)
+                    }
+                    .font(.callout)
+                }
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
             if model.isImmersive {
                 Button(role: .destructive) {
@@ -94,6 +133,25 @@ struct ControlPanelView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.purple)
+
+#if DEBUG
+            if model.isImmersive {
+                VStack(spacing: 8) {
+                    Text("NPC: \(model.npcClerk.phase.rawValue)"
+                         + (model.npcClerk.lastPlayedAnimation.isEmpty
+                            ? "" : " · \(model.npcClerk.lastPlayedAnimation)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        ForEach(NPCAnimationCue.allCases, id: \.rawValue) { cue in
+                            Button(cue.rawValue) { model.npcClerk.playForTesting(cue) }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                }
+            }
+#endif
 
             Divider()
 
@@ -161,10 +219,12 @@ struct ControlPanelView: View {
                 stat("왼쪽거리", String(format: "%.2f", model.leftWheelDist))
                 stat("오른쪽거리", String(format: "%.2f", model.rightWheelDist))
             }
-            .font(.callout)
+                .font(.callout)
+            }
+            .padding(28)
+            .frame(width: 460)
         }
-        .padding(28)
-        .frame(width: 460)
+        .frame(width: 460, height: 720)
         .disabled(isImmersiveTransitioning)
     }
 
@@ -182,5 +242,24 @@ struct ControlPanelView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(v).monospacedDigit()
         }
+    }
+
+    private var handTrackingBinding: Binding<Bool> {
+        Binding(
+            get: { model.useHandTracking },
+            set: { model.setHandTrackingEnabled($0) })
+    }
+
+    private var testFistDriveBinding: Binding<Bool> {
+        Binding(
+            get: { model.testFistDriveEnabled },
+            set: { model.setTestFistDriveEnabled($0) })
+    }
+
+    private var fistTurnLabel: String {
+        let turn = model.fistDriveTurnAxis
+        guard abs(turn) >= 0.02 else { return "중앙" }
+        let direction = turn < 0 ? "왼쪽" : "오른쪽"
+        return "\(direction) \(String(format: "%.0f%%", abs(turn) * 100))"
     }
 }

@@ -34,7 +34,8 @@ struct ImmersiveView: View {
         // 그래야 System이 매 프레임 이 값을 바꿀 때 body가 다시 평가되고,
         // 아래 RealityView update 클로저가 재실행되어 하이라이트/바퀴 회전이 반영된다.
         let _ = (model.leftGrabbed, model.rightGrabbed,
-                 model.wheelAngleLeft, model.wheelAngleRight)
+                 model.wheelAngleLeft, model.wheelAngleRight,
+                 model.fistDriveActive)
 
         return RealityView { content, attachments in
             // System이 읽을 입력 소스를 '실제 화면에 쓰이는' 이 모델로 고정.
@@ -170,8 +171,10 @@ struct ImmersiveView: View {
             applyRoll(leftWheel, angle: model.wheelAngleLeft)
             applyRoll(rightWheel, angle: model.wheelAngleRight)
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
-            setMaterials(leftWheelMesh, model.leftGrabbed ? leftHiMats : leftBaseMats)
-            setMaterials(rightWheelMesh, model.rightGrabbed ? rightHiMats : rightBaseMats)
+            setMaterials(leftWheelMesh,
+                         (model.leftGrabbed || model.fistDriveActive) ? leftHiMats : leftBaseMats)
+            setMaterials(rightWheelMesh,
+                         (model.rightGrabbed || model.fistDriveActive) ? rightHiMats : rightBaseMats)
         } attachments: {
             // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
@@ -185,6 +188,11 @@ struct ImmersiveView: View {
             Attachment(id: "questHUD") {
                 QuestHUDView()
             }
+            // 점원이 계산대에 도착한 뒤 표시되는 공간 대화 패널.
+            Attachment(id: "npcDialogue") {
+                NPCDialoguePanelView(controller: model.npcDialogue,
+                                     clerk: model.npcClerk)
+            }
         }
         .onAppear {
             model.isImmersive = true
@@ -192,10 +200,13 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             model.isImmersive = false
-            handTracker.stop()
+            model.npcClerk.resetForOutdoor()
+            handTracker.stop(model: model)
         }
-        .task {
-            // 실기에서 손 추적을 켰을 때만 ARKit 세션 시작.
+        .task(id: model.useHandTracking) {
+            // 창 토글을 몰입 공간 진입 뒤에 바꿔도 즉시 세션을 시작/종료한다.
+            // 새 start 전에 반드시 이전 세대를 먼저 끊어 빠른 OFF→ON도 직렬화한다.
+            handTracker.stop(model: model)
             if model.useHandTracking {
                 await handTracker.start(model: model)
             }
