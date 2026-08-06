@@ -38,8 +38,6 @@ enum QuestTuning {
     static let deadZoneDistance: Float = 0.2
     /// 지수 스무딩 수렴 속도(초당 배율 계수). 클수록 빨리 붙는다.
     static let smoothingRate: Float = 4.0
-    /// 완료 연출 유지 시간(초).
-    static let completedHoldSeconds: Double = 1.5
     /// head 포즈를 못 얻을 때 고정 배치 위치(씬 원점 기준).
     static let fallbackPosition = SIMD3<Float>(-0.35, 1.4, -1.2)
 }
@@ -74,9 +72,6 @@ final class QuestModel {
 
     /// 현재 단계 인덱스. steps.count면 전체 완료(이번 스코프에선 도달 안 함).
     private(set) var currentIndex = 0
-    /// 완료 연출용: 방금 완료된 단계(잠시 표시 후 nil).
-    private(set) var justCompletedStep: QuestStep?
-
     /// 현재 표시할 목표 단계(전체 완료면 nil).
     var currentStep: QuestStep? {
         currentIndex < steps.count ? steps[currentIndex] : nil
@@ -85,10 +80,9 @@ final class QuestModel {
     /// 몰입 공간 재진입 시 1단계로 리셋(InteractionModel 리셋 패턴과 동일).
     func reset() {
         currentIndex = 0
-        justCompletedStep = nil
     }
 
-    /// 이벤트 발행. 현재 단계의 완료 이벤트와 일치할 때만 진행하고 완료 연출을 띄운다.
+    /// 이벤트 발행. 현재 단계의 완료 이벤트와 일치할 때만 진행한다.
     /// 불일치 이벤트(중복·순서 꼬임)는 무시된다.
     @discardableResult
     func advance(on event: QuestEvent) -> QuestAdvanceOutcome {
@@ -99,13 +93,7 @@ final class QuestModel {
             eventMatchesCurrent: event == step.completionEvent)
         guard nextIndex != currentIndex else { return .ignored }
 
-        justCompletedStep = step
         currentIndex = nextIndex
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(QuestTuning.completedHoldSeconds))
-            guard self?.justCompletedStep?.id == step.id else { return }
-            self?.justCompletedStep = nil
-        }
         return .advanced(completed: step, next: currentStep)
     }
 }

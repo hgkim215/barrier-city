@@ -184,9 +184,9 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskOrderView()
             }
-            // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
+            // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
-                QuestHUDView()
+                ExperienceGuideView()
             }
             // 점원이 계산대에 도착한 뒤 표시되는 공간 대화 패널.
             Attachment(id: "npcDialogue") {
