@@ -76,6 +76,7 @@ struct IntroductionCardView: View {
 
             Button("확인", action: onConfirm)
                 .buttonStyle(.borderedProminent)
+                .tint(GuideTheme.accent)
                 .frame(minWidth: 200, minHeight: 52)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

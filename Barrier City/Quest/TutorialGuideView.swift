@@ -54,6 +54,7 @@ struct TutorialGuideView: View {
                         action: onNext
                     )
                     .buttonStyle(.borderedProminent)
+                    .tint(GuideTheme.accent)
                     .frame(minWidth: 200, minHeight: 52)
                 }
             }

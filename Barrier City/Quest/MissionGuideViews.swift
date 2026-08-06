@@ -23,6 +23,7 @@ struct MissionAnnouncementView: View {
 
             Button("확인", action: onConfirm)
                 .buttonStyle(.borderedProminent)
+                .tint(GuideTheme.accent)
                 .frame(minWidth: 200, minHeight: 52)
         }
         .padding(.horizontal, 60)
@@ -91,6 +92,7 @@ struct ExperienceCompletionView: View {
 
             Button("확인", action: onConfirm)
                 .buttonStyle(.borderedProminent)
+                .tint(GuideTheme.accent)
                 .frame(minWidth: 200, minHeight: 52)
         }
         .padding(48)
