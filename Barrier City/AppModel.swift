@@ -288,6 +288,34 @@ final class AppModel {
         handSpeedRight = 0
     }
 
+    func prepareForGuidePhaseChange(isLocked: Bool) {
+        vL = 0
+        vR = 0
+        pendingImpulseLeft = 0
+        pendingImpulseRight = 0
+        brakeRequested = false
+        releaseWheelHandInput()
+        stopFistDrive(
+            requestRecenter: true,
+            status: isLocked && testFistDriveEnabled ? "가이드 확인 중" : nil)
+    }
+
+    func discardGuideLockedInput() {
+        vL = 0
+        vR = 0
+        pendingImpulseLeft = 0
+        pendingImpulseRight = 0
+        brakeRequested = false
+        releaseWheelHandInput()
+        fistDriveActive = false
+        fistDriveForwardAxis = 0
+        fistDriveTurnAxis = 0
+        fistDriveTargetLeft = 0
+        fistDriveTargetRight = 0
+        fistDriveLastUpdate = 0
+        fistDriveHand = ""
+    }
+
     /// System이 호출: 누적 충격량을 가져오고 리셋.
     func consumeImpulses() -> (left: Float, right: Float) {
         defer { pendingImpulseLeft = 0; pendingImpulseRight = 0 }
