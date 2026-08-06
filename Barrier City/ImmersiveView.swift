@@ -200,6 +200,7 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             QuestSetup.stop()
+            InteractionModel.shared.endImmersiveSession()
             model.isImmersive = false
             model.npcClerk.resetForOutdoor()
             handTracker.stop(model: model)

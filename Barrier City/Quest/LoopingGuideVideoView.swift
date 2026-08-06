@@ -5,7 +5,7 @@ import SwiftUI
 @Observable @MainActor
 private final class LoopingGuidePlayback {
     let player: AVQueuePlayer
-    private let looper: AVPlayerLooper
+    private var looper: AVPlayerLooper?
 
     init(url: URL) {
         let item = AVPlayerItem(url: url)
@@ -18,8 +18,9 @@ private final class LoopingGuidePlayback {
     func play() { player.play() }
 
     func stop() {
+        looper?.disableLooping()
         player.pause()
-        player.removeAllItems()
+        looper = nil
     }
 }
 

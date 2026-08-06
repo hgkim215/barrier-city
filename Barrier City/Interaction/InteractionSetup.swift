@@ -27,10 +27,10 @@ enum InteractionSetup {
         //    InteractionModel은 싱글턴이라 '체험 종료' 후에도 상태가 남는다. 첫 입장에서
         //    scene이 .indoor가 된 채 재진입하면 switchToIndoor의 `scene == .outdoor` 가드가
         //    막혀 "예"를 눌러도 전환이 안 되던 버그를 방지한다.
+        im.beginImmersiveSession()
         im.scene = .outdoor
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
-        im.isTransitioning = false
         im.transitionError = nil
         im.kioskTooHighShown = false
         appModel.npcClerk.resetForOutdoor()

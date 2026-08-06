@@ -13,7 +13,7 @@ import Observation
 enum QuestEvent: Equatable {
     case enteredIndoor   // 실내(카페) 진입 성공
     case kioskFailed     // 키오스크 "사용하기" → 장벽 안내
-    case npcHelpDone     // 정의만 — 발행은 NPC 씬 배치 후(이번 스코프 밖)
+    case npcHelpDone     // NPC 대화에서 주문 완료 시 발행
 }
 
 /// 퀘스트 한 단계(목표 + 방법 + 완료 조건). 순수 값 타입.

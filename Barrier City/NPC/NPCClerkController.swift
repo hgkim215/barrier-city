@@ -134,7 +134,9 @@ final class NPCClerkController {
     /// Indoor의 authoring marker(BarTable/Human/AreaK)로 동선과 계산대 위치를 구성한다.
     func enterIndoor(worldRoot: Entity,
                      indoorMap: Entity,
-                     kioskCenter: SIMD2<Float>) async {
+                     kioskCenter: SIMD2<Float>,
+                     isTransitionCurrent: @escaping @MainActor () -> Bool) async {
+        guard isTransitionCurrent() else { return }
         greetingTask?.cancel()
         emotionPlayback?.stop()
         locomotionRoot?.removeFromParent()
@@ -165,20 +167,26 @@ final class NPCClerkController {
         // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
         indoorMap.findEntity(named: "Human")?.isEnabled = false
 
+        let animated = try? await Entity(named: "Untitled Scene",
+                                         in: realityKitContentBundle)
+        guard isTransitionCurrent() else { return }
+
         let loadedScene: Entity
-        if let animated = try? await Entity(named: "Untitled Scene",
-                                            in: realityKitContentBundle) {
+        if let animated {
             loadedScene = animated
-        } else if let skull = try? await Entity(named: "Skull",
-                                                in: realityKitContentBundle) {
+        } else {
+            let skull = try? await Entity(named: "Skull",
+                                          in: realityKitContentBundle)
+            guard isTransitionCurrent() else { return }
+            guard let skull else {
+                phase = .unavailable
+                print("⚠️ NPC 프로토타입 로드 실패 — Untitled Scene/Skull 확인")
+                return
+            }
             // RCP 씬 로드 실패 시에도 배치/이동은 검증할 수 있는 정적 폴백.
             skull.position.y = 0.45
             loadedScene = skull
             print("⚠️ NPC 애니메이션 씬 로드 실패 — 정적 Skull 폴백")
-        } else {
-            phase = .unavailable
-            print("⚠️ NPC 프로토타입 로드 실패 — Untitled Scene/Skull 확인")
-            return
         }
 
         // Greeting/Upset이 NPCTest의 로컬 transform을 덮어쓰므로 이동·회전·스케일은

@@ -18,17 +18,24 @@ import simd
 @MainActor
 enum SceneSwitcher {
 
+    static func requestIndoorTransition() {
+        let im = InteractionModel.shared
+        im.startSceneTransition { token in
+            await switchToIndoor(token: token)
+        }
+    }
+
     /// "예" 선택 시 호출. Outdoor에서만 동작하며, 실패 시 Outdoor를 유지하고
     /// 패널에 안내 문구를 띄운다.
-    static func switchToIndoor() async {
+    private static func switchToIndoor(token: SceneTransitionToken) async {
         let im = InteractionModel.shared
-        guard !im.isTransitioning, im.scene == .outdoor,
+        guard im.isCurrentTransition(token), im.scene == .outdoor,
               let app = AppModel.current, let worldRoot = app.worldRoot else { return }
-        im.isTransitioning = true
-        defer { im.isTransitioning = false }
 
         // 1) 실내 시각 맵 로드(실패 시 전환 취소, Outdoor 유지)
-        guard let indoorVisible = try? await Entity(named: "Indoor", in: realityKitContentBundle) else {
+        let loadedIndoorVisible = try? await Entity(named: "Indoor", in: realityKitContentBundle)
+        guard im.isCurrentTransition(token) else { return }
+        guard let indoorVisible = loadedIndoorVisible else {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
             print("⚠️ Indoor 씬(시각) 로드 실패 — 이름/번들 확인")
             return
@@ -46,9 +53,12 @@ enum SceneSwitcher {
         //    씬에 상주하는 debugFloorCollision이 바닥을 담당해 주행은 정상이다
         //    (실내 벽 통과는 1차 스코프에서 허용 — 김선환 RCP 콜리전 작업 대기).
         if let oldCollision = im.collisionMap, let parent = oldCollision.parent {
-            if let indoorCollision = try? await Entity(named: "Indoor", in: realityKitContentBundle) {
+            let loadedIndoorCollision = try? await Entity(named: "Indoor", in: realityKitContentBundle)
+            guard im.isCurrentTransition(token) else { return }
+            if let indoorCollision = loadedIndoorCollision {
                 ImmersiveView.stripPhysics(indoorCollision)
                 let n = await ImmersiveView.addStaticCollision(indoorCollision)
+                guard im.isCurrentTransition(token) else { return }
                 app.collisionShapes = n
                 indoorCollision.components.set(OpacityComponent(opacity: 0))
                 parent.addChild(indoorCollision)
@@ -113,7 +123,11 @@ enum SceneSwitcher {
         // 7) 점원 프로토타입 배치: Human/AreaK/BarTable marker와 애니메이션 씬을 연결한다.
         await app.npcClerk.enterIndoor(worldRoot: worldRoot,
                                        indoorMap: indoorVisible,
-                                       kioskCenter: kioskCenter)
+                                       kioskCenter: kioskCenter,
+                                       isTransitionCurrent: {
+                                           im.isCurrentTransition(token)
+                                       })
+        guard im.isCurrentTransition(token) else { return }
 
         // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
         GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)

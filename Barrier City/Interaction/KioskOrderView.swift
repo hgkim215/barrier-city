@@ -31,7 +31,7 @@ struct KioskOrderView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("확인") {
-                    im.kioskPanelEntity?.isEnabled = false
+                    im.acknowledgeKioskBarrier()
                     GuideFlowModel.shared.handleQuestEvent(.kioskFailed)
                 }
                 .buttonStyle(.borderedProminent)
