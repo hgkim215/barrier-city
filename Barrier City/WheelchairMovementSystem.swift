@@ -1,3 +1,4 @@
+import Foundation
 import RealityKit
 import simd
 
@@ -20,14 +21,21 @@ struct WheelchairMovementSystem: System {
     private static let wheelBase: Float = 1.1
     private static let maxSpeed: Float = 5.0
     private static let maxOmega: Float = 1.8
+    /// 테스트용 가상 스틱 목표 속도를 따라가는 응답 속도(초당 비율).
+    private static let fistDriveResponse: Float = 8.0
+    /// 마지막 손 샘플이 끊긴 뒤 안전 정지까지 허용할 최대 시간.
+    private static let fistDriveStaleTimeout: TimeInterval = 0.25
     private static let gravity: Float = 6.0          // 경사 미끄러짐 세기
     private static let fallGravityY: Float = 9.8     // 수직 낙하 중력
     private static let minImpactVel: Float = 0.8
 
     // 몸체 치수(충돌/지지점)
-    private static let bodyFront: Float = 0.32   // 중심→앞 충돌 거리(작을수록 벽에 더 가까이 가서 막힘)
-    private static let bodyRear: Float = 0.20
-    private static let bodyHalfWidth: Float = 0.30   // 벽 광선 좌우 오프셋
+    // WhellChair.usdz를 ImmersiveView의 scale/offset/뒷바퀴 보정까지 적용하면
+    // 사용자 원점 기준 외곽은 전후 약 0.42m, 좌우 약 0.36m다. 이전 값은 이보다
+    // 6~10cm 작아서 바퀴가 벽 안으로 들어간 뒤에야 충돌한 것처럼 보였다.
+    private static let bodyFront: Float = 0.42
+    private static let bodyRear: Float = 0.42
+    private static let bodyHalfWidth: Float = 0.37
     private static let wallRayY: Float = 0.45         // 벽 광선 높이(바닥 위)
     private static let collisionSkin: Float = 0.02   // 프레임 경계·부동소수 오차용 여유
     private static let climbLimit: Float = AppModel.wheelRadius * 0.15   // ≈0.05
@@ -42,7 +50,10 @@ struct WheelchairMovementSystem: System {
     private static let bumpKick: Float = -1.6
     private static let surgeSpring: Float = 80
     private static let surgeDamp: Float = 8
-    private static let surgeGain: Float = 0.25
+    private static let surgeGain: Float = 0.36
+    /// 실제 조작에서 흔한 약 1.3m/s를 최대 충격 음량 기준으로 사용한다.
+    /// 물리 안전 상한(maxSpeed=5)을 기준으로 하면 보통 속도의 충돌음이 지나치게 작다.
+    private static let impactReferenceSpeed: Float = 1.3
 
     // 기울기
     private static let tiltK: Float = 35
@@ -76,28 +87,70 @@ struct WheelchairMovementSystem: System {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
             model.tick += 1
 
+            let now = ProcessInfo.processInfo.systemUptime
+            if model.testFistDriveEnabled,
+               model.fistDriveActive,
+               now - model.fistDriveLastUpdate > Self.fistDriveStaleTimeout {
+                model.stopFistDrive(
+                    requestRecenter: true,
+                    status: "손 추적이 끊겼습니다 · 손을 펴고 다시 쥐세요")
+            }
+
             // 한 점 바닥 높이(down-ray, groundGroup만). 없으면 nil(허공).
             func groundY(_ x: Float, _ z: Float) -> Float? {
                 let hits = scene.raycast(origin: [x, 4, z], direction: [0, -1, 0],
                                          length: 8, query: .nearest, mask: AppModel.groundGroup)
                 return hits.first?.position.y
             }
-            // 진행 방향에 수직 벽이 있는지(몸체 폭 3점 forward-ray). 경사로/완만턱은 법선이 위라 통과.
-            func wallAhead(fromX: Float, fromZ: Float, dxn: Float, dzn: Float, dist: Float, baseY: Float) -> Bool {
+            // 진행 방향의 수직 벽까지 가장 가까운 거리. 휠체어 폭을 5점으로 훑어
+            // 좁은 기둥/테이블 다리가 3개 레이 사이로 빠지는 것을 막는다.
+            // 경사로/완만턱은 법선이 위를 향하므로 여기서 막지 않고 아래 단차 로직에 맡긴다.
+            func wallDistance(fromX: Float,
+                              fromZ: Float,
+                              dxn: Float,
+                              dzn: Float,
+                              dist: Float,
+                              baseY: Float) -> Float? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
-                for off in [-Self.bodyHalfWidth, 0, Self.bodyHalfWidth] {
+                var nearest: Float?
+                for fraction: Float in [-1, -0.5, 0, 0.5, 1] {
+                    let off = Self.bodyHalfWidth * fraction
                     let ox = fromX + px * off, oz = fromZ + pz * off
                     let hits = scene.raycast(origin: [ox, baseY + Self.wallRayY, oz],
                                              direction: [dxn, 0, dzn], length: dist,
                                              query: .all, mask: AppModel.groundGroup)
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
-                    if hits.contains(where: { abs($0.normal.y) < 0.5 }) { return true }
+                    for hit in hits where abs(hit.normal.y) < 0.5 {
+                        let hitDistance = simd_distance(hit.position, SIMD3<Float>(ox, baseY + Self.wallRayY, oz))
+                        nearest = min(nearest ?? hitDistance, hitDistance)
+                    }
                 }
-                return false
+                return nearest
+            }
+
+            // 벽/넘을 수 없는 단차에 닿았을 때 실제 이동 속도를 끊고, 시야 반동과
+            // 충돌음을 한 번만 준다. 반동 속도는 비현실적으로 큰 테스트 입력에서도 제한한다.
+            @MainActor
+            func stopAtObstacle(impactSpeed: Float) {
+                if !model.blocked, abs(impactSpeed) > 0.01 {
+                    let cappedImpact = max(-Self.impactReferenceSpeed,
+                                           min(Self.impactReferenceSpeed, impactSpeed))
+                    model.surgeVel = cappedImpact * Self.surgeGain
+                    let intensity = min(1, abs(impactSpeed) / Self.impactReferenceSpeed)
+                    ImpactAudio.shared.playThunk(intensity: max(0.2, intensity))
+                }
+                model.vL = 0
+                model.vR = 0
+                model.blocked = true
             }
 
             // 전복(게임오버)
             if model.fallen {
+                if model.fistDriveActive {
+                    model.stopFistDrive(
+                        requestRecenter: true,
+                        status: "전복 상태 · 다시 시작한 뒤 주먹을 다시 쥐세요")
+                }
                 let tgtP = model.fallDirPitch * Self.fallAngle
                 let tgtR = model.fallDirRoll  * Self.fallAngle
                 model.pitchVel += (Self.fallK * (tgtP - model.pitch) - Self.fallC * model.pitchVel) * dt
@@ -120,19 +173,35 @@ struct WheelchairMovementSystem: System {
             if imp.left != 0 || imp.right != 0 { model.impulseApplied += 1 }
             let braking = model.brakeRequested
             model.brakeRequested = false
+            let hardStop = model.consumeFistDriveHardStop()
 
             // 2) 밀기
-            model.vL += imp.left * Self.pushGain
-            model.vR += imp.right * Self.pushGain
+            if !model.testFistDriveEnabled {
+                model.vL += imp.left * Self.pushGain
+                model.vR += imp.right * Self.pushGain
+            }
 
             // 3) 감속
             model.vL = Self.applyFriction(model.vL, dt: dt)
             model.vR = Self.applyFriction(model.vR, dt: dt)
             if braking { model.vL *= 0.2; model.vR *= 0.2 }
+            if hardStop { model.vL = 0; model.vR = 0 }
 
-            // 잡은 바퀴 클러치
-            if model.leftGrabbed  { model.vL = Self.clutch(model.vL, toward: model.handSpeedLeft, dt: dt) }
-            if model.rightGrabbed { model.vR = Self.clutch(model.vR, toward: model.handSpeedRight, dt: dt) }
+            if model.testFistDriveEnabled {
+                // 테스트 모드는 전용 목표 속도를 빠르게 추종한다. 주먹을 펴거나 추적이
+                // 끊긴 inactive 상태에서는 경사/관성까지 포함해 안전하게 정지 유지한다.
+                if model.fistDriveActive {
+                    model.vL = Self.followFistDrive(model.vL, toward: model.fistDriveTargetLeft, dt: dt)
+                    model.vR = Self.followFistDrive(model.vR, toward: model.fistDriveTargetRight, dt: dt)
+                } else {
+                    model.vL = 0
+                    model.vR = 0
+                }
+            } else {
+                // 실제 손으로 잡은 바퀴 클러치
+                if model.leftGrabbed  { model.vL = Self.clutch(model.vL, toward: model.handSpeedLeft, dt: dt) }
+                if model.rightGrabbed { model.vR = Self.clutch(model.vR, toward: model.handSpeedRight, dt: dt) }
+            }
 
             model.vL = max(-Self.maxSpeed, min(Self.maxSpeed, model.vL))
             model.vR = max(-Self.maxSpeed, min(Self.maxSpeed, model.vR))
@@ -150,8 +219,8 @@ struct WheelchairMovementSystem: System {
             let hAhead = groundY(model.posX + dirX * 0.06, model.posZ + dirZ * 0.06) ?? hHere
             let slope = (hAhead - hHere) / 0.06
             let dv = -Self.gravity * slope * dt
-            if !model.leftGrabbed  { model.vL += dv }
-            if !model.rightGrabbed { model.vR += dv }
+            if !model.leftGrabbed, !model.testFistDriveEnabled  { model.vL += dv }
+            if !model.rightGrabbed, !model.testFistDriveEnabled { model.vR += dv }
 
             // 6) 이동 후보 + 충돌
             let newX = model.posX + dirX * forward * dt
@@ -160,33 +229,38 @@ struct WheelchairMovementSystem: System {
             let leadDirX = movingFwd ? dirX : -dirX
             let leadDirZ = movingFwd ? dirZ : -dirZ
             let leadExtent = movingFwd ? Self.bodyFront : Self.bodyRear
+            // 단차는 `stepProbe` 끝에서 높이를 미리 읽으므로 시작점을 그만큼 안쪽에 둔다.
+            // probe 끝이 실제 바퀴 외곽(leadExtent)에 오게 해 기존 턱/경사 진입 시점은 유지한다.
+            let stepLeadExtent = max(0, leadExtent - Self.stepProbe)
 
             // 몸체 앞/뒤 끝뿐 아니라 이번 프레임에 이동할 구간까지 훑어 저프레임에서도
             // 얇은 벽을 한 번에 통과(tunneling)하지 않게 한다.
             let sweepDistance = leadExtent + abs(forward) * dt + Self.collisionSkin
-            if wallAhead(fromX: model.posX, fromZ: model.posZ, dxn: leadDirX, dzn: leadDirZ,
-                         dist: sweepDistance, baseY: model.chairY) {
-                // 수직 벽: 하드 스톱
-                if !model.blocked {
-                    model.surgeVel = forward * Self.surgeGain
-                    ImpactAudio.shared.playThunk(intensity: min(1, abs(forward) / Self.maxSpeed))
-                }
-                model.vL *= 0.1; model.vR *= 0.1
-                model.blocked = true
+            if let hitDistance = wallDistance(fromX: model.posX,
+                                              fromZ: model.posZ,
+                                              dxn: leadDirX,
+                                              dzn: leadDirZ,
+                                              dist: sweepDistance,
+                                              baseY: model.chairY) {
+                // 수직 벽: 이번 프레임의 이동을 통째로 버리지 않고, 외곽이 skin만
+                // 남기고 닿는 지점까지만 이동한다. 저프레임에서도 관통하거나 멀찍이
+                // 떠서 멈추지 않고 실제 접촉 위치가 일정해진다.
+                let requestedTravel = abs(forward) * dt
+                let allowedTravel = max(0, hitDistance - leadExtent - Self.collisionSkin)
+                let contactTravel = min(requestedTravel, allowedTravel)
+                model.posX += leadDirX * contactTravel
+                model.posZ += leadDirZ * contactTravel
+                stopAtObstacle(impactSpeed: forward)
             } else {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
-                let lx = newX + leadDirX * leadExtent, lz = newZ + leadDirZ * leadExtent
+                let lx = newX + leadDirX * stepLeadExtent
+                let lz = newZ + leadDirZ * stepLeadExtent
                 let h0 = groundY(lx, lz) ?? model.chairY
                 let h1 = groundY(lx + leadDirX * Self.stepProbe, lz + leadDirZ * Self.stepProbe) ?? h0
                 let rise = h1 - h0
                 if rise > Self.climbLimit {
                     // 못 넘는 단차(계단) → 막힘
-                    if !model.blocked {
-                        model.surgeVel = forward * Self.surgeGain
-                        ImpactAudio.shared.playThunk(intensity: min(1, abs(forward) / Self.maxSpeed))
-                    }
-                    model.vL *= 0.1; model.vR *= 0.1
-                    model.blocked = true
+                    stopAtObstacle(impactSpeed: forward)
                 } else if rise > Self.stepMin {
                     // 넘을 수 있는 낮은 턱 → 저항 후 통과
                     let resist = min(1, rise / Self.climbLimit)
@@ -338,6 +412,10 @@ struct WheelchairMovementSystem: System {
         let factor = startEase + (1 - startEase) * startup
         let acc = (hand - v) * gripK
         return v + acc * factor * dt
+    }
+
+    private static func followFistDrive(_ velocity: Float, toward target: Float, dt: Float) -> Float {
+        velocity + (target - velocity) * min(1, fistDriveResponse * dt)
     }
 
     private static func applyFriction(_ v: Float, dt: Float) -> Float {

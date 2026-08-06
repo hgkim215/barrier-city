@@ -19,6 +19,11 @@ struct Barrier_CityApp: App {
         }
         .windowResizability(.contentSize)
 
+        WindowGroup(id: "npc-dialogue-test") {
+            DialogueTurnView(controller: appModel.npcDialogue)
+        }
+        .windowResizability(.contentSize)
+
         ImmersiveSpace(id: "wheelchair") {
             ImmersiveView()
                 .environment(appModel)

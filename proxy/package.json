@@ -1,0 +1,13 @@
+{
+  "name": "barrier-city-openai-proxy",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "deploy:check": "wrangler deploy --dry-run",
+    "whoami": "wrangler whoami"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "wrangler": "4.114.0"
+  }
+}

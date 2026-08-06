@@ -4,7 +4,7 @@
 //
 //  Outdoor("Map") → Indoor("Indoor") 배경 전환.
 //  같은 몰입 공간을 유지한 채 ① worldRoot의 시각 맵 교체 ② 씬 원점의 투명 콜리전
-//  사본 교체 ③ 포즈를 실내 문 앞 스폰 상수로 리셋한다.
+//  사본 교체 ③ DOOR1→Kiosk 방향으로 실내 문 안쪽 포즈를 계산한다.
 //
 //  stripPhysics/addStaticCollision은 이윤서 ImmersiveView의 검증된 로더 유틸을
 //  그대로 호출한다(중복 구현 방지, Task 5에서 private 제거).
@@ -13,6 +13,7 @@
 import RealityKit
 import RealityKitContent
 import SwiftUI
+import simd
 
 @MainActor
 enum SceneSwitcher {
@@ -58,14 +59,7 @@ enum SceneSwitcher {
             }
         }
 
-        // 4) 포즈 리셋: 실내 문 앞(밖에서 문을 열고 들어온 위치)
-        app.restart()
-        app.posX = InteractionTuning.indoorSpawnX
-        app.posZ = InteractionTuning.indoorSpawnZ
-        app.heading = InteractionTuning.indoorSpawnHeading
-
-        // 5) 인터랙션 상태 전환: 실내에는 키오스크 트리거를 등록한다.
-        //    Kiosk 프림의 맵 좌표(worldRoot 기준)를 찾고, 실패 시 폴백 상수(문 DOOR1 패턴 동일).
+        // 4) Kiosk 프림의 맵 좌표(worldRoot 기준)를 찾고, 실패 시 폴백 상수를 쓴다.
         var kioskCenter = InteractionTuning.kioskFallbackCenter
         if let kiosk = indoorVisible.findEntity(named: "Kiosk") {
             // 트리거 중심은 엔티티 원점(pivot)이 아니라 '보이는 메시의 중심'(visualBounds)으로.
@@ -76,6 +70,32 @@ enum SceneSwitcher {
         } else {
             print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
         }
+
+        // 5) 포즈 리셋: DOOR1에서 Kiosk로 향하는 방향을 이용해 실제 문 안쪽에 스폰한다.
+        //    이전 고정값 (0, 4)는 BarTable의 직원 구역과 겹쳐 NPC가 즉시 반응했다.
+        var spawn = SIMD2<Float>(InteractionTuning.indoorSpawnX,
+                                 InteractionTuning.indoorSpawnZ)
+        var heading = InteractionTuning.indoorSpawnHeading
+        if let door = indoorVisible.findEntity(named: "DOOR1") {
+            let bounds = door.visualBounds(relativeTo: worldRoot)
+            let doorCenter = SIMD2<Float>(bounds.center.x, bounds.center.z)
+            let delta = kioskCenter - doorCenter
+            if simd_length(delta) > 0.001 {
+                let towardCafe = simd_normalize(delta)
+                spawn = doorCenter + towardCafe * InteractionTuning.indoorSpawnDistanceFromDoor
+                // 휠체어의 로컬 정면은 -Z.
+                heading = atan2(-towardCafe.x, -towardCafe.y)
+            }
+            print("실내 스폰: (\(spawn.x), \(spawn.y)), heading=\(heading)")
+        } else {
+            print("⚠️ Indoor DOOR1을 찾지 못해 스폰 폴백 사용: \(spawn)")
+        }
+        app.restart()
+        app.posX = spawn.x
+        app.posZ = spawn.y
+        app.heading = heading
+
+        // 6) 인터랙션 상태 전환: 실내에는 키오스크 트리거를 등록한다.
         im.scene = .indoor
         im.triggers = [ProximityTrigger(
             id: "kiosk.order",
@@ -89,6 +109,11 @@ enum SceneSwitcher {
         im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
         im.kioskPanelEntity?.isEnabled = false
+
+        // 7) 점원 프로토타입 배치: Human/AreaK/BarTable marker와 애니메이션 씬을 연결한다.
+        await app.npcClerk.enterIndoor(worldRoot: worldRoot,
+                                       indoorMap: indoorVisible,
+                                       kioskCenter: kioskCenter)
 
         // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
         QuestModel.shared.advance(on: .enteredIndoor)

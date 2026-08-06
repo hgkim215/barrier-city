@@ -59,7 +59,7 @@ final class OpenAILLMClientTests: XCTestCase {
         } catch { /* expected */ }
     }
 
-    func test_body_includesModelStreamToolAndMessages() throws {
+    func test_body_isShortStreamingRequest_withoutToolRoundTrip() throws {
         let data = try OpenAILLMClient.body(messages: [
             Message(role: .system, content: "S"),
             Message(role: .user, content: "U"),
@@ -67,7 +67,8 @@ final class OpenAILLMClientTests: XCTestCase {
         let obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         XCTAssertEqual(obj["model"] as? String, "gpt-4o-mini")
         XCTAssertEqual(obj["stream"] as? Bool, true)
-        XCTAssertNotNil(obj["tools"])
+        XCTAssertNil(obj["tools"])
+        XCTAssertEqual(obj["max_tokens"] as? Int, 80)
         let msgs = obj["messages"] as! [[String: String]]
         XCTAssertEqual(msgs.first?["role"], "system")
         XCTAssertEqual(msgs.last?["content"], "U")

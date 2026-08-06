@@ -33,6 +33,7 @@ enum InteractionSetup {
         im.isTransitioning = false
         im.transitionError = nil
         im.kioskTooHighShown = false
+        appModel.npcClerk.resetForOutdoor()
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
@@ -49,6 +50,11 @@ enum InteractionSetup {
                 im.kioskPanelEntity = kiosk
             } else {
                 print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
+            }
+            if let npcDialogue = attachments.entity(for: "npcDialogue") {
+                appModel.npcClerk.installDialoguePanel(npcDialogue, in: worldRoot)
+            } else {
+                print("⚠️ npcDialogue attachment 없음 — 점원 대화 패널 비활성")
             }
         } else {
             print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
@@ -73,8 +79,8 @@ enum InteractionSetup {
             cancelLabel: "아니요")]
 
         // 3) 매 프레임 근접 판정 구독(구독 객체를 보관해야 해제되지 않는다).
-        im.updateSubscription = content.subscribe(to: SceneEvents.Update.self) { _ in
-            tick()
+        im.updateSubscription = content.subscribe(to: SceneEvents.Update.self) { event in
+            tick(deltaTime: Float(event.deltaTime))
         }
 
         // 4) [김현기] 퀘스트 가이드 HUD 설치(HUD는 씬 루트에 붙고 head를 따라간다).
@@ -82,7 +88,7 @@ enum InteractionSetup {
     }
 
     /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치·빌보드.
-    private static func tick() {
+    private static func tick(deltaTime: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
         guard !im.isTransitioning else { return }
@@ -100,6 +106,7 @@ enum InteractionSetup {
             im.kioskTooHighShown = false   // 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋
         }
         updatePanel(im)
+        app.npcClerk.update(deltaTime: deltaTime, appModel: app)
     }
 
     /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).

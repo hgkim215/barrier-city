@@ -1,7 +1,7 @@
 import Foundation
 import DialogueKit
 
-/// ⑤ LLMClient의 구체 구현. 프록시 /chat으로 stream:true + 의도용 tool을 보내고,
+/// ⑤ LLMClient의 구체 구현. 프록시 /chat으로 짧은 답변을 스트리밍하고,
 /// 응답 SSE 줄을 DialogueKit의 parseSSELine으로 LLMEvent로 변환해 방출한다.
 /// 키는 모른다(프록시 뒤). 네트워크 실패는 스트림 throw로 전달 → Orchestrator가 폴백.
 public struct OpenAILLMClient: LLMClient {
@@ -19,7 +19,9 @@ public struct OpenAILLMClient: LLMClient {
                 do {
                     var req = URLRequest(url: config.chatURL)
                     req.httpMethod = "POST"
+                    req.timeoutInterval = 12
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     req.httpBody = try Self.body(messages: messages)
                     let (bytes, response) = try await session.bytes(for: req)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -40,31 +42,15 @@ public struct OpenAILLMClient: LLMClient {
         }
     }
 
-    /// 대화 + 의도(tool) 요청 바디. 시스템 프롬프트는 PromptBuilder가 영어로 구성해 messages로 들어온다.
+    /// 짧은 대화 요청 바디. 게임 의도는 로컬에서 분류해 tool 호출 지연을 없앤다.
     static func body(messages: [Message]) throws -> Data {
         let msgs = messages.map { ["role": $0.role.rawValue, "content": $0.content] }
-        let tool: [String: Any] = [
-            "type": "function",
-            "function": [
-                "name": "set_intent",
-                "description": "Classify the player's turn intent and politeness.",
-                "parameters": [
-                    "type": "object",
-                    "properties": [
-                        "kind": ["type": "string",
-                                 "enum": ["orderComplete", "helpRequest", "leave", "smalltalk", "unknown"]],
-                        "politeness": ["type": "integer"],
-                    ],
-                    "required": ["kind"],
-                ],
-            ],
-        ]
         let payload: [String: Any] = [
             "model": "gpt-4o-mini",
             "stream": true,
             "messages": msgs,
-            "tools": [tool],
-            "tool_choice": "auto",
+            "max_tokens": 80,
+            "temperature": 0.7,
         ]
         return try JSONSerialization.data(withJSONObject: payload)
     }
