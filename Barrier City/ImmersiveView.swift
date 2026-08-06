@@ -199,6 +199,7 @@ struct ImmersiveView: View {
             AppModel.current = model
         }
         .onDisappear {
+            QuestSetup.stop()
             model.isImmersive = false
             model.npcClerk.resetForOutdoor()
             handTracker.stop(model: model)

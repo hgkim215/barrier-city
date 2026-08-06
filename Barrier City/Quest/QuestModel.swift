@@ -28,18 +28,24 @@ struct QuestStep: Identifiable, Equatable {
 enum QuestTuning {
     /// head 앞으로 띄우는 거리(m)
     static let forwardDistance: Float = 1.2
-    /// head 기준 좌우 오프셋(m, -면 왼쪽)
-    static let lateralOffset: Float = -0.35
-    /// head 기준 세로 오프셋(m, -면 눈높이보다 아래)
-    static let verticalOffset: Float = -0.15
+    /// 중앙 모달의 head 기준 좌우 오프셋(m, -면 왼쪽)
+    static let centerLateralOffset: Float = 0
+    /// 중앙 모달의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
+    static let centerVerticalOffset: Float = -0.05
+    /// 상단 선행 HUD의 head 기준 좌우 오프셋(m, -면 왼쪽)
+    static let hudLateralOffset: Float = -0.4
+    /// 상단 선행 HUD의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
+    static let hudVerticalOffset: Float = 0.2
     /// 데드존 각도(rad). 이 안이면 따라가지 않음(15°).
     static let deadZoneAngle: Float = 15 * .pi / 180
     /// 데드존 거리(m). 이 안이면 따라가지 않음.
     static let deadZoneDistance: Float = 0.2
     /// 지수 스무딩 수렴 속도(초당 배율 계수). 클수록 빨리 붙는다.
     static let smoothingRate: Float = 4.0
-    /// head 포즈를 못 얻을 때 고정 배치 위치(씬 원점 기준).
-    static let fallbackPosition = SIMD3<Float>(-0.35, 1.4, -1.2)
+    /// head 포즈를 못 얻을 때 중앙 모달의 고정 배치 위치(씬 원점 기준).
+    static let centerFallbackPosition = SIMD3<Float>(0, 1.45, -1.2)
+    /// head 포즈를 못 얻을 때 상단 선행 HUD의 고정 배치 위치(씬 원점 기준).
+    static let hudFallbackPosition = SIMD3<Float>(-0.4, 1.65, -1.2)
 }
 
 enum QuestAdvanceOutcome: Equatable {
