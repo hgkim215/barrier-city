@@ -68,8 +68,12 @@ struct GuideFlowState: Equatable {
             phase = .missionAnnouncement(index: 0)
         case (.missionAnnouncement(let index), .confirmMission):
             phase = .missionActive(index: index)
-        case (.missionActive, .questAdvanced(let nextIndex)):
-            phase = nextIndex.map { .missionAnnouncement(index: $0) } ?? .completionAnnouncement
+        case (.missionActive(index: 0), .questAdvanced(nextIndex: 1)):
+            phase = .missionAnnouncement(index: 1)
+        case (.missionActive(index: 1), .questAdvanced(nextIndex: 2)):
+            phase = .missionAnnouncement(index: 2)
+        case (.missionActive(index: 2), .questAdvanced(nextIndex: nil)):
+            phase = .completionAnnouncement
         case (.completionAnnouncement, .confirmCompletion):
             phase = .completed
         case (_, .failOpen(let activeMissionIndex)):

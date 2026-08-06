@@ -52,6 +52,18 @@ struct GuideFlowStateTests {
         invalid.send(.questAdvanced(nextIndex: 1))
         expect(invalid.phase, .introduction, "quest event ignored outside active mission")
 
+        var backwardAdvance = GuideFlowState(phase: .missionActive(index: 1))
+        backwardAdvance.send(.questAdvanced(nextIndex: 0))
+        expect(backwardAdvance.phase, .missionActive(index: 1), "backward quest advancement ignored")
+
+        var skippedAdvance = GuideFlowState(phase: .missionActive(index: 0))
+        skippedAdvance.send(.questAdvanced(nextIndex: 2))
+        expect(skippedAdvance.phase, .missionActive(index: 0), "skipped quest advancement ignored")
+
+        var earlyCompletion = GuideFlowState(phase: .missionActive(index: 1))
+        earlyCompletion.send(.questAdvanced(nextIndex: nil))
+        expect(earlyCompletion.phase, .missionActive(index: 1), "early completion ignored")
+
         var failOpen = GuideFlowState()
         failOpen.send(.failOpen(activeMissionIndex: 0))
         expect(failOpen.phase, .missionActive(index: 0), "attachment failure unlocks mission")
