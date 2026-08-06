@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["door", "Collision", "building", "Outdoor", "Door"]
+    reorder nameChildren = ["door", "Collision", "building", "Outdoor", "Door", "Timeline"]
     def Material "building"
     {
         token outputs:mtlx:surface
@@ -110,6 +110,13 @@ def Xform "Root"
             float3 xformOp:scale = (0.99999994, 0.99999994, 0.99999994)
             float3 xformOp:translate = (0, 0.003, 0)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def RealityKitTimeline "Timeline"
+    {
+        def RealityKitTrack "Track"
+        {
         }
     }
 }
