@@ -438,7 +438,7 @@ final class NPCClerkController {
         handledMissionSequence = dialogue.missionEventSequence
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
-            QuestModel.shared.advance(on: .npcHelpDone)
+            GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
             phase = .completed
         case .exited:
             greetingTask?.cancel()

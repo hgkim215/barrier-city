@@ -116,7 +116,7 @@ enum SceneSwitcher {
                                        kioskCenter: kioskCenter)
 
         // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
-        QuestModel.shared.advance(on: .enteredIndoor)
+        GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)
     }
 
     /// Indoor 프로토타입의 검정 벽 임시 보정: 모든 메시를 밝은 단색으로 덮어쓴다.
