@@ -44,6 +44,11 @@ enum QuestTuning {
     static let fallbackPosition = SIMD3<Float>(-0.35, 1.4, -1.2)
 }
 
+enum QuestAdvanceOutcome: Equatable {
+    case ignored
+    case advanced(completed: QuestStep, next: QuestStep?)
+}
+
 /// 퀘스트 전역 상태.
 @Observable
 @MainActor
@@ -85,19 +90,22 @@ final class QuestModel {
 
     /// 이벤트 발행. 현재 단계의 완료 이벤트와 일치할 때만 진행하고 완료 연출을 띄운다.
     /// 불일치 이벤트(중복·순서 꼬임)는 무시된다.
-    func advance(on event: QuestEvent) {
-        guard let step = currentStep else { return }
-        let matches = (event == step.completionEvent)
-        let next = QuestProgression.nextIndex(currentIndex: currentIndex,
-                                              stepCount: steps.count,
-                                              eventMatchesCurrent: matches)
-        guard next != currentIndex else { return }   // 변화 없으면 무시
+    @discardableResult
+    func advance(on event: QuestEvent) -> QuestAdvanceOutcome {
+        guard let step = currentStep else { return .ignored }
+        let nextIndex = QuestProgression.nextIndex(
+            currentIndex: currentIndex,
+            stepCount: steps.count,
+            eventMatchesCurrent: event == step.completionEvent)
+        guard nextIndex != currentIndex else { return .ignored }
+
         justCompletedStep = step
-        currentIndex = next
-        // 완료 연출을 completedHoldSeconds 후 해제(그 사이 새 완료가 오면 최신 것 우선).
-        Task { @MainActor [self] in
+        currentIndex = nextIndex
+        Task { [weak self] in
             try? await Task.sleep(for: .seconds(QuestTuning.completedHoldSeconds))
-            if self.justCompletedStep == step { self.justCompletedStep = nil }
+            guard self?.justCompletedStep?.id == step.id else { return }
+            self?.justCompletedStep = nil
         }
+        return .advanced(completed: step, next: currentStep)
     }
 }
