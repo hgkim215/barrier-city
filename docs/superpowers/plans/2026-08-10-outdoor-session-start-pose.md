@@ -36,7 +36,7 @@
 - Consumes: `AppModel.restart()`, `AppModel.posX`, `AppModel.posZ`, `AppModel.heading`, `InteractionTuning.doorFallbackCenter`, and the resolved `DOOR1` trigger center.
 - Produces: `OutdoorStartPose`, `OutdoorSessionResettable`, `OutdoorSessionStart.pose(startPosition:doorCenter:fallbackDoorCenter:)`, and `OutdoorSessionStart.reset(_:startPosition:doorCenter:fallbackDoorCenter:)`.
 
-- [ ] **Step 1: Write the failing behavior tests**
+- [x] **Step 1: Write the failing behavior tests**
 
 Create `Tests/OutdoorSessionStartTests.swift`. The production mutations these tests catch are: wrong yaw sign, a removed coincident-target fallback, omitted restart delegation, and failure to overwrite the previous pose.
 
@@ -105,7 +105,7 @@ struct OutdoorSessionStartTests {
 }
 ```
 
-- [ ] **Step 2: Run the new test to verify RED**
+- [x] **Step 2: Run the new test to verify RED**
 
 Run:
 
@@ -118,7 +118,7 @@ xcrun swiftc \
 
 Expected: FAIL because `Barrier City/Interaction/OutdoorSessionStart.swift` and its public interfaces do not exist yet.
 
-- [ ] **Step 3: Implement the minimal pose and reset coordinator**
+- [x] **Step 3: Implement the minimal pose and reset coordinator**
 
 Create `Barrier City/Interaction/OutdoorSessionStart.swift`:
 
@@ -152,9 +152,11 @@ enum OutdoorSessionStart {
             direction = SIMD2<Float>(0, 1)
         }
         direction = simd_normalize(direction)
+        let rawHeading = atan2(-direction.x, -direction.y)
+        let heading = rawHeading < 0 ? rawHeading + 2 * .pi : rawHeading
         return OutdoorStartPose(
             position: startPosition,
-            heading: atan2(-direction.x, -direction.y))
+            heading: heading)
     }
 
     @MainActor
@@ -176,7 +178,7 @@ enum OutdoorSessionStart {
 }
 ```
 
-- [ ] **Step 4: Run the focused test to verify GREEN**
+- [x] **Step 4: Run the focused test to verify GREEN**
 
 Run:
 
@@ -190,7 +192,7 @@ xcrun swiftc \
 
 Expected: `OutdoorSessionStartTests: PASS`.
 
-- [ ] **Step 5: Connect the reset coordinator to immersive installation**
+- [x] **Step 5: Connect the reset coordinator to immersive installation**
 
 In `InteractionSetup.swift`, add the conformance near the imports:
 
@@ -210,7 +212,7 @@ OutdoorSessionStart.reset(
 
 This ordering ensures the loaded map marker determines the heading while all stale physical and input state is cleared before the first interaction tick.
 
-- [ ] **Step 6: Run focused and existing standalone regression tests**
+- [x] **Step 6: Run focused and existing standalone regression tests**
 
 Run:
 
@@ -227,7 +229,7 @@ xcrun swiftc "Barrier City/Quest/QuestProgression.swift" "Barrier City/Quest/Que
 xcrun swiftc "Barrier City/Interaction/SceneTransitionSession.swift" Tests/SceneTransitionSessionTests.swift -o /tmp/scene-transition-session-tests
 /tmp/scene-transition-session-tests
 
-xcrun swiftc Tests/LoopingGuidePlaybackContractTests.swift -o /tmp/looping-guide-playback-contract-tests
+xcrun swiftc -parse-as-library Tests/LoopingGuidePlaybackContractTests.swift -o /tmp/looping-guide-playback-contract-tests
 /tmp/looping-guide-playback-contract-tests "Barrier City/Quest/LoopingGuideVideoView.swift"
 
 xcrun swiftc \
@@ -250,7 +252,7 @@ LoopingGuidePlaybackContractTests: PASS
 InteractionFlowRegressionTests: PASS
 ```
 
-- [ ] **Step 7: Run package and app verification**
+- [x] **Step 7: Run package and app verification**
 
 Run:
 
@@ -266,7 +268,7 @@ xcodebuild \
 
 Expected: 54 DialogueKit tests pass with zero failures and Xcode reports `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 8: Review the diff and commit**
+- [x] **Step 8: Review the diff and commit**
 
 Run:
 
@@ -278,6 +280,7 @@ git diff -- "Barrier City/Interaction/OutdoorSessionStart.swift" \
 git add "Barrier City/Interaction/OutdoorSessionStart.swift" \
   "Barrier City/Interaction/InteractionSetup.swift" \
   Tests/OutdoorSessionStartTests.swift \
+  docs/superpowers/specs/2026-08-10-outdoor-session-start-pose-design.md \
   docs/superpowers/plans/2026-08-10-outdoor-session-start-pose.md
 git commit -m "fix(interaction): reset outdoor immersive start pose"
 ```

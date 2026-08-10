@@ -52,8 +52,9 @@ Automated regression tests will verify:
 1. A door on positive Z produces a heading of pi radians.
 2. An offset door produces a heading whose forward vector points at the door.
 3. A coincident target uses the fallback cafe-facing heading.
-4. The immersive installation path performs a wheelchair restart before
-   applying the outdoor start pose.
+4. The outdoor-session reset coordinator performs a wheelchair restart before
+   applying the outdoor start pose; the app build verifies its installation
+   wiring, and manual acceptance verifies the immersive entry boundary.
 
 After the tests pass, run the existing standalone regression suite,
 `DialogueKit` tests, and a generic visionOS Simulator build. Manual acceptance

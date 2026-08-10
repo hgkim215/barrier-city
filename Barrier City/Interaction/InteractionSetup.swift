@@ -13,6 +13,8 @@ import RealityKit
 import SwiftUI
 import simd
 
+extension AppModel: OutdoorSessionResettable {}
+
 @MainActor
 enum InteractionSetup {
 
@@ -70,6 +72,11 @@ enum InteractionSetup {
         } else {
             print("⚠️ DOOR1 프림을 찾지 못해 폴백 좌표 사용: \(center)")
         }
+        OutdoorSessionStart.reset(
+            appModel,
+            startPosition: .zero,
+            doorCenter: center,
+            fallbackDoorCenter: InteractionTuning.doorFallbackCenter)
         im.triggers = [ProximityTrigger(
             id: "door.enter",
             center: center,
