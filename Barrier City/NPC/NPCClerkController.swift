@@ -1,16 +1,19 @@
 import Foundation
 import Observation
 import RealityKit
-import RealityKitContent
 import simd
 import DialogueKit
 
-/// Reality Composer Pro에 작성된 점원 감정 애니메이션 키.
+/// Indoor.usda의 Barista AnimationLibrary에 연결된 코드 실행용 애니메이션 키.
 /// 같은 cue가 연속으로 와도 다시 재생할 수 있도록 요청에는 별도 sequence를 사용한다.
 enum NPCAnimationCue: String, CaseIterable {
-    case greeting = "Greeting"
-    case happy = "Happy"
-    case upset = "Upset"
+    case idle = "Idle"
+    case greet = "Greet"
+    case walk = "Walk"
+
+    var repeats: Bool {
+        self == .idle || self == .walk
+    }
 }
 
 struct NPCAnimationRequest: Equatable {
@@ -26,7 +29,7 @@ enum NPCClerkPhase: String {
     case completed = "주문 완료"
 }
 
-/// 실제 모델·동선이 확정되기 전까지 한곳에서 조절하는 프로토타입 튜닝값.
+/// Barista 배치와 동선을 한곳에서 조절하는 튜닝값.
 enum NPCClerkTuning {
     /// 점원이 돌아다니는 동안에도 사용자를 놓치지 않도록 실제 NPC 위치 기준으로 넉넉히 감지한다.
     static let detectionRadius: Float = 4.0
@@ -40,13 +43,11 @@ enum NPCClerkTuning {
     static let staffCounterInset: Float = 1.05
     static let customerStandOff: Float = 0.65
 
-    /// 현재 Skull은 실제 사람보다 작으므로 머리 높이에서 잘 보이게 하는 임시 보정.
-    /// 실제 점원 모델 교체 시 1 / 0으로 되돌리면 된다.
-    static let prototypeScale: Float = 1.8
-    static let prototypeBaseY: Float = 0.42
-    /// Skull 자산의 시각적 정면은 RealityKit 기본 정면(-Z)과 반대(+Z)다.
-    /// 실제 점원 모델이 -Z 정면으로 제작되면 0으로 되돌린다.
-    static let prototypeForwardYawOffset: Float = .pi
+    /// Barista 자체 스케일·축 변환은 Indoor.usda에 작성되어 있어 wrapper는 보정하지 않는다.
+    static let baristaScale: Float = 1.0
+    static let baristaBaseY: Float = 0
+    /// Blender에서 제작된 Barista의 시각적 정면(+Z)을 RealityKit 이동 정면(-Z)에 맞춘다.
+    static let baristaForwardYawOffset: Float = .pi
 
     static let dialogueHeight: Float = 1.55
     static let dialogueForwardOffset: Float = 0.25
@@ -75,9 +76,9 @@ final class NPCClerkController {
 
     @ObservationIgnored private weak var worldRoot: Entity?
     @ObservationIgnored private var locomotionRoot: Entity?
-    @ObservationIgnored private var prototypeScene: Entity?
+    @ObservationIgnored private var baristaEntity: Entity?
     @ObservationIgnored private var dialoguePanel: Entity?
-    @ObservationIgnored private var emotionPlayback: AnimationPlaybackController?
+    @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
 
     private var staffHome = NPCClerkTuning.fallbackStaffHome
@@ -108,11 +109,11 @@ final class NPCClerkController {
     func resetForOutdoor() {
         greetingTask?.cancel()
         greetingTask = nil
-        emotionPlayback?.stop()
-        emotionPlayback = nil
+        animationPlayback?.stop()
+        animationPlayback = nil
         locomotionRoot?.removeFromParent()
         locomotionRoot = nil
-        prototypeScene = nil
+        baristaEntity = nil
         dialoguePanel?.isEnabled = false
         isDialogueVisible = false
         phase = .unavailable
@@ -130,7 +131,7 @@ final class NPCClerkController {
                      indoorMap: Entity,
                      kioskCenter: SIMD2<Float>) async {
         greetingTask?.cancel()
-        emotionPlayback?.stop()
+        animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
         dialogue.reset()
 
@@ -159,37 +160,31 @@ final class NPCClerkController {
         // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
         indoorMap.findEntity(named: "Human")?.isEnabled = false
 
-        let loadedScene: Entity
-        if let animated = try? await Entity(named: "Untitled Scene",
-                                            in: realityKitContentBundle) {
-            loadedScene = animated
-        } else if let skull = try? await Entity(named: "Skull",
-                                                in: realityKitContentBundle) {
-            // RCP 씬 로드 실패 시에도 배치/이동은 검증할 수 있는 정적 폴백.
-            skull.position.y = 0.45
-            loadedScene = skull
-            print("⚠️ NPC 애니메이션 씬 로드 실패 — 정적 Skull 폴백")
-        } else {
+        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. 이 엔티티에
+        // Idle/Greet/Walk AnimationLibrary가 연결되어 있어 별도 테스트 씬이 필요 없다.
+        guard let barista = indoorMap.findEntity(named: "Barista") else {
             phase = .unavailable
-            print("⚠️ NPC 프로토타입 로드 실패 — Untitled Scene/Skull 확인")
+            print("⚠️ Barista를 찾지 못함 — Indoor.usda의 Barista 엔티티 확인")
             return
         }
+        barista.removeFromParent()
 
-        // Greeting/Upset이 NPCTest의 로컬 transform을 덮어쓰므로 이동·회전·스케일은
-        // 반드시 이 바깥 wrapper에만 적용한다.
+        // 스켈레톤 애니메이션과 NPC 이동 transform이 충돌하지 않도록 이동·회전은
+        // Barista 바깥 wrapper에만 적용한다. Barista의 authored 축/스케일은 유지한다.
         let locomotion = Entity()
         locomotion.name = "NPCClerkLocomotionRoot"
-        locomotion.position = [staffHome.x, NPCClerkTuning.prototypeBaseY, staffHome.y]
-        locomotion.scale = SIMD3(repeating: NPCClerkTuning.prototypeScale)
-        locomotion.addChild(loadedScene)
+        locomotion.position = [staffHome.x, NPCClerkTuning.baristaBaseY, staffHome.y]
+        locomotion.scale = SIMD3(repeating: NPCClerkTuning.baristaScale)
+        locomotion.addChild(barista)
         worldRoot.addChild(locomotion)
 
         locomotionRoot = locomotion
-        prototypeScene = loadedScene
-        availableAnimationNames = collectAnimationNames(in: loadedScene).sorted()
+        baristaEntity = barista
+        availableAnimationNames = collectAnimationNames(in: barista).sorted()
         print("NPC 배치: \(placementSummary)")
         print("NPC 애니메이션: \(availableAnimationNames)")
         phase = .working
+        playAnimation(.idle)
     }
 
     /// SceneEvents.Update에서 호출한다. Entity.move를 매 프레임 재시작하지 않고
@@ -245,7 +240,7 @@ final class NPCClerkController {
 
     /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
     func playForTesting(_ cue: NPCAnimationCue) {
-        playAnimation(cue)
+        playAnimation(cue, restart: true)
     }
 
     // MARK: - Placement
@@ -354,11 +349,14 @@ final class NPCClerkController {
         guard !workWaypoints.isEmpty else { return }
         if workPauseRemaining > 0 {
             workPauseRemaining = max(0, workPauseRemaining - deltaTime)
+            playAnimation(.idle)
             return
         }
+        playAnimation(.walk)
         if move(toward: workWaypoints[workWaypointIndex], deltaTime: deltaTime) {
             workWaypointIndex = (workWaypointIndex + 1) % workWaypoints.count
             workPauseRemaining = NPCClerkTuning.workPauseSeconds
+            playAnimation(.idle)
         }
     }
 
@@ -392,10 +390,10 @@ final class NPCClerkController {
 
     private func face(direction: SIMD2<Float>, deltaTime: Float) {
         guard let root = locomotionRoot else { return }
-        // 이동 wrapper의 -Z를 목표 방향으로 맞춘 뒤, 현재 Skull의 +Z 정면을 180° 보정한다.
-        // 애니메이션이 내부 NPCTest transform을 덮어써도 바깥 wrapper 보정은 유지된다.
+        // 이동 wrapper의 -Z를 목표 방향으로 맞춘 뒤 Barista의 +Z 정면을 180° 보정한다.
+        // 스켈레톤 애니메이션은 자식에만 적용되므로 바깥 wrapper 보정은 유지된다.
         let yaw = atan2(-direction.x, -direction.y)
-            + NPCClerkTuning.prototypeForwardYawOffset
+            + NPCClerkTuning.baristaForwardYawOffset
         let target = simd_quatf(angle: yaw, axis: [0, 1, 0])
         let amount = min(1, NPCClerkTuning.turnResponse * deltaTime)
         root.orientation = simd_slerp(root.orientation, target, amount)
@@ -404,6 +402,7 @@ final class NPCClerkController {
     private func beginGreeting() {
         guard phase == .working else { return }
         phase = .greeting
+        playAnimation(.idle)
         setDialogueVisible(true)
 
         // 키오스크 장벽 패널과 대화 패널이 겹치지 않게 현재 키오스크 UI를 닫는다.
@@ -425,7 +424,7 @@ final class NPCClerkController {
         if let request = dialogue.animationRequest,
            request.sequence != handledAnimationSequence {
             handledAnimationSequence = request.sequence
-            playAnimation(request.cue)
+            playAnimation(request.cue, restart: true)
         }
 
         guard dialogue.missionEventSequence != handledMissionSequence else { return }
@@ -434,6 +433,7 @@ final class NPCClerkController {
         case .orderPlaced:
             QuestModel.shared.advance(on: .npcHelpDone)
             phase = .completed
+            playAnimation(.idle)
         case .exited:
             greetingTask?.cancel()
             greetingTask = nil
@@ -461,15 +461,16 @@ final class NPCClerkController {
 
     // MARK: - Animation
 
-    private func playAnimation(_ cue: NPCAnimationCue) {
-        guard let scene = prototypeScene,
-              let match = findAnimation(named: cue.rawValue, in: scene) else {
+    private func playAnimation(_ cue: NPCAnimationCue, restart: Bool = false) {
+        guard restart || lastPlayedAnimation != cue.rawValue else { return }
+        guard let barista = baristaEntity,
+              let match = findAnimation(named: cue.rawValue, in: barista) else {
             print("⚠️ NPC 애니메이션 '\(cue.rawValue)'을 찾지 못함 — 현재 키: \(availableAnimationNames)")
             return
         }
-        emotionPlayback?.stop(blendOutDuration: 0.05)
-        emotionPlayback = match.entity.playAnimation(match.resource,
-                                                       transitionDuration: 0.10)
+        animationPlayback?.stop(blendOutDuration: 0.05)
+        let resource = cue.repeats ? match.resource.repeat() : match.resource
+        animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.10)
         lastPlayedAnimation = cue.rawValue
     }
 

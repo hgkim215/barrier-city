@@ -347,6 +347,12 @@ def Xform "Root"
         {
             token info:id = "RealityKit.AnimationLibrary"
 
+            def RealityKitAnimationFile "Idle"
+            {
+                uniform asset file = @Barista/Default.usdz@
+                uniform string name = "Idle"
+            }
+
             def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @Barista/Walk.usdz@
@@ -361,4 +367,3 @@ def Xform "Root"
         }
     }
 }
-

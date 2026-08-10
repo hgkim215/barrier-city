@@ -125,7 +125,7 @@ final class NPCDialogueController {
         userText = ""
         npcSubtitle = ""
         status = .speaking
-        requestAnimation(.greeting)
+        requestAnimation(.greet)
         await voice.speak("어서 오세요. 무엇을 도와드릴까요?") { [weak self] line in
             self?.npcSubtitle = line
         }
@@ -133,6 +133,7 @@ final class NPCDialogueController {
             status = .idle
             return
         }
+        requestAnimation(.idle)
         status = .idle
 
         automaticConversationTask = Task { @MainActor [weak self] in
@@ -225,11 +226,9 @@ final class NPCDialogueController {
         if !result.usedFallback {
             switch tone {
             case .supportive, .warm:
-                requestAnimation(.happy)
-            case .dismissive, .hostile:
-                requestAnimation(.upset)
-            case .neutral:
-                break
+                requestAnimation(.greet)
+            case .neutral, .dismissive, .hostile:
+                requestAnimation(.idle)
             }
         }
         if let event = result.event {
