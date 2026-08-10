@@ -61,6 +61,7 @@ public actor RealtimeWebSocketClient {
     public func connect() async throws {
         guard socket == nil else { throw RealtimeClientError.alreadyConnected }
         let secret = try await secretProvider.fetch()
+        try Task.checkCancellation()
         let task = session.webSocketTask(
             with: endpoint,
             protocols: ["realtime", "openai-insecure-api-key.\(secret.value)"]
@@ -84,11 +85,13 @@ public actor RealtimeWebSocketClient {
         return text
     }
 
-    public func disconnect() {
-        receiveTask?.cancel()
+    public func disconnect() async {
+        let task = receiveTask
         receiveTask = nil
+        task?.cancel()
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
+        await task?.value
         continuation.finish()
     }
 

@@ -19,17 +19,23 @@ final class QuestHUDFollower {
     private let provider = WorldTrackingProvider()
     private var running = false
     private var placed = false   // 최초 1회는 스무딩 없이 즉시 배치
+    private var runGeneration = 0
 
     /// world tracking 시작. 실패하면 running=false로 남아 update가 폴백 배치를 쓴다.
     func start() async {
+        runGeneration &+= 1
+        let generation = runGeneration
+        running = false
         guard WorldTrackingProvider.isSupported else {
             print("WorldTracking 미지원 — 퀘스트 HUD 고정 배치 폴백")
             return
         }
         do {
             try await session.run([provider])
+            guard generation == runGeneration, !Task.isCancelled else { return }
             running = true
         } catch {
+            guard generation == runGeneration, !Task.isCancelled else { return }
             print("WorldTracking 시작 실패: \(error) — 퀘스트 HUD 고정 배치 폴백")
         }
     }
@@ -77,7 +83,9 @@ final class QuestHUDFollower {
     /// 세션 정리용. 현재 팀원 파일(ImmersiveView.onDisappear) 경계 때문에 호출 지점이
     /// 없어 도달하지 않는다. NPC 작업으로 팀원 파일 수정이 열리면 onDisappear에 연결한다.
     func stop() {
+        runGeneration &+= 1
         running = false
+        placed = false
         session.stop()
     }
 

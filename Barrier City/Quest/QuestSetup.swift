@@ -15,6 +15,7 @@ enum QuestSetup {
     private static var follower: QuestHUDFollower?
     private static var hudPanel: Entity?
     private static var subscription: EventSubscription?
+    private static var startTask: Task<Void, Never>?
 
     static func install(content: RealityViewContent,
                         attachments: RealityViewAttachments,
@@ -32,7 +33,7 @@ enum QuestSetup {
 
         let f = QuestHUDFollower()
         follower = f
-        Task { await f.start() }
+        startTask = Task { await f.start() }
 
         subscription = content.subscribe(to: SceneEvents.Update.self) { event in
             guard let panel = hudPanel, let f = follower else { return }
@@ -44,6 +45,8 @@ enum QuestSetup {
     static func stop() {
         subscription?.cancel()
         subscription = nil
+        startTask?.cancel()
+        startTask = nil
         follower?.stop()
         follower = nil
         hudPanel?.removeFromParent()

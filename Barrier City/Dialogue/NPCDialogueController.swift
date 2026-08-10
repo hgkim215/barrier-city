@@ -63,6 +63,9 @@ final class NPCDialogueController {
     private var automaticTurnCount = 0
     private var automaticConversationTask: Task<Void, Never>?
     private var realtimeSession: RealtimeNPCConversationSession?
+    private var realtimeCommandTask: Task<Void, Never>?
+    private var cleanupTask: Task<Void, Never>?
+    private var cleanupGeneration = 0
     private var realtimeLiveText = ""
     private var pendingRealtimeMissionEvent: MissionEvent?
     private var pendingRealtimeFunctionCall: (callID: String, output: String)?
@@ -146,6 +149,8 @@ final class NPCDialogueController {
     }
 
     private func startLegacyEncounter() async {
+        await finishPendingCleanup()
+        guard !Task.isCancelled else { return }
         guard !isEncounterActive else { return }
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
@@ -187,24 +192,29 @@ final class NPCDialogueController {
     /// 마이크를 즉시 닫고 진행 중인 자동 턴을 취소하되, 호감도와 미션 결과는 보존한다.
     func cancelEncounter() {
         isEncounterActive = false
+        voice.stop()
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
+        realtimeCommandTask?.cancel()
+        realtimeCommandTask = nil
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
         pendingRealtimeMissionEvent = nil
         pendingRealtimeFunctionCall = nil
-        if let realtime {
-            Task { @MainActor in await realtime.stop() }
+        cleanupGeneration &+= 1
+        let generation = cleanupGeneration
+        let previousCleanup = cleanupTask
+        cleanupTask = Task { @MainActor [weak self] in
+            await previousCleanup?.value
+            if let realtime { await realtime.stop() }
+            guard let self else { return }
+            if self.speech.isRecording { _ = await self.speech.stop() }
+            if self.status == .listening { self.status = .idle }
+            if self.cleanupGeneration == generation { self.cleanupTask = nil }
         }
 
-        if speech.isRecording {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.speech.isRecording { _ = await self.speech.stop() }
-                if self.status == .listening { self.status = .idle }
-            }
-        } else if status == .listening {
+        if !speech.isRecording, status == .listening {
             status = .idle
         }
     }
@@ -412,6 +422,8 @@ final class NPCDialogueController {
     // MARK: - Realtime speech-to-speech conversation
 
     private func startRealtimeEncounter() async {
+        await finishPendingCleanup()
+        guard !Task.isCancelled else { return }
         guard !isEncounterActive else { return }
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
@@ -498,13 +510,15 @@ final class NPCDialogueController {
                 pendingRealtimeFunctionCall = nil
                 status = .thinking
                 guard let realtimeSession else { return }
-                Task { @MainActor [weak self] in
+                realtimeCommandTask?.cancel()
+                realtimeCommandTask = Task { @MainActor [weak self] in
                     do {
                         try await realtimeSession.completeFunctionCall(
                             callID: functionCall.callID,
                             output: functionCall.output
                         )
                     } catch {
+                        guard !Task.isCancelled else { return }
                         self?.handleRealtimeEvent(.failure(error.localizedDescription))
                     }
                 }
@@ -514,24 +528,26 @@ final class NPCDialogueController {
                 pendingRealtimeMissionEvent = nil
                 publishMissionEvent(event)
                 if event == .orderPlaced || event == .exited {
-                    isEncounterActive = false
+                    cancelEncounter()
                     status = .idle
-                    let session = realtimeSession
-                    realtimeSession = nil
-                    if let session {
-                        Task { @MainActor in await session.stop() }
-                    }
                     return
                 }
             }
             status = .listening
 
         case .failure(let message):
+            cancelEncounter()
             npcSubtitle = "음성 연결 오류: \(message)"
             status = .idle
-            isEncounterActive = false
             publishMissionEvent(.exited)
         }
+    }
+
+    private func finishPendingCleanup() async {
+        let generation = cleanupGeneration
+        guard let task = cleanupTask else { return }
+        await task.value
+        if cleanupGeneration == generation { cleanupTask = nil }
     }
 
     private func handleRealtimeFunction(name: String, callID: String) {

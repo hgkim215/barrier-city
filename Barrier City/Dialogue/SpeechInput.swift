@@ -59,6 +59,7 @@ final class SpeechInput {
         }
 #endif
         guard await requestPermission() else { throw STTError.notAuthorized }
+        try Task.checkCancellation()
         guard let recognizer, recognizer.isAvailable else { throw STTError.recognizerUnavailable }
 
         partialText = ""

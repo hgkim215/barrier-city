@@ -58,6 +58,7 @@ final class RealtimeAudioIO {
         guard await AVAudioApplication.requestRecordPermission() else {
             throw AudioError.permissionDenied
         }
+        try Task.checkCancellation()
 
         try AudioSessionCoordinator.shared.acquire(.realtimeConversation)
         hasAudioSessionClaim = true

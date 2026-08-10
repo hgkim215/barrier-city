@@ -27,6 +27,8 @@ final class RealtimeNPCConversationSession {
     private var client: RealtimeWebSocketClient?
     private var receiveTask: Task<Void, Never>?
     private var audioSendTask: Task<Void, Never>?
+    private var configurationSendTask: Task<Void, Never>?
+    private var truncateTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<Data>.Continuation?
     private var eventHandler: (@MainActor (Event) -> Void)?
     private var sessionConfigurationContinuation: CheckedContinuation<Void, Error>?
@@ -38,6 +40,8 @@ final class RealtimeNPCConversationSession {
         tools: [RealtimeFunctionTool],
         onEvent: @escaping @MainActor (Event) -> Void
     ) async throws {
+        guard client == nil else { throw RealtimeClientError.alreadyConnected }
+        try Task.checkCancellation()
         let client = RealtimeWebSocketClient(config: AppConfig.proxy)
         self.client = client
         eventHandler = onEvent
@@ -83,9 +87,11 @@ final class RealtimeNPCConversationSession {
                 instructions: instructions,
                 tools: tools
             )
+            try Task.checkCancellation()
             try await audio.start { chunk in
                 audioStream.continuation.yield(chunk)
             }
+            try Task.checkCancellation()
             try await client.send(
                 RealtimeClientEvent.createResponse(
                     instructions: """
@@ -110,16 +116,28 @@ final class RealtimeNPCConversationSession {
 
     func stop() async {
         resumeSessionConfiguration(throwing: CancellationError())
+        eventHandler = nil
         audioContinuation?.finish()
         audioContinuation = nil
-        audioSendTask?.cancel()
+        let configurationTask = configurationSendTask
+        configurationSendTask = nil
+        let pendingTruncateTask = truncateTask
+        truncateTask = nil
+        configurationTask?.cancel()
+        pendingTruncateTask?.cancel()
+        let sendTask = audioSendTask
         audioSendTask = nil
-        receiveTask?.cancel()
+        let eventTask = receiveTask
         receiveTask = nil
+        sendTask?.cancel()
+        eventTask?.cancel()
         audio.stop()
         if let client { await client.disconnect() }
         client = nil
-        eventHandler = nil
+        await configurationTask?.value
+        await pendingTruncateTask?.value
+        await sendTask?.value
+        await eventTask?.value
         currentOutputItem = nil
         interruptedOutputItemID = nil
     }
@@ -135,7 +153,8 @@ final class RealtimeNPCConversationSession {
             let playedMilliseconds = audio.interruptOutput()
             interruptedOutputItemID = currentOutputItem?.id
             if let currentOutputItem, let playedMilliseconds, let client {
-                Task { @MainActor [weak self] in
+                truncateTask?.cancel()
+                truncateTask = Task { @MainActor [weak self] in
                     do {
                         try await client.send(
                             RealtimeClientEvent.truncateAudio(
@@ -145,6 +164,7 @@ final class RealtimeNPCConversationSession {
                             )
                         )
                     } catch {
+                        guard !Task.isCancelled else { return }
                         self?.eventHandler?(.failure(error.localizedDescription))
                     }
                 }
@@ -194,7 +214,8 @@ final class RealtimeNPCConversationSession {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 sessionConfigurationContinuation = continuation
-                Task { @MainActor [weak self] in
+                configurationSendTask?.cancel()
+                configurationSendTask = Task { @MainActor [weak self] in
                     do {
                         try await client.send(
                             RealtimeClientEvent.sessionUpdate(
@@ -203,6 +224,7 @@ final class RealtimeNPCConversationSession {
                             )
                         )
                     } catch {
+                        guard !Task.isCancelled else { return }
                         self?.resumeSessionConfiguration(throwing: error)
                     }
                 }
