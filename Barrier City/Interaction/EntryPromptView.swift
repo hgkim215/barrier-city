@@ -38,7 +38,7 @@ struct EntryPromptView: View {
                 .buttonStyle(.bordered)
 
                 Button {
-                    Task { await SceneSwitcher.switchToIndoor() }
+                    SceneSwitcher.requestIndoorTransition()
                 } label: {
                     Text(im.activeTrigger?.confirmLabel ?? "예")
                         .font(.title2)

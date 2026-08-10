@@ -16,6 +16,7 @@ struct ImmersiveView: View {
     @State private var leftHiMats: [any RealityKit.Material] = []     // 발광 틴트 머티리얼
     @State private var rightHiMats: [any RealityKit.Material] = []
     @State private var handTracker = HandTrackingManager()
+    @State private var immersiveSessionGeneration: Int?
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
     private static let chairScale: Float = 0.95                  // 전체(몸체 기준) 크기
@@ -184,9 +185,9 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskOrderView()
             }
-            // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
+            // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
-                QuestHUDView()
+                ExperienceGuideView()
             }
             // 점원이 계산대에 도착한 뒤 표시되는 공간 대화 패널.
             Attachment(id: "npcDialogue") {
@@ -195,13 +196,19 @@ struct ImmersiveView: View {
             }
         }
         .onAppear {
-            model.isImmersive = true
+            immersiveSessionGeneration = model.immersiveSessionAppeared()
             AppModel.current = model
         }
         .onDisappear {
-            model.isImmersive = false
+            handTracker.stopSession()
+            guard let immersiveSessionGeneration,
+                  model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
+                return
+            }
+            QuestSetup.stop()
+            InteractionModel.shared.endImmersiveSession()
             model.npcClerk.resetForOutdoor()
-            handTracker.stop(model: model)
+            handTracker.clearModelInput(model: model)
         }
         .task(id: model.useHandTracking) {
             // 창 토글을 몰입 공간 진입 뒤에 바꿔도 즉시 세션을 시작/종료한다.

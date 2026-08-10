@@ -18,16 +18,23 @@ final class QuestHUDFollower {
     private let session = ARKitSession()
     private let provider = WorldTrackingProvider()
     private var running = false
+    private var stopped = false
     private var placed = false   // 최초 1회는 스무딩 없이 즉시 배치
+    private var lastPlacement: GuidePlacement?
 
     /// world tracking 시작. 실패하면 running=false로 남아 update가 폴백 배치를 쓴다.
     func start() async {
+        guard !stopped else { return }
         guard WorldTrackingProvider.isSupported else {
             print("WorldTracking 미지원 — 퀘스트 HUD 고정 배치 폴백")
             return
         }
         do {
             try await session.run([provider])
+            guard !stopped else {
+                session.stop()
+                return
+            }
             running = true
         } catch {
             print("WorldTracking 시작 실패: \(error) — 퀘스트 HUD 고정 배치 폴백")
@@ -37,15 +44,21 @@ final class QuestHUDFollower {
     /// 매 프레임 호출. panel을 head 옆 타깃으로 스무딩 이동 + head를 향해 yaw 빌보드.
     /// - panel: 씬 루트에 붙은 HUD 엔티티(월드 좌표계에서 움직인다).
     /// - dt: 이전 프레임과의 시간 간격(초, SceneEvents.Update.deltaTime).
-    func update(panel: Entity, dt: Float) {
+    func update(panel: Entity, dt: Float, placement: GuidePlacement) {
+        if placement != lastPlacement {
+            placed = false
+            lastPlacement = placement
+        }
+
         let targetPos: SIMD3<Float>
         let headPos: SIMD3<Float>
-        if let pose = targetPose() {
+        if let pose = targetPose(placement: placement) {
             targetPos = pose.position
             headPos = pose.head
         } else {
-            targetPos = QuestTuning.fallbackPosition
-            headPos = SIMD3(0, QuestTuning.fallbackPosition.y, 0)   // 원점을 향함
+            targetPos = placement == .centerModal
+                ? QuestTuning.centerFallbackPosition : QuestTuning.hudFallbackPosition
+            headPos = SIMD3(0, targetPos.y, 0)   // 원점을 향함
         }
 
         let current = panel.position(relativeTo: nil)
@@ -74,15 +87,15 @@ final class QuestHUDFollower {
         }
     }
 
-    /// 세션 정리용. 현재 팀원 파일(ImmersiveView.onDisappear) 경계 때문에 호출 지점이
-    /// 없어 도달하지 않는다. NPC 작업으로 팀원 파일 수정이 열리면 onDisappear에 연결한다.
+    /// 세션 정리용.
     func stop() {
+        stopped = true
         running = false
         session.stop()
     }
 
     /// head 포즈로부터 (타깃 위치, head 위치)를 계산. 못 얻으면 nil.
-    private func targetPose() -> (position: SIMD3<Float>, head: SIMD3<Float>)? {
+    private func targetPose(placement: GuidePlacement) -> (position: SIMD3<Float>, head: SIMD3<Float>)? {
         guard running,
               let anchor = provider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime())
         else { return nil }
@@ -91,10 +104,14 @@ final class QuestHUDFollower {
         // head yaw만 사용(pitch/roll 무시): forward(-Z)/right(+X)를 수평면에 투영.
         let forward = normalizeSafe(-SIMD3(m.columns.2.x, 0, m.columns.2.z))
         let right = normalizeSafe(SIMD3(m.columns.0.x, 0, m.columns.0.z))
+        let lateral = placement == .centerModal
+            ? QuestTuning.centerLateralOffset : QuestTuning.hudLateralOffset
+        let vertical = placement == .centerModal
+            ? QuestTuning.centerVerticalOffset : QuestTuning.hudVerticalOffset
         let pos = head
             + forward * QuestTuning.forwardDistance
-            + right * QuestTuning.lateralOffset
-            + SIMD3(0, QuestTuning.verticalOffset, 0)
+            + right * lateral
+            + SIMD3(0, vertical, 0)
         return (pos, head)
     }
 }
