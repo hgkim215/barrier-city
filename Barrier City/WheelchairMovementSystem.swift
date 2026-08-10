@@ -86,11 +86,12 @@ struct WheelchairMovementSystem: System {
 
         do {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
+            let motion = model.motion
             let now = ProcessInfo.processInfo.systemUptime
             let updateStartedAt = now
             var raycastCount = 0
             defer {
-                model.recordPerformance(
+                motion.recordPerformance(
                     deltaTime: dt,
                     updateSeconds: ProcessInfo.processInfo.systemUptime - updateStartedAt,
                     raycasts: raycastCount)
@@ -146,38 +147,38 @@ struct WheelchairMovementSystem: System {
             // 충돌음을 한 번만 준다. 반동 속도는 비현실적으로 큰 테스트 입력에서도 제한한다.
             @MainActor
             func stopAtObstacle(impactSpeed: Float) {
-                if !model.blocked, abs(impactSpeed) > 0.01 {
+                if !motion.isBlocked, abs(impactSpeed) > 0.01 {
                     let cappedImpact = max(-Self.impactReferenceSpeed,
                                            min(Self.impactReferenceSpeed, impactSpeed))
-                    model.surgeVel = cappedImpact * Self.surgeGain
+                    motion.surgeVelocity = cappedImpact * Self.surgeGain
                     let intensity = min(1, abs(impactSpeed) / Self.impactReferenceSpeed)
                     ImpactAudio.shared.playThunk(intensity: max(0.2, intensity))
                 }
-                model.vL = 0
-                model.vR = 0
-                model.blocked = true
+                motion.leftVelocity = 0
+                motion.rightVelocity = 0
+                motion.isBlocked = true
             }
 
             // 전복(게임오버)
-            if model.fallen {
+            if motion.hasFallen {
                 if model.fistDriveActive {
                     model.stopFistDrive(
                         requestRecenter: true,
                         status: "전복 상태 · 다시 시작한 뒤 주먹을 다시 쥐세요")
                 }
-                let tgtP = model.fallDirPitch * Self.fallAngle
-                let tgtR = model.fallDirRoll  * Self.fallAngle
-                model.pitchVel += (Self.fallK * (tgtP - model.pitch) - Self.fallC * model.pitchVel) * dt
-                model.rollVel  += (Self.fallK * (tgtR - model.roll ) - Self.fallC * model.rollVel ) * dt
-                model.pitch += model.pitchVel * dt
-                model.roll  += model.rollVel  * dt
-                let mag = (model.pitch * model.pitch + model.roll * model.roll).squareRoot()
+                let tgtP = motion.fallDirectionPitch * Self.fallAngle
+                let tgtR = motion.fallDirectionRoll  * Self.fallAngle
+                motion.pitchVelocity += (Self.fallK * (tgtP - motion.pitch) - Self.fallC * motion.pitchVelocity) * dt
+                motion.rollVelocity  += (Self.fallK * (tgtR - motion.roll ) - Self.fallC * motion.rollVelocity ) * dt
+                motion.pitch += motion.pitchVelocity * dt
+                motion.roll  += motion.rollVelocity  * dt
+                let mag = (motion.pitch * motion.pitch + motion.roll * motion.roll).squareRoot()
                 if mag > Self.fallAngle {
                     let s = Self.fallAngle / mag
-                    model.pitch *= s; model.roll *= s
-                    model.pitchVel = 0; model.rollVel = 0
+                    motion.pitch *= s; motion.roll *= s
+                    motion.pitchVelocity = 0; motion.rollVelocity = 0
                 }
-                model.vL = 0; model.vR = 0
+                motion.leftVelocity = 0; motion.rightVelocity = 0
                 Self.applyWorld(worldRoot, model: model)
                 return
             }
@@ -191,54 +192,54 @@ struct WheelchairMovementSystem: System {
 
             // 2) 밀기
             if !model.testFistDriveEnabled {
-                model.vL += imp.left * Self.pushGain
-                model.vR += imp.right * Self.pushGain
+                motion.leftVelocity += imp.left * Self.pushGain
+                motion.rightVelocity += imp.right * Self.pushGain
             }
 
             // 3) 감속
-            model.vL = Self.applyFriction(model.vL, dt: dt)
-            model.vR = Self.applyFriction(model.vR, dt: dt)
-            if braking { model.vL *= 0.2; model.vR *= 0.2 }
-            if hardStop { model.vL = 0; model.vR = 0 }
+            motion.leftVelocity = Self.applyFriction(motion.leftVelocity, dt: dt)
+            motion.rightVelocity = Self.applyFriction(motion.rightVelocity, dt: dt)
+            if braking { motion.leftVelocity *= 0.2; motion.rightVelocity *= 0.2 }
+            if hardStop { motion.leftVelocity = 0; motion.rightVelocity = 0 }
 
             if model.testFistDriveEnabled {
                 // 테스트 모드는 전용 목표 속도를 빠르게 추종한다. 주먹을 펴거나 추적이
                 // 끊긴 inactive 상태에서는 경사/관성까지 포함해 안전하게 정지 유지한다.
                 if model.fistDriveActive {
-                    model.vL = Self.followFistDrive(model.vL, toward: model.fistDriveTargetLeft, dt: dt)
-                    model.vR = Self.followFistDrive(model.vR, toward: model.fistDriveTargetRight, dt: dt)
+                    motion.leftVelocity = Self.followFistDrive(motion.leftVelocity, toward: model.fistDriveTargetLeft, dt: dt)
+                    motion.rightVelocity = Self.followFistDrive(motion.rightVelocity, toward: model.fistDriveTargetRight, dt: dt)
                 } else {
-                    model.vL = 0
-                    model.vR = 0
+                    motion.leftVelocity = 0
+                    motion.rightVelocity = 0
                 }
             } else {
                 // 실제 손으로 잡은 바퀴 클러치
-                if model.leftGrabbed  { model.vL = Self.clutch(model.vL, toward: model.handSpeedLeft, dt: dt) }
-                if model.rightGrabbed { model.vR = Self.clutch(model.vR, toward: model.handSpeedRight, dt: dt) }
+                if model.leftGrabbed  { motion.leftVelocity = Self.clutch(motion.leftVelocity, toward: model.handSpeedLeft, dt: dt) }
+                if model.rightGrabbed { motion.rightVelocity = Self.clutch(motion.rightVelocity, toward: model.handSpeedRight, dt: dt) }
             }
 
-            model.vL = max(-Self.maxSpeed, min(Self.maxSpeed, model.vL))
-            model.vR = max(-Self.maxSpeed, min(Self.maxSpeed, model.vR))
+            motion.leftVelocity = max(-Self.maxSpeed, min(Self.maxSpeed, motion.leftVelocity))
+            motion.rightVelocity = max(-Self.maxSpeed, min(Self.maxSpeed, motion.rightVelocity))
 
             // 4) 차동 구동
-            let forward = (model.vL + model.vR) * 0.5
-            let omega = (model.vR - model.vL) / Self.wheelBase
+            let forward = (motion.leftVelocity + motion.rightVelocity) * 0.5
+            let omega = (motion.rightVelocity - motion.leftVelocity) / Self.wheelBase
             let clampedOmega = max(-Self.maxOmega, min(Self.maxOmega, omega))
-            model.heading += clampedOmega * dt
-            let dirX = -sin(model.heading)
-            let dirZ = -cos(model.heading)
+            motion.heading += clampedOmega * dt
+            let dirX = -sin(motion.heading)
+            let dirZ = -cos(motion.heading)
 
             // 5) 경사 미끄러짐: 바라보는 방향 경사만큼 속도 가감(놓은 바퀴만).
-            let hHere = groundY(model.posX, model.posZ) ?? model.chairY
-            let hAhead = groundY(model.posX + dirX * 0.06, model.posZ + dirZ * 0.06) ?? hHere
+            let hHere = groundY(motion.positionX, motion.positionZ) ?? motion.chairHeight
+            let hAhead = groundY(motion.positionX + dirX * 0.06, motion.positionZ + dirZ * 0.06) ?? hHere
             let slope = (hAhead - hHere) / 0.06
             let dv = -Self.gravity * slope * dt
-            if !model.leftGrabbed, !model.testFistDriveEnabled  { model.vL += dv }
-            if !model.rightGrabbed, !model.testFistDriveEnabled { model.vR += dv }
+            if !model.leftGrabbed, !model.testFistDriveEnabled  { motion.leftVelocity += dv }
+            if !model.rightGrabbed, !model.testFistDriveEnabled { motion.rightVelocity += dv }
 
             // 6) 이동 후보 + 충돌
-            let newX = model.posX + dirX * forward * dt
-            let newZ = model.posZ + dirZ * forward * dt
+            let newX = motion.positionX + dirX * forward * dt
+            let newZ = motion.positionZ + dirZ * forward * dt
             let movingFwd = forward >= 0
             let leadDirX = movingFwd ? dirX : -dirX
             let leadDirZ = movingFwd ? dirZ : -dirZ
@@ -252,25 +253,25 @@ struct WheelchairMovementSystem: System {
             let requestedTravel = abs(forward) * dt
             let sweepDistance = leadExtent + requestedTravel + Self.collisionSkin
             if requestedTravel > 0.0001,
-               let hitDistance = wallDistance(fromX: model.posX,
-                                               fromZ: model.posZ,
+               let hitDistance = wallDistance(fromX: motion.positionX,
+                                               fromZ: motion.positionZ,
                                                dxn: leadDirX,
                                                dzn: leadDirZ,
                                                dist: sweepDistance,
-                                               baseY: model.chairY) {
+                                               baseY: motion.chairHeight) {
                 // 수직 벽: 이번 프레임의 이동을 통째로 버리지 않고, 외곽이 skin만
                 // 남기고 닿는 지점까지만 이동한다. 저프레임에서도 관통하거나 멀찍이
                 // 떠서 멈추지 않고 실제 접촉 위치가 일정해진다.
                 let allowedTravel = max(0, hitDistance - leadExtent - Self.collisionSkin)
                 let contactTravel = min(requestedTravel, allowedTravel)
-                model.posX += leadDirX * contactTravel
-                model.posZ += leadDirZ * contactTravel
+                motion.positionX += leadDirX * contactTravel
+                motion.positionZ += leadDirZ * contactTravel
                 stopAtObstacle(impactSpeed: forward)
             } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
                 let lz = newZ + leadDirZ * stepLeadExtent
-                let h0 = groundY(lx, lz) ?? model.chairY
+                let h0 = groundY(lx, lz) ?? motion.chairHeight
                 let h1 = groundY(lx + leadDirX * Self.stepProbe, lz + leadDirZ * Self.stepProbe) ?? h0
                 let rise = h1 - h0
                 if rise > Self.climbLimit {
@@ -280,56 +281,56 @@ struct WheelchairMovementSystem: System {
                     // 넘을 수 있는 낮은 턱 → 저항 후 통과
                     let resist = min(1, rise / Self.climbLimit)
                     let f = max(0, 1 - resist * Self.climbDrag * dt)
-                    model.vL *= f; model.vR *= f
-                    model.posX = newX; model.posZ = newZ
-                    model.blocked = false
+                    motion.leftVelocity *= f; motion.rightVelocity *= f
+                    motion.positionX = newX; motion.positionZ = newZ
+                    motion.isBlocked = false
                 } else {
-                    model.posX = newX; model.posZ = newZ
-                    model.blocked = false
+                    motion.positionX = newX; motion.positionZ = newZ
+                    motion.isBlocked = false
                 }
             }
 
             // 7) 수직 위치: 여러 점 평균 높이(격자 노이즈 완화) + 부드럽게 따라가기(저역통과).
-            let g0Hit = groundHit(model.posX, model.posZ)
+            let g0Hit = groundHit(motion.positionX, motion.positionZ)
             let g0 = g0Hit?.height
-            let gAh = groundY(model.posX + dirX * 0.18, model.posZ + dirZ * 0.18)
-            let gBk = groundY(model.posX - dirX * 0.18, model.posZ - dirZ * 0.18)
+            let gAh = groundY(motion.positionX + dirX * 0.18, motion.positionZ + dirZ * 0.18)
+            let gBk = groundY(motion.positionX - dirX * 0.18, motion.positionZ - dirZ * 0.18)
             let solids = [g0, gAh, gBk].compactMap { $0 }
             let centerGround: Float? = solids.isEmpty ? nil : solids.reduce(0, +) / Float(solids.count)
 
-            if let g = centerGround, model.chairY <= g + 0.02 {
+            if let g = centerGround, motion.chairHeight <= g + 0.02 {
                 // 지면 위/근처: 즉시 스냅 대신 부드럽게 따라가 미세 요철을 흡수.
-                let dy = g - model.chairY
+                let dy = g - motion.chairHeight
                 if dy > Self.stepBlock {
-                    model.bumpVel = Self.bumpKick * 0.6
+                    motion.bumpVelocity = Self.bumpKick * 0.6
                     ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
                 }
-                model.chairY += dy * min(1, 18 * dt)
-                model.fallVelY = 0
+                motion.chairHeight += dy * min(1, 18 * dt)
+                motion.fallVelocity = 0
             } else {
-                model.fallVelY -= Self.fallGravityY * dt
-                model.chairY += model.fallVelY * dt
+                motion.fallVelocity -= Self.fallGravityY * dt
+                motion.chairHeight += motion.fallVelocity * dt
                 let g = centerGround ?? -1000
-                if model.chairY <= g {
-                    let impactVel = -model.fallVelY
-                    model.chairY = g
-                    model.fallVelY = 0
+                if motion.chairHeight <= g {
+                    let impactVel = -motion.fallVelocity
+                    motion.chairHeight = g
+                    motion.fallVelocity = 0
                     if impactVel > Self.minImpactVel {
                         let impact = min(1, impactVel / 3.0)
-                        model.bumpVel = Self.bumpKick * (0.4 + 0.6 * impact)
+                        motion.bumpVelocity = Self.bumpKick * (0.4 + 0.6 * impact)
                         ImpactAudio.shared.playBump(intensity: max(0.25, impact))
                     }
                 }
             }
-            model.groundY = centerGround ?? model.chairY
+            motion.groundHeight = centerGround ?? motion.chairHeight
 
             // 8) 바퀴 시각 회전
-            model.wheelAngleLeft  += (model.vL * dt) / AppModel.wheelRadius
-            model.wheelAngleRight += (model.vR * dt) / AppModel.wheelRadius
+            motion.leftWheelAngle  += (motion.leftVelocity * dt) / AppModel.wheelRadius
+            motion.rightWheelAngle += (motion.rightVelocity * dt) / AppModel.wheelRadius
 
             // 9) 기울기: 표면 '법선 평균'으로 경사(점 높이차 노이즈 없이 매끈) + 모서리 지지손실(전복).
-            let rightX = cos(model.heading), rightZ = -sin(model.heading)
-            let px = model.posX, pz = model.posZ
+            let rightX = cos(motion.heading), rightZ = -sin(motion.heading)
+            let px = motion.positionX, pz = motion.positionZ
             func contact(_ ro: Float, _ fo: Float) -> (Float, Float) {
                 (px + rightX * ro + dirX * fo, pz + rightZ * ro + dirZ * fo)
             }
@@ -358,45 +359,45 @@ struct WheelchairMovementSystem: System {
 
             var targetPitch = slopePitch + (rearU - frontU) * Self.pitchDiveMax
             var targetRoll  = slopeRoll  + (rightU - leftU) * Self.rollDiveMax
-            if model.blocked { targetPitch = 0; targetRoll = 0 }
+            if motion.isBlocked { targetPitch = 0; targetRoll = 0 }
             if abs(targetPitch) < Self.tiltDeadzone { targetPitch = 0 }
             if abs(targetRoll)  < Self.tiltDeadzone { targetRoll = 0 }
             targetPitch = max(-Self.maxTip, min(Self.maxTip, targetPitch))
             targetRoll  = max(-Self.maxTip, min(Self.maxTip, targetRoll))
 
-            let lean = (model.pitch * model.pitch + model.roll * model.roll).squareRoot()
+            let lean = (motion.pitch * motion.pitch + motion.roll * motion.roll).squareRoot()
             if lean <= Self.criticalLean {
-                model.pitchVel += (Self.tiltK * (targetPitch - model.pitch) - Self.tiltC * model.pitchVel) * dt
-                model.rollVel  += (Self.tiltK * (targetRoll  - model.roll ) - Self.tiltC * model.rollVel ) * dt
+                motion.pitchVelocity += (Self.tiltK * (targetPitch - motion.pitch) - Self.tiltC * motion.pitchVelocity) * dt
+                motion.rollVelocity  += (Self.tiltK * (targetRoll  - motion.roll ) - Self.tiltC * motion.rollVelocity ) * dt
             } else {
                 let accel = Self.tipGravity * (lean - Self.criticalLean)
                 let inv = 1 / lean
-                model.pitchVel += (accel * model.pitch * inv - Self.tipDamp * model.pitchVel) * dt
-                model.rollVel  += (accel * model.roll  * inv - Self.tipDamp * model.rollVel ) * dt
+                motion.pitchVelocity += (accel * motion.pitch * inv - Self.tipDamp * motion.pitchVelocity) * dt
+                motion.rollVelocity  += (accel * motion.roll  * inv - Self.tipDamp * motion.rollVelocity ) * dt
             }
-            model.pitch += model.pitchVel * dt
-            model.roll  += model.rollVel  * dt
+            motion.pitch += motion.pitchVelocity * dt
+            motion.roll  += motion.rollVelocity  * dt
 
-            let leanNow = (model.pitch * model.pitch + model.roll * model.roll).squareRoot()
+            let leanNow = (motion.pitch * motion.pitch + motion.roll * motion.roll).squareRoot()
             if leanNow > Self.fallenThreshold {
-                model.fallen = true
+                motion.hasFallen = true
                 let n = max(leanNow, 1e-4)
-                model.fallDirPitch = model.pitch / n
-                model.fallDirRoll = model.roll / n
+                motion.fallDirectionPitch = motion.pitch / n
+                motion.fallDirectionRoll = motion.roll / n
                 ImpactAudio.shared.playThunk(intensity: 1)
             }
 
             // 덜컹/흔들림 스프링
-            model.bumpVel += (-Self.bumpSpring * model.bumpOffset - Self.bumpDamp * model.bumpVel) * dt
-            model.bumpOffset += model.bumpVel * dt
-            model.surgeVel += (-Self.surgeSpring * model.surgeOffset - Self.surgeDamp * model.surgeVel) * dt
-            model.surgeOffset += model.surgeVel * dt
+            motion.bumpVelocity += (-Self.bumpSpring * motion.bumpOffset - Self.bumpDamp * motion.bumpVelocity) * dt
+            motion.bumpOffset += motion.bumpVelocity * dt
+            motion.surgeVelocity += (-Self.surgeSpring * motion.surgeOffset - Self.surgeDamp * motion.surgeVelocity) * dt
+            motion.surgeOffset += motion.surgeVelocity * dt
 
-            model.speed = forward
-            model.headingDegrees = model.heading * 180 / .pi
+            motion.speed = forward
+            motion.headingDegrees = motion.heading * 180 / .pi
 
-            let dGoal = simd_distance(SIMD2(model.posX, model.posZ), Terrain.goal)
-            if dGoal < Terrain.goalRadius { model.reachedGoal = true }
+            let dGoal = simd_distance(SIMD2(motion.positionX, motion.positionZ), Terrain.goal)
+            if dGoal < Terrain.goalRadius { motion.reachedGoal = true }
 
             Self.applyWorld(worldRoot, model: model)
         }
@@ -405,14 +406,15 @@ struct WheelchairMovementSystem: System {
     /// 보이는 카페(worldRoot)를 가상 위치/자세의 역(inverse)으로 배치 → world-inverse 시야.
     @MainActor
     private static func applyWorld(_ worldRoot: Entity, model: AppModel) {
-        let invYaw = simd_quatf(angle: -model.heading, axis: [0, 1, 0])
-        let invPitch = simd_quatf(angle: -model.pitch, axis: [1, 0, 0])
-        let invRoll = simd_quatf(angle: model.roll, axis: [0, 0, 1])
+        let motion = model.motion
+        let invYaw = simd_quatf(angle: -motion.heading, axis: [0, 1, 0])
+        let invPitch = simd_quatf(angle: -motion.pitch, axis: [1, 0, 0])
+        let invRoll = simd_quatf(angle: motion.roll, axis: [0, 0, 1])
         let rot = invRoll * invPitch * invYaw
-        let dirX = -sin(model.heading), dirZ = -cos(model.heading)
-        var pe = SIMD3<Float>(model.posX, model.chairY + model.bumpOffset - AppModel.viewHeightOffset, model.posZ)
-        pe.x -= dirX * model.surgeOffset
-        pe.z -= dirZ * model.surgeOffset
+        let dirX = -sin(motion.heading), dirZ = -cos(motion.heading)
+        var pe = SIMD3<Float>(motion.positionX, motion.chairHeight + motion.bumpOffset - AppModel.viewHeightOffset, motion.positionZ)
+        pe.x -= dirX * motion.surgeOffset
+        pe.z -= dirZ * motion.surgeOffset
         worldRoot.transform = Transform(scale: .one, rotation: rot, translation: rot.act(-pe))
     }
 

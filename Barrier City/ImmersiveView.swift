@@ -35,7 +35,7 @@ struct ImmersiveView: View {
         // 그래야 System이 매 프레임 이 값을 바꿀 때 body가 다시 평가되고,
         // 아래 RealityView update 클로저가 재실행되어 하이라이트/바퀴 회전이 반영된다.
         let _ = (model.leftGrabbed, model.rightGrabbed,
-                 model.wheelAngleLeft, model.wheelAngleRight,
+                 model.motion.leftWheelAngle, model.motion.rightWheelAngle,
                  model.fistDriveActive)
 
         return RealityView { content, attachments in
@@ -62,7 +62,7 @@ struct ImmersiveView: View {
             if let cafeCollision = try? await Entity(named: "Map", in: realityKitContentBundle) {
                 Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
                 let n = await Self.addStaticCollision(cafeCollision)
-                model.collisionShapes = n
+                model.motion.collisionShapeCount = n
                 cafeCollision.components.set(OpacityComponent(opacity: 0))   // 안 보이게(충돌만)
                 content.add(cafeCollision)
                 InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
@@ -169,8 +169,8 @@ struct ImmersiveView: View {
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
-            applyRoll(leftWheel, angle: model.wheelAngleLeft)
-            applyRoll(rightWheel, angle: model.wheelAngleRight)
+            applyRoll(leftWheel, angle: model.motion.leftWheelAngle)
+            applyRoll(rightWheel, angle: model.motion.rightWheelAngle)
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
             let shouldHighlight = model.leftGrabbed || model.rightGrabbed || model.fistDriveActive
             if wheelsHighlighted != shouldHighlight {

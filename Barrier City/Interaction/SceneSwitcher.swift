@@ -83,10 +83,10 @@ enum SceneSwitcher {
                                  indoorMap: prepared.visible,
                                  kioskCenter: layout.kioskCenter)
         app.restart()
-        app.posX = layout.spawn.x
-        app.posZ = layout.spawn.y
-        app.heading = layout.heading
-        app.collisionShapes = prepared.collisionShapeCount
+        app.motion.positionX = layout.spawn.x
+        app.motion.positionZ = layout.spawn.y
+        app.motion.heading = layout.heading
+        app.motion.collisionShapeCount = prepared.collisionShapeCount
 
         im.scene = .indoor
         im.visibleMap = prepared.visible

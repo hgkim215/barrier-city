@@ -211,7 +211,7 @@ final class NPCClerkController {
         }
 
         let dt = min(max(rawDeltaTime, 0), 1.0 / 15.0)
-        let player = SIMD2<Float>(appModel.posX, appModel.posZ)
+        let player = SIMD2<Float>(appModel.motion.positionX, appModel.motion.positionZ)
         // 대화 감지는 계산대의 고정 좌표가 아니라 현재 돌아다니는 NPC의 실제 위치를 쓴다.
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)

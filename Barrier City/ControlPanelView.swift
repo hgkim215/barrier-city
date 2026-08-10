@@ -20,7 +20,7 @@ struct ControlPanelView: View {
                 .font(.title2).bold()
 
             // 전복(게임오버): 다시 시작 안내
-            if model.fallen {
+            if model.motion.hasFallen {
                 VStack(spacing: 12) {
                     Label("넘어졌습니다!", systemImage: "exclamationmark.triangle.fill")
                         .font(.title3).bold()
@@ -214,10 +214,10 @@ struct ControlPanelView: View {
 
             // 상태 표시
             HStack(spacing: 24) {
-                stat("속도", String(format: "%.2f m/s", model.speed))
-                stat("방향", String(format: "%.0f°", model.headingDegrees))
-                stat("FPS", String(format: "%.0f", model.frameRate))
-                stat("물리", String(format: "%.2f ms", model.physicsUpdateMilliseconds))
+                stat("속도", String(format: "%.2f m/s", model.motion.speed))
+                stat("방향", String(format: "%.0f°", model.motion.headingDegrees))
+                stat("FPS", String(format: "%.0f", model.motion.frameRate))
+                stat("물리", String(format: "%.2f ms", model.motion.physicsUpdateMilliseconds))
                 stat("누름", "\(model.pushCount)")
                 stat("충격수신", "\(model.impulseApplied)")
             }
@@ -225,14 +225,14 @@ struct ControlPanelView: View {
 
             // 물리 진단(CharacterController)
             HStack(spacing: 24) {
-                stat("콜리전", "\(model.collisionShapes)")
-                stat("레이/프레임", String(format: "%.1f", model.raycastsPerFrame))
-                stat("프레임", String(format: "%.1f ms", model.frameTimeMilliseconds))
-                stat("바닥Y", String(format: "%.2f", model.groundY))
-                stat("의자Y", String(format: "%.2f", model.chairY))
-                stat("pitch", String(format: "%.2f", model.pitch))
-                stat("막힘", model.blocked ? "Y" : "N")
-                stat("전복", model.fallen ? "Y" : "N")
+                stat("콜리전", "\(model.motion.collisionShapeCount)")
+                stat("레이/프레임", String(format: "%.1f", model.motion.raycastsPerFrame))
+                stat("프레임", String(format: "%.1f ms", model.motion.frameTimeMilliseconds))
+                stat("바닥Y", String(format: "%.2f", model.motion.groundHeight))
+                stat("의자Y", String(format: "%.2f", model.motion.chairHeight))
+                stat("pitch", String(format: "%.2f", model.motion.pitch))
+                stat("막힘", model.motion.isBlocked ? "Y" : "N")
+                stat("전복", model.motion.hasFallen ? "Y" : "N")
             }
             .font(.callout)
 

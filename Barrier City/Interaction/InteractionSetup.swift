@@ -95,7 +95,7 @@ enum InteractionSetup {
         guard !im.isTransitioning else { return }
 
         let verdict = InteractionModel.evaluate(
-            playerX: app.posX, playerZ: app.posZ,
+            playerX: app.motion.positionX, playerZ: app.motion.positionZ,
             triggers: im.triggers,
             activeID: im.activeTrigger?.id,
             dismissedID: im.dismissedTriggerID)

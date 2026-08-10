@@ -67,8 +67,7 @@ final class NPCDialogueController {
     private var cleanupTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
-    private var pendingRealtimeMissionEvent: MissionEvent?
-    private var pendingRealtimeFunctionCall: (callID: String, output: String)?
+    private var realtimeMission = RealtimeMissionCoordinator()
 
     init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
         self.accessibilityAttitude = accessibilityAttitude
@@ -122,8 +121,7 @@ final class NPCDialogueController {
         tone = SocialClimate(rapport: rapport).tone
         history = []
         realtimeLiveText = ""
-        pendingRealtimeMissionEvent = nil
-        pendingRealtimeFunctionCall = nil
+        realtimeMission.reset()
         automaticTurnCount = 0
         animationSequence = 0
         hasRequestedGreetingAnimation = false
@@ -200,8 +198,7 @@ final class NPCDialogueController {
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
-        pendingRealtimeMissionEvent = nil
-        pendingRealtimeFunctionCall = nil
+        realtimeMission.reset()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
         let previousCleanup = cleanupTask
@@ -434,8 +431,7 @@ final class NPCDialogueController {
         lastEvent = ""
         lastMissionEvent = nil
         realtimeLiveText = ""
-        pendingRealtimeMissionEvent = nil
-        pendingRealtimeFunctionCall = nil
+        realtimeMission.reset()
         userText = ""
         npcSubtitle = "연결 중..."
         status = .thinking
@@ -502,12 +498,13 @@ final class NPCDialogueController {
             if !transcript.isEmpty { npcSubtitle = transcript }
 
         case .functionCall(let name, let callID, _):
-            handleRealtimeFunction(name: name, callID: callID)
+            if let event = realtimeMission.register(name: name, callID: callID) {
+                publishMissionEvent(event)
+            }
 
         case .responseDone:
             requestAnimation(.idle)
-            if let functionCall = pendingRealtimeFunctionCall {
-                pendingRealtimeFunctionCall = nil
+            if let functionCall = realtimeMission.takeFunctionCall() {
                 status = .thinking
                 guard let realtimeSession else { return }
                 realtimeCommandTask?.cancel()
@@ -524,8 +521,7 @@ final class NPCDialogueController {
                 }
                 return
             }
-            if let event = pendingRealtimeMissionEvent {
-                pendingRealtimeMissionEvent = nil
+            if let event = realtimeMission.takeCompletedEvent() {
                 publishMissionEvent(event)
                 if event == .orderPlaced || event == .exited {
                     cancelEncounter()
@@ -548,25 +544,6 @@ final class NPCDialogueController {
         guard let task = cleanupTask else { return }
         await task.value
         if cleanupGeneration == generation { cleanupTask = nil }
-    }
-
-    private func handleRealtimeFunction(name: String, callID: String) {
-        let output: String
-        switch name {
-        case "complete_order":
-            pendingRealtimeMissionEvent = .orderPlaced
-            output = #"{"success":true,"message":"order recorded"}"#
-        case "request_help":
-            publishMissionEvent(.helpRequested)
-            output = #"{"success":true,"message":"help requested"}"#
-        case "end_conversation":
-            pendingRealtimeMissionEvent = .exited
-            output = #"{"success":true,"message":"conversation may close"}"#
-        default:
-            output = #"{"success":false,"message":"unknown function"}"#
-        }
-
-        pendingRealtimeFunctionCall = (callID: callID, output: output)
     }
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
