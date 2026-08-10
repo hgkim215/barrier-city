@@ -31,12 +31,16 @@ final class SpeechInput {
     /// 실시간 부분 결과(자막/디버그용)
     private(set) var partialText: String = ""
     private(set) var isRecording: Bool = false
+    private(set) var inputLevel: Float = 0
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ko-KR"))
     /// Simulator에서는 생성 자체가 CoreAudio 채널 경고를 낼 수 있어 실제 녹음 시점까지 지연한다.
     @ObservationIgnored private lazy var engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    @ObservationIgnored private var inputLevelTask: Task<Void, Never>?
+    @ObservationIgnored private var inputLevelContinuation: AsyncStream<Float>.Continuation?
+    @ObservationIgnored private let inputLevelSampler = MicrophoneLevelSampler()
     private var isInputTapInstalled = false
     private var hasAudioSessionClaim = false
 
@@ -63,6 +67,7 @@ final class SpeechInput {
         guard let recognizer, recognizer.isAvailable else { throw STTError.recognizerUnavailable }
 
         partialText = ""
+        inputLevel = 0
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition {
@@ -80,8 +85,23 @@ final class SpeechInput {
             releaseAudioSessionClaim()
             throw STTError.inputUnavailable
         }
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buffer, _ in
+        let inputLevels = AsyncStream.makeStream(
+            of: Float.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        inputLevelContinuation = inputLevels.continuation
+        inputLevelTask = Task { @MainActor [weak self] in
+            for await level in inputLevels.stream {
+                guard !Task.isCancelled else { return }
+                self?.inputLevel = level
+            }
+        }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) {
+            [weak req, inputLevelSampler, levelContinuation = inputLevels.continuation] buffer, _ in
             req?.append(buffer)
+            if let level = inputLevelSampler.consume(buffer) {
+                levelContinuation.yield(level)
+            }
         }
         isInputTapInstalled = true
         engine.prepare()
@@ -91,6 +111,7 @@ final class SpeechInput {
             input.removeTap(onBus: 0)
             isInputTapInstalled = false
             self.request = nil
+            stopInputLevelUpdates()
             releaseAudioSessionClaim()
             throw error
         }
@@ -144,6 +165,7 @@ final class SpeechInput {
         task = nil
         request = nil
         isRecording = false
+        stopInputLevelUpdates()
         releaseAudioSessionClaim()
         return partialText
     }
@@ -152,5 +174,14 @@ final class SpeechInput {
         guard hasAudioSessionClaim else { return }
         hasAudioSessionClaim = false
         AudioSessionCoordinator.shared.release(.recording)
+    }
+
+    private func stopInputLevelUpdates() {
+        inputLevelContinuation?.finish()
+        inputLevelContinuation = nil
+        inputLevelTask?.cancel()
+        inputLevelTask = nil
+        inputLevelSampler.reset()
+        inputLevel = 0
     }
 }

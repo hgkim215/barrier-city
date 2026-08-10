@@ -44,11 +44,13 @@ final class RealtimeAudioIO {
     private var outputStartedAt: ContinuousClock.Instant?
     private var receivedOutputFrames = 0
     private var hasAudioSessionClaim = false
+    private let inputLevelSampler = MicrophoneLevelSampler()
     private(set) var isRunning = false
 
     /// Audio I/O를 시작한다. 콜백은 Core Audio 스레드에서 호출되므로 전달받은 Data를
     /// 즉시 비동기 큐/스트림으로 넘기고 콜백 안에서 네트워크를 기다리면 안 된다.
-    func start(onInput: @escaping @Sendable (Data) -> Void) async throws {
+    func start(onInput: @escaping @Sendable (Data) -> Void,
+               onInputLevel: @escaping @Sendable (Float) -> Void) async throws {
 #if targetEnvironment(simulator)
         guard DevelopmentOptions.simulatorMicrophoneEnabled else {
             throw AudioError.simulatorUnavailable
@@ -85,7 +87,11 @@ final class RealtimeAudioIO {
             isPlayerAttached = true
         }
 
-        input.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) { buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) {
+            [inputLevelSampler] buffer, _ in
+            if let level = inputLevelSampler.consume(buffer) {
+                onInputLevel(level)
+            }
             guard let data = Self.convertInput(
                 buffer,
                 using: converter,
@@ -152,6 +158,7 @@ final class RealtimeAudioIO {
         if isPlayerAttached { player.stop() }
         if engine.isRunning { engine.stop() }
         isRunning = false
+        inputLevelSampler.reset()
         outputStartedAt = nil
         receivedOutputFrames = 0
         releaseAudioSessionClaim()

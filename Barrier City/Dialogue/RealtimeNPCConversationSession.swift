@@ -12,6 +12,7 @@ import DialogueKitOpenAI
 final class RealtimeNPCConversationSession {
     enum Event: Sendable {
         case sessionReady
+        case inputLevel(Float)
         case speechStarted
         case speechStopped
         case inputTranscriptDelta(String)
@@ -29,7 +30,9 @@ final class RealtimeNPCConversationSession {
     private var audioSendTask: Task<Void, Never>?
     private var configurationSendTask: Task<Void, Never>?
     private var truncateTask: Task<Void, Never>?
+    private var inputLevelTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<Data>.Continuation?
+    private var inputLevelContinuation: AsyncStream<Float>.Continuation?
     private var eventHandler: (@MainActor (Event) -> Void)?
     private var sessionConfigurationContinuation: CheckedContinuation<Void, Error>?
     private var currentOutputItem: (id: String, contentIndex: Int)?
@@ -51,6 +54,11 @@ final class RealtimeNPCConversationSession {
             bufferingPolicy: .bufferingNewest(64)
         )
         audioContinuation = audioStream.continuation
+        let inputLevelStream = AsyncStream.makeStream(
+            of: Float.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        inputLevelContinuation = inputLevelStream.continuation
 
         do {
             try await client.connect()
@@ -82,15 +90,23 @@ final class RealtimeNPCConversationSession {
                 }
             }
 
+            inputLevelTask = Task { @MainActor [weak self] in
+                for await level in inputLevelStream.stream {
+                    guard !Task.isCancelled else { return }
+                    self?.eventHandler?(.inputLevel(level))
+                }
+            }
+
             try await configureSession(
                 client,
                 instructions: instructions,
                 tools: tools
             )
             try Task.checkCancellation()
-            try await audio.start { chunk in
-                audioStream.continuation.yield(chunk)
-            }
+            try await audio.start(
+                onInput: { chunk in audioStream.continuation.yield(chunk) },
+                onInputLevel: { level in inputLevelStream.continuation.yield(level) }
+            )
             try Task.checkCancellation()
             try await client.send(
                 RealtimeClientEvent.createResponse(
@@ -119,6 +135,8 @@ final class RealtimeNPCConversationSession {
         eventHandler = nil
         audioContinuation?.finish()
         audioContinuation = nil
+        inputLevelContinuation?.finish()
+        inputLevelContinuation = nil
         let configurationTask = configurationSendTask
         configurationSendTask = nil
         let pendingTruncateTask = truncateTask
@@ -129,8 +147,11 @@ final class RealtimeNPCConversationSession {
         audioSendTask = nil
         let eventTask = receiveTask
         receiveTask = nil
+        let levelTask = inputLevelTask
+        inputLevelTask = nil
         sendTask?.cancel()
         eventTask?.cancel()
+        levelTask?.cancel()
         audio.stop()
         if let client { await client.disconnect() }
         client = nil
@@ -138,6 +159,7 @@ final class RealtimeNPCConversationSession {
         await pendingTruncateTask?.value
         await sendTask?.value
         await eventTask?.value
+        await levelTask?.value
         currentOutputItem = nil
         interruptedOutputItemID = nil
     }

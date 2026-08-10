@@ -52,6 +52,9 @@ final class NPCDialogueController {
     var liveText: String {
         realtimeSession == nil ? speech.partialText : realtimeLiveText
     }
+    var microphoneLevel: Float {
+        realtimeSession == nil ? speech.inputLevel : realtimeInputLevel
+    }
     var isBusy: Bool { status == .thinking || status == .speaking }
 
     private let speech = SpeechInput()
@@ -69,6 +72,7 @@ final class NPCDialogueController {
     private var cleanupTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
+    private var realtimeInputLevel: Float = 0
     private var realtimeMission = RealtimeMissionCoordinator()
 
     init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
@@ -123,6 +127,7 @@ final class NPCDialogueController {
         tone = SocialClimate(rapport: rapport).tone
         history = []
         realtimeLiveText = ""
+        realtimeInputLevel = 0
         realtimeMission.reset()
         automaticTurnCount = 0
         animationSequence = 0
@@ -202,6 +207,7 @@ final class NPCDialogueController {
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
+        realtimeInputLevel = 0
         realtimeMission.reset()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
@@ -436,6 +442,7 @@ final class NPCDialogueController {
         lastEvent = ""
         lastMissionEvent = nil
         realtimeLiveText = ""
+        realtimeInputLevel = 0
         realtimeMission.reset()
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
@@ -478,6 +485,9 @@ final class NPCDialogueController {
         switch event {
         case .sessionReady:
             break
+
+        case .inputLevel(let level):
+            realtimeInputLevel = level
 
         case .speechStarted:
             realtimeResponseTimeoutTask?.cancel()
