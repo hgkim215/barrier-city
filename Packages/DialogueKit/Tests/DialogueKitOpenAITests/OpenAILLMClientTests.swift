@@ -68,7 +68,9 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(obj["model"] as? String, "gpt-4o-mini")
         XCTAssertEqual(obj["stream"] as? Bool, true)
         XCTAssertNil(obj["tools"])
-        XCTAssertEqual(obj["max_tokens"] as? Int, 80)
+        XCTAssertEqual(obj["max_tokens"] as? Int, 120)
+        XCTAssertEqual(obj["temperature"] as? Double, 0.8)
+        XCTAssertEqual(obj["frequency_penalty"] as? Double, 0.2)
         let msgs = obj["messages"] as! [[String: String]]
         XCTAssertEqual(msgs.first?["role"], "system")
         XCTAssertEqual(msgs.last?["content"], "U")

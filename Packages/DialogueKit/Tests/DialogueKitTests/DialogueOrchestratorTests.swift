@@ -68,10 +68,22 @@ final class DialogueOrchestratorTests: XCTestCase {
         let first = await sut.handle(utterance: "키오스크가 너무 높아서 주문하기 어려워요", history: [])
         let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
         let third = await sut.handle(utterance: "직접 주문 좀 받아주세요", history: [])
+        let fourth = await sut.handle(utterance: "그럼 라떼 주세요", history: [])
 
         XCTAssertNil(first.event)
         XCTAssertNil(second.event)
-        XCTAssertEqual(third.event, .orderPlaced)
+        XCTAssertNil(third.event)
+        XCTAssertEqual(fourth.event, .orderPlaced)
+    }
+
+    func test_genericAcceptedOrder_asksForItemBeforeCompleting() async {
+        let sut = makeSUT(MockLLM([.token("네."), .done]))
+
+        let request = await sut.handle(utterance: "주문하고 싶어요", history: [])
+        let item = await sut.handle(utterance: "아메리카노 주세요", history: [])
+
+        XCTAssertNil(request.event)
+        XCTAssertEqual(item.event, .orderPlaced)
     }
 
     func test_ableistStaff_withWarmRapport_acceptsFirstOrderRequest() async {
@@ -175,7 +187,7 @@ final class DialogueOrchestratorTests: XCTestCase {
         await sut.beginEncounter()
         let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
         await sut.beginEncounter()
-        let third = await sut.handle(utterance: "직접 주문 받아주세요", history: [])
+        let third = await sut.handle(utterance: "라떼 주문 받아주세요", history: [])
 
         XCTAssertNil(first.event)
         XCTAssertTrue(blocked.usedFallback)

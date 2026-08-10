@@ -13,12 +13,24 @@ public struct IntentRouter: Sendable {
         if ["나갈게", "갈게", "가볼게", "그만", "주문 안", "안 살", "됐어요"].contains(where: value.contains) {
             return DialogueIntent(kind: .leave)
         }
-        let mentionsOrder = ["주문", "아메리카노", "라떼", "커피", "음료", "메뉴", "결제", "한 잔"].contains(where: value.contains)
         let describesKioskBarrier = value.contains("키오스크")
             && ["높", "못", "불편", "어려", "닿지", "안 닿"].contains(where: value.contains)
-        if mentionsOrder || describesKioskBarrier {
+        if describesKioskBarrier {
+            return DialogueIntent(kind: .orderRequest)
+        }
+
+        // 메뉴가 구체적으로 정해진 발화만 주문 완료 후보로 본다. 기존에는 "메뉴가 뭐예요?"나
+        // "주문하고 싶어요"도 즉시 미션 완료로 처리되어 한두 마디 만에 대화가 끊겼다.
+        let mentionsConcreteItem = [
+            "아메리카노", "라떼", "에스프레소", "카푸치노", "모카",
+            "콜드브루", "주스", "에이드", "차", "티",
+        ].contains(where: value.contains)
+        if mentionsConcreteItem {
             return DialogueIntent(kind: .orderComplete)
         }
+        let mentionsOrderRequest = ["주문", "커피", "음료", "메뉴", "결제", "한 잔"]
+            .contains(where: value.contains)
+        if mentionsOrderRequest { return DialogueIntent(kind: .orderRequest) }
         if ["도와", "도움", "밀어", "잡아", "경사로", "문턱", "못 들어", "못 올라", "통과 못"].contains(where: value.contains) {
             return DialogueIntent(kind: .helpRequest)
         }
@@ -30,6 +42,7 @@ public struct IntentRouter: Sendable {
 
     public func route(_ intent: DialogueIntent) -> MissionEvent? {
         switch intent.kind {
+        case .orderRequest: return nil
         case .orderComplete: return .orderPlaced
         case .helpRequest:   return .helpRequested
         case .leave:         return .exited

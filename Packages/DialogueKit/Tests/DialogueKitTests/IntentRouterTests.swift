@@ -15,7 +15,12 @@ final class IntentRouterTests: XCTestCase {
     }
 
     func test_highKioskComplaint_isTreatedAsOrderAccommodationRequest() {
-        XCTAssertEqual(router.infer(from: "키오스크가 너무 높아서 손이 안 닿아요").kind, .orderComplete)
+        XCTAssertEqual(router.infer(from: "키오스크가 너무 높아서 손이 안 닿아요").kind, .orderRequest)
+    }
+
+    func test_genericOrderRequest_waitsForConcreteMenuItem() {
+        XCTAssertEqual(router.infer(from: "주문하고 싶어요").kind, .orderRequest)
+        XCTAssertEqual(router.infer(from: "메뉴가 뭐예요?").kind, .orderRequest)
     }
 
     func test_orderComplete_mapsTo_orderPlaced() {
@@ -31,6 +36,7 @@ final class IntentRouterTests: XCTestCase {
     }
 
     func test_smalltalk_and_unknown_mapTo_nil() {
+        XCTAssertNil(router.route(DialogueIntent(kind: .orderRequest)))
         XCTAssertNil(router.route(DialogueIntent(kind: .smalltalk)))
         XCTAssertNil(router.route(DialogueIntent(kind: .unknown)))
     }

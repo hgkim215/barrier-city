@@ -49,8 +49,9 @@ public struct OpenAILLMClient: LLMClient {
             "model": "gpt-4o-mini",
             "stream": true,
             "messages": msgs,
-            "max_tokens": 80,
-            "temperature": 0.7,
+            "max_tokens": 120,
+            "temperature": 0.8,
+            "frequency_penalty": 0.2,
         ]
         return try JSONSerialization.data(withJSONObject: payload)
     }

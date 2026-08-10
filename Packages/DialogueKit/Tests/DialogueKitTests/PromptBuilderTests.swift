@@ -11,8 +11,10 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertEqual(msgs.first?.role, .system)
         let sys = msgs.first!.content
         XCTAssertTrue(sys.contains("You are a busy cafe staff member."))
-        XCTAssertTrue(sys.contains("Respond ONLY in natural spoken Korean"))
-        XCTAssertTrue(sys.contains("Put the important reaction first"))
+        XCTAssertTrue(sys.contains("Respond ONLY in everyday spoken Korean"))
+        XCTAssertTrue(sys.contains("live face-to-face conversation"))
+        XCTAssertTrue(sys.contains("Ask at most one relevant follow-up question"))
+        XCTAssertTrue(sys.contains("Do not restart the greeting"))
     }
 
     func test_dismissiveTone_isInjectedIntoSystem() {
@@ -63,13 +65,13 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(msgs.first!.content.contains("8"))
     }
 
-    func test_onlyFourRecentTurns_areSent() {
-        let history = (0..<12).map { index in
+    func test_onlySixRecentTurns_areSent() {
+        let history = (0..<16).map { index in
             Message(role: index.isMultiple(of: 2) ? .user : .assistant, content: "m\(index)")
         }
         let msgs = PromptBuilder().build(persona: persona, climate: SocialClimate(),
             history: history, userUtterance: "latest", turnLimit: 30)
-        XCTAssertEqual(msgs.count, 10) // system + 최근 8개 + 현재 발화
+        XCTAssertEqual(msgs.count, 14) // system + 최근 12개 + 현재 발화
         XCTAssertEqual(msgs[1].content, "m4")
         XCTAssertEqual(msgs.last?.content, "latest")
     }

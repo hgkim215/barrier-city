@@ -18,13 +18,13 @@ final class NPCDialogueController {
     /// 버튼 없이 이어지는 공간 대화의 음성 구간 판정값.
     /// 첫 발화는 충분히 기다리되, 말을 시작한 뒤에는 자연스러운 짧은 쉼을 한 턴의 끝으로 본다.
     private enum AutomaticConversationTuning {
-        static let responseTimeout: TimeInterval = 12
-        static let endOfSpeechSilence: TimeInterval = 1.4
-        static let maximumUtteranceDuration: TimeInterval = 25
+        static let responseTimeout: TimeInterval = 18
+        static let endOfSpeechSilence: TimeInterval = 1.8
+        static let maximumUtteranceDuration: TimeInterval = 30
         static let pollingInterval = Duration.milliseconds(120)
-        static let maximumTurns = 8
-        static let inactivityFarewell = "주문하실 때 다시 불러 주세요."
-        static let turnLimitFarewell = "잠시 후 다시 말씀해 주세요."
+        static let maximumTurns = 14
+        static let inactivityFarewell = "필요하시면 다시 불러 주세요."
+        static let turnLimitFarewell = "잠깐 일 좀 보고 올게요. 더 필요하시면 다시 불러 주세요."
     }
 
     private enum AutomaticListenResult {
@@ -77,14 +77,14 @@ final class NPCDialogueController {
         return DialogueOrchestrator(
             persona: persona,
             llm: OpenAILLMClient(config: AppConfig.proxy),
-            guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
+            guardian: SafetyGuard(bannedKeywords: [], maxTurns: AutomaticConversationTuning.maximumTurns),
             cache: DialogueCache(lines: [
                 .greeting: CannedLine(text: "어서 오세요.", audioKey: "greeting"),
                 .timeout: CannedLine(text: "죄송해요, 다시 한 번 말씀해 주시겠어요?", audioKey: "timeout"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked"),
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
             ]),
-            turnLimit: 8)
+            turnLimit: AutomaticConversationTuning.maximumTurns)
     }
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
@@ -126,7 +126,7 @@ final class NPCDialogueController {
         npcSubtitle = ""
         status = .speaking
         requestAnimation(.greet)
-        await voice.speak("어서 오세요. 무엇을 도와드릴까요?") { [weak self] line in
+        await voice.speak("안녕하세요. 필요하신 거 있으세요?") { [weak self] line in
             self?.npcSubtitle = line
         }
         guard isEncounterActive, !Task.isCancelled else {

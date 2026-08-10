@@ -19,6 +19,7 @@ public actor DialogueOrchestrator {
     private let forcedOrderAcceptanceAttempt: Int
     private var turnCount = 0
     private var orderRequestCount = 0
+    private var isTakingOrder = false
 
     public init(persona: NPCPersona, climate: SocialClimate? = nil, llm: LLMClient,
                 guardian: SafetyGuard, cache: DialogueCache, turnLimit: Int,
@@ -34,6 +35,7 @@ public actor DialogueOrchestrator {
     /// 같은 점원의 호감도와 누적 주문 요청 횟수는 유지해 미션 진행이 되돌아가지 않는다.
     public func beginEncounter() {
         turnCount = 0
+        isTakingOrder = false
     }
 
     public func handle(utterance: String, history: [Message],
@@ -93,20 +95,32 @@ public actor DialogueOrchestrator {
     }
 
     private func decideOrderService(for intent: DialogueIntent) -> OrderServiceDecision {
-        guard intent.kind == .orderComplete else { return .notApplicable }
-        orderRequestCount += 1
-        if persona.accessibilityAttitude == .inclusive || climate.tone == .warm || climate.tone == .supportive {
-            return .acceptDirectly
+        guard intent.kind == .orderRequest || intent.kind == .orderComplete else {
+            return .notApplicable
         }
-        // 비친화 점원도 설정된 최대 시도에는 주문을 받아 미션이 막히지 않게 한다.
-        if orderRequestCount >= forcedOrderAcceptanceAttempt { return .acceptReluctantly }
-        return .refuseKioskOnly
+        // 앞 턴에서 구두 주문을 받기로 했다면 메뉴를 말하는 다음 턴에는 다시 거절하지 않는다.
+        if isTakingOrder { return .acceptDirectly }
+        orderRequestCount += 1
+        let decision: OrderServiceDecision
+        if persona.accessibilityAttitude == .inclusive
+            || climate.tone == .warm || climate.tone == .supportive {
+            decision = .acceptDirectly
+        } else if orderRequestCount >= forcedOrderAcceptanceAttempt {
+            // 비친화 점원도 설정된 최대 시도에는 주문을 받아 미션이 막히지 않게 한다.
+            decision = .acceptReluctantly
+        } else {
+            decision = .refuseKioskOnly
+        }
+        if decision.acceptsVerbalOrder { isTakingOrder = true }
+        return decision
     }
 
     private func missionEvent(for intent: DialogueIntent,
                               orderDecision: OrderServiceDecision) -> MissionEvent? {
         if intent.kind == .orderComplete {
-            return orderDecision.completesOrder ? .orderPlaced : nil
+            guard orderDecision.acceptsVerbalOrder else { return nil }
+            isTakingOrder = false
+            return .orderPlaced
         }
         return router.route(intent)
     }
