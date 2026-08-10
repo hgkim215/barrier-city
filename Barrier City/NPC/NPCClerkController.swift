@@ -86,6 +86,8 @@ final class NPCClerkController {
     private var workWaypoints: [SIMD2<Float>] = []
     private var workWaypointIndex = 0
     private var workPauseRemaining: Float = 0
+    /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
+    private var conversationAnchor: SIMD2<Float>?
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
     private var hasPlayedGreetingAnimation = false
@@ -119,6 +121,7 @@ final class NPCClerkController {
         availableAnimationNames = []
         lastPlayedAnimation = ""
         placementSummary = ""
+        conversationAnchor = nil
         handledAnimationSequence = 0
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
@@ -137,6 +140,7 @@ final class NPCClerkController {
         handledAnimationSequence = 0
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
+        conversationAnchor = nil
         isInteractionBubbleVisible = false
         isTalkAvailable = false
         interactionBubble?.isEnabled = false
@@ -211,6 +215,20 @@ final class NPCClerkController {
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
         handleDialogueSignals()
+
+        // 대화 시작부터 종료 이벤트 처리 전까지는 phase 변화와 무관하게 위치를 잠근다.
+        // 비동기 음성 세션이 greeting/conversing 사이를 오가는 동안 업무 동선이 끼어들어
+        // 점원이 사용자를 두고 걸어가는 현상을 방지하고, 회전만 사용자 쪽으로 허용한다.
+        if let anchor = conversationAnchor {
+            if playerDistance > NPCClerkTuning.conversationExitRadius {
+                endEncounterForDeparture()
+                return
+            }
+            holdPosition(at: anchor)
+            isTalkAvailable = false
+            face(point: player, deltaTime: dt)
+            return
+        }
 
         isTalkAvailable = (phase == .working || phase == .completed)
             && playerDistance <= NPCClerkTuning.detectionRadius
@@ -361,7 +379,8 @@ final class NPCClerkController {
 
     @discardableResult
     private func move(toward target: SIMD2<Float>, deltaTime: Float) -> Bool {
-        guard let root = locomotionRoot else { return false }
+        guard conversationAnchor == nil,
+              let root = locomotionRoot else { return false }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         let delta = target - current
         let distance = simd_length(delta)
@@ -377,6 +396,12 @@ final class NPCClerkController {
         root.position.z += direction.y * step
         face(direction: direction, deltaTime: deltaTime)
         return step >= distance
+    }
+
+    private func holdPosition(at anchor: SIMD2<Float>) {
+        guard let root = locomotionRoot else { return }
+        root.position.x = anchor.x
+        root.position.z = anchor.y
     }
 
     private func face(point: SIMD2<Float>, deltaTime: Float) {
@@ -400,6 +425,8 @@ final class NPCClerkController {
 
     private func beginGreeting() {
         guard phase == .working || phase == .completed else { return }
+        // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
+        conversationAnchor = currentClerkPosition
         phase = .greeting
         isTalkAvailable = false
         playAnimation(.idle)
@@ -431,10 +458,12 @@ final class NPCClerkController {
         handledMissionSequence = dialogue.missionEventSequence
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
+            conversationAnchor = nil
             QuestModel.shared.advance(on: .npcHelpDone)
             phase = .completed
             playAnimation(.idle)
         case .exited:
+            conversationAnchor = nil
             greetingTask?.cancel()
             greetingTask = nil
             dialogue.cancelEncounter()
@@ -448,6 +477,7 @@ final class NPCClerkController {
 
     /// 대화 중 사용자가 멀어지면 즉시 마이크를 닫고 말 걸기 상태로 돌아간다.
     private func endEncounterForDeparture() {
+        conversationAnchor = nil
         greetingTask?.cancel()
         greetingTask = nil
         dialogue.cancelEncounter()
