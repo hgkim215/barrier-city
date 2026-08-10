@@ -119,6 +119,7 @@ enum SceneSwitcher {
         let visible = try await Entity(named: "Indoor", in: realityKitContentBundle)
         try Task.checkCancellation()
         ImmersiveView.stripPhysics(visible)
+        ImmersiveView.hideColliders(visible)
         brighten(visible)
 
         let collision = try await Entity(named: "Indoor", in: realityKitContentBundle)
@@ -126,7 +127,7 @@ enum SceneSwitcher {
         ImmersiveView.stripPhysics(collision)
         let collisionShapeCount = await ImmersiveView.addStaticCollision(collision)
         try Task.checkCancellation()
-        collision.components.set(OpacityComponent(opacity: 0))
+        ImmersiveView.stripRendering(collision)
 
         // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
         // debugFloorCollision이 바닥을 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.

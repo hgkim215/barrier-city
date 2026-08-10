@@ -63,7 +63,7 @@ struct ImmersiveView: View {
                 Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
                 let n = await Self.addStaticCollision(cafeCollision)
                 model.motion.collisionShapeCount = n
-                cafeCollision.components.set(OpacityComponent(opacity: 0))   // 안 보이게(충돌만)
+                Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
                 content.add(cafeCollision)
                 InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
             } else {
@@ -300,15 +300,23 @@ struct ImmersiveView: View {
         for child in entity.children { stripPhysics(child) }
     }
 
-    /// 시각 인스턴스에서 충돌용(이름에 collision) 도형은 안 보이게 한다(단순 도형이라 흉하므로).
-    private static func hideColliders(_ entity: Entity, inherited: Bool = false) {
+    /// 시각 인스턴스에서 충돌용(이름에 collision) 도형의 렌더 컴포넌트를 제거한다.
+    /// Entity 자체를 비활성화하면 CollisionComponent도 꺼지므로 시각 요소만 제거해야 한다.
+    static func hideColliders(_ entity: Entity, inherited: Bool = false) {
         let isCollider = inherited || entity.name.lowercased().contains("collision")
-        if isCollider, entity.components[ModelComponent.self] != nil {
-            entity.components.set(OpacityComponent(opacity: 0))
+        if isCollider {
+            entity.components.remove(ModelComponent.self)
         }
         for child in entity.children {
             hideColliders(child, inherited: isCollider)
         }
+    }
+
+    /// 충돌 전용 복제본에서 모든 렌더 컴포넌트를 제거한다.
+    /// addStaticCollision 이후 호출하면 생성된 충돌 형상과 transform 계층은 그대로 남는다.
+    static func stripRendering(_ entity: Entity) {
+        entity.components.remove(ModelComponent.self)
+        for child in entity.children { stripRendering(child) }
     }
 
     /// 엔티티와 모든 하위 모델에 접지 그림자를 부여(바닥 그림자).
