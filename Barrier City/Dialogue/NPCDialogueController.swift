@@ -18,8 +18,10 @@ final class NPCDialogueController {
     /// 버튼 없이 이어지는 공간 대화의 음성 구간 판정값.
     /// 첫 발화는 충분히 기다리되, 말을 시작한 뒤에는 자연스러운 짧은 쉼을 한 턴의 끝으로 본다.
     private enum AutomaticConversationTuning {
-        static let responseTimeout: TimeInterval = 18
-        static let endOfSpeechSilence: TimeInterval = 1.8
+        /// NPC 발화가 끝난 뒤 사용자가 첫 말을 시작할 때까지 기다리는 시간.
+        static let responseTimeout: TimeInterval = 30
+        /// 사용자가 말을 시작한 뒤 한 턴이 끝났다고 판단하는 무음 시간.
+        static let endOfSpeechSilence: TimeInterval = 2.5
         static let maximumUtteranceDuration: TimeInterval = 30
         static let pollingInterval = Duration.milliseconds(120)
         static let maximumTurns = 14
