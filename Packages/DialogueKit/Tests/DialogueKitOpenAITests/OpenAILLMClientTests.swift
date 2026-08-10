@@ -7,6 +7,7 @@ final class MockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var stubData = Data()
     nonisolated(unsafe) static var stubContentType = "text/event-stream"
     nonisolated(unsafe) static var stubStatus = 200
+    nonisolated(unsafe) static var lastRequest: URLRequest?
 
     static func stub(body: Data, contentType: String = "text/event-stream", status: Int = 200) {
         stubData = body; stubContentType = contentType; stubStatus = status
@@ -19,6 +20,7 @@ final class MockURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        Self.lastRequest = request
         let resp = HTTPURLResponse(url: request.url!, statusCode: Self.stubStatus,
                                    httpVersion: nil, headerFields: ["Content-Type": Self.stubContentType])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
@@ -83,5 +85,57 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(config.ttsURL.absoluteString, "https://proxy.test/root/tts")
         XCTAssertEqual(config.realtimeTokenURL.absoluteString,
                        "https://proxy.test/root/realtime-token")
+    }
+
+    func test_realtimeSecretProvider_postsToRestrictedEndpoint() async throws {
+        MockURLProtocol.stub(
+            body: Data(#"{"value":"ek_test","expires_at":12345}"#.utf8),
+            contentType: "application/json"
+        )
+        let provider = RealtimeClientSecretProvider(
+            config: ProxyConfig(base: URL(string: "https://proxy.test")!),
+            session: MockURLProtocol.session()
+        )
+
+        let secret = try await provider.fetch()
+
+        XCTAssertEqual(secret, RealtimeClientSecret(value: "ek_test", expiresAt: 12345))
+        XCTAssertEqual(MockURLProtocol.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString,
+                       "https://proxy.test/realtime-token")
+    }
+
+    func test_realtimeProtocol_parsesAudioAndFunctionEvents() throws {
+        let audio = Data([0, 1, 2, 3])
+        let audioEvent = Data(
+            #"{"type":"response.output_audio.delta","delta":"\#(audio.base64EncodedString())"}"#.utf8
+        )
+        let functionEvent = Data(
+            #"{"type":"response.function_call_arguments.done","name":"complete_order","call_id":"call-1","arguments":"{}"}"#.utf8
+        )
+
+        XCTAssertEqual(try RealtimeServerEvent.parse(audioEvent), .outputAudio(audio))
+        XCTAssertEqual(
+            try RealtimeServerEvent.parse(functionEvent),
+            .functionCall(name: "complete_order", callID: "call-1", arguments: "{}")
+        )
+    }
+
+    func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
+        let data = try RealtimeClientEvent.sessionUpdate(
+            instructions: "자연스럽게 대화해.",
+            tools: [.init(name: "complete_order", description: "주문 완료")]
+        )
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let session = try XCTUnwrap(object["session"] as? [String: Any])
+        let audio = try XCTUnwrap(session["audio"] as? [String: Any])
+        let input = try XCTUnwrap(audio["input"] as? [String: Any])
+        let transcription = try XCTUnwrap(input["transcription"] as? [String: Any])
+        let tools = try XCTUnwrap(session["tools"] as? [[String: Any]])
+
+        XCTAssertEqual(object["type"] as? String, "session.update")
+        XCTAssertEqual(session["instructions"] as? String, "자연스럽게 대화해.")
+        XCTAssertEqual(transcription["model"] as? String, "gpt-live-transcribe")
+        XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
 }
