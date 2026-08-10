@@ -1,9 +1,11 @@
 {
   "name": "barrier-city-openai-proxy",
   "private": true,
+  "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
     "deploy:check": "wrangler deploy --dry-run",
+    "test": "node --test worker.test.js",
     "whoami": "wrangler whoami"
   },
   "devDependencies": {
