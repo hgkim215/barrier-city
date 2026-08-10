@@ -125,13 +125,16 @@ enum SceneSwitcher {
     /// 조상 이름을 물려받아 바닥/바/키오스크만 다른 톤을 준다.
     private static func brighten(_ entity: Entity, inheritedLabel: String = "") {
         let label = (inheritedLabel + " " + entity.name).lowercased()
+        // 완성형 캐릭터의 PBR 머티리얼은 그대로 둔다. 이전의 `contains("bar")`는
+        // Barista까지 바 가구로 오인해 캐릭터 전체를 나무색으로 덮어썼다.
+        if label.contains("barista") { return }
         if var model = entity.components[ModelComponent.self] {
             let color: UIColor
             if label.contains("floor") {
                 color = UIColor(white: 0.55, alpha: 1)          // 바닥: 중간 회색
             } else if label.contains("kiosk") {
                 color = UIColor(white: 0.25, alpha: 1)          // 키오스크: 짙은 회색
-            } else if label.contains("bar") {
+            } else if label.contains("bartable") {
                 color = UIColor(red: 0.45, green: 0.30, blue: 0.18, alpha: 1)  // 바: 나무톤
             } else {
                 color = UIColor(white: 0.85, alpha: 1)          // 벽·천장: 밝은 회색
