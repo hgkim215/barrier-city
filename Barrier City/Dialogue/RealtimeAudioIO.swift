@@ -170,7 +170,9 @@ final class RealtimeAudioIO {
         AudioSessionCoordinator.shared.release(.realtimeConversation)
     }
 
-    private static func convertInput(
+    /// CoreAudio 입력 탭에서 직접 호출된다. RealtimeAudioIO의 MainActor 격리를
+    /// 상속하면 오디오 큐에서 swift_task_checkIsolated가 중단시키므로 명시적으로 분리한다.
+    nonisolated private static func convertInput(
         _ input: AVAudioPCMBuffer,
         using converter: AVAudioConverter,
         outputFormat: AVAudioFormat

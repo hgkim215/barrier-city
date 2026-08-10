@@ -118,8 +118,11 @@ final class SpeechInput {
         isRecording = true
 
         task = recognizer.recognitionTask(with: req) { [weak self] result, _ in
-            guard let self, let result else { return }
-            self.partialText = result.bestTranscription.formattedString
+            guard let result else { return }
+            let text = result.bestTranscription.formattedString
+            Task { @MainActor [weak self] in
+                self?.partialText = text
+            }
         }
     }
 
