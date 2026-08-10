@@ -2,20 +2,27 @@ import SwiftUI
 import RealityKit
 import RealityKitContent
 
+/// RealityView 클로저가 직접 갱신하는 렌더링 참조.
+/// SwiftUI 관찰 대상이 아닌 참조 타입에 보관해 view update 도중 @State를 변경하지 않는다.
+@MainActor
+private final class ImmersiveRuntimeState {
+    var leftWheel: Entity?
+    var rightWheel: Entity?
+    var leftWheelMesh: Entity?
+    var rightWheelMesh: Entity?
+    var leftBaseMats: [any RealityKit.Material] = []
+    var rightBaseMats: [any RealityKit.Material] = []
+    var leftHiMats: [any RealityKit.Material] = []
+    var rightHiMats: [any RealityKit.Material] = []
+    var wheelsHighlighted = false
+}
+
 /// 몰입 공간 본체: 평지 + 거리 마커 기둥 + 양옆 바퀴.
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
 
-    @State private var leftWheel: Entity?     // USDZ 뒷바퀴 노드(Roda_Traseira_L)
-    @State private var rightWheel: Entity?    // USDZ 뒷바퀴 노드(Roda_Traseira_R)
-    @State private var leftWheelMesh: Entity?    // 뒷바퀴 메시(발광 틴트 대상)
-    @State private var rightWheelMesh: Entity?
-    @State private var leftBaseMats: [any RealityKit.Material] = []   // 원본 머티리얼
-    @State private var rightBaseMats: [any RealityKit.Material] = []
-    @State private var leftHiMats: [any RealityKit.Material] = []     // 발광 틴트 머티리얼
-    @State private var rightHiMats: [any RealityKit.Material] = []
-    @State private var wheelsHighlighted = false
+    @State private var runtime = ImmersiveRuntimeState()
     @State private var handTracker = HandTrackingManager()
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
@@ -113,8 +120,8 @@ struct ImmersiveView: View {
                 // 몸체와 별개로 뒷바퀴만 추가 배율(허브 중심으로 커짐 → 제자리에서 크기만 변함).
                 if let wl { wl.scale = wl.scale * Self.wheelScale }
                 if let wr { wr.scale = wr.scale * Self.wheelScale }
-                leftWheel = wl
-                rightWheel = wr
+                runtime.leftWheel = wl
+                runtime.rightWheel = wr
 
                 // 뒷바퀴를 앞으로(-Z)·위로(+Y)·좌우 바깥으로 이동(chairRoot 기준).
                 // 바닥 안착 '전'에 적용해 허브를 올리면 프레임이 바퀴 위로 더 내려앉는다.
@@ -150,14 +157,14 @@ struct ImmersiveView: View {
 
                 // 잡힘 하이라이트: 뒷바퀴 메시를 찾아 발광(emissive) 틴트 버전을 미리 준비.
                 if let mesh = Self.firstModelEntity(wl), let comp = mesh.components[ModelComponent.self] {
-                    leftWheelMesh = mesh
-                    leftBaseMats = comp.materials
-                    leftHiMats = Self.emissiveTinted(comp.materials)
+                    runtime.leftWheelMesh = mesh
+                    runtime.leftBaseMats = comp.materials
+                    runtime.leftHiMats = Self.emissiveTinted(comp.materials)
                 }
                 if let mesh = Self.firstModelEntity(wr), let comp = mesh.components[ModelComponent.self] {
-                    rightWheelMesh = mesh
-                    rightBaseMats = comp.materials
-                    rightHiMats = Self.emissiveTinted(comp.materials)
+                    runtime.rightWheelMesh = mesh
+                    runtime.rightBaseMats = comp.materials
+                    runtime.rightHiMats = Self.emissiveTinted(comp.materials)
                 }
             } else {
                 print("⚠️ WhellChair.usdz 로드 실패 — 이름/번들 확인")
@@ -169,14 +176,16 @@ struct ImmersiveView: View {
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
-            applyRoll(leftWheel, angle: model.motion.leftWheelAngle)
-            applyRoll(rightWheel, angle: model.motion.rightWheelAngle)
+            applyRoll(runtime.leftWheel, angle: model.motion.leftWheelAngle)
+            applyRoll(runtime.rightWheel, angle: model.motion.rightWheelAngle)
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
             let shouldHighlight = model.leftGrabbed || model.rightGrabbed || model.fistDriveActive
-            if wheelsHighlighted != shouldHighlight {
-                wheelsHighlighted = shouldHighlight
-                setMaterials(leftWheelMesh, shouldHighlight ? leftHiMats : leftBaseMats)
-                setMaterials(rightWheelMesh, shouldHighlight ? rightHiMats : rightBaseMats)
+            if runtime.wheelsHighlighted != shouldHighlight {
+                runtime.wheelsHighlighted = shouldHighlight
+                setMaterials(runtime.leftWheelMesh,
+                             shouldHighlight ? runtime.leftHiMats : runtime.leftBaseMats)
+                setMaterials(runtime.rightWheelMesh,
+                             shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
             // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
