@@ -35,7 +35,7 @@ final class AppModel {
 
     /// 바닥/벽 콜리전 전용 충돌 그룹. 기울기용 광선이 '이 그룹만' 때려서
     /// 캐릭터 캡슐(다른 그룹)을 바닥으로 오인하지 않게 한다.
-    nonisolated static let groundGroup = CollisionGroup(rawValue: 1 << 5)
+    static let groundGroup = CollisionGroup(rawValue: 1 << 5)
 
     /// 시점(눈) 높이 보정. 바닥+휠체어를 이만큼 위로 올려 체감 눈높이를 낮춘다.
     /// 0 = 바닥을 실제 바닥에 맞춤(앉아서 테스트 시 자연스러움).

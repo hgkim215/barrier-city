@@ -175,14 +175,13 @@ final class RealtimeAudioIO {
             frameCapacity: capacity
         ) else { return nil }
 
-        var suppliedInput = false
+        let inputState = ConverterInputState()
         var conversionError: NSError?
         let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if suppliedInput {
+            guard inputState.claimInput() else {
                 inputStatus.pointee = .noDataNow
                 return nil
             }
-            suppliedInput = true
             inputStatus.pointee = .haveData
             return input
         }
@@ -217,5 +216,20 @@ final class RealtimeAudioIO {
         }
         buffer.frameLength = AVAudioFrameCount(frameCount)
         return buffer
+    }
+}
+
+/// AVAudioConverter의 @Sendable 입력 콜백이 같은 변환에서 입력 버퍼를 한 번만 소비하게 한다.
+/// 콜백 호출 스레드에 대한 프레임워크 보장이 타입에 표현되지 않아 잠금으로 명시한다.
+private nonisolated final class ConverterInputState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var supplied = false
+
+    func claimInput() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !supplied else { return false }
+        supplied = true
+        return true
     }
 }
