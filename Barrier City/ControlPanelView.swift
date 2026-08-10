@@ -100,17 +100,7 @@ struct ControlPanelView: View {
                         isImmersiveTransitioning = true
                         immersiveError = nil
                         defer { isImmersiveTransitioning = false }
-
-                        switch await openSpace(id: "wheelchair") {
-                        case .opened:
-                            break
-                        case .userCancelled:
-                            immersiveError = "몰입 공간 열기가 취소되었습니다."
-                        case .error:
-                            immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
-                        @unknown default:
-                            immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
-                        }
+                        _ = await openImmersiveSpaceIfNeeded()
                     }
                 } label: {
                     Label(isImmersiveTransitioning ? "여는 중…" : "체험 시작",
@@ -135,6 +125,22 @@ struct ControlPanelView: View {
             .tint(.purple)
 
 #if DEBUG
+            Button {
+                Task { @MainActor in
+                    guard !isImmersiveTransitioning else { return }
+                    isImmersiveTransitioning = true
+                    immersiveError = nil
+                    defer { isImmersiveTransitioning = false }
+                    await enterCafeForDevelopment()
+                }
+            } label: {
+                Label(isImmersiveTransitioning ? "카페 준비 중…" : "개발: 카페 바로 시작",
+                      systemImage: "cup.and.saucer.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+
             if model.isImmersive {
                 VStack(spacing: 8) {
                     Text("NPC: \(model.npcClerk.phase.rawValue)"
@@ -242,6 +248,47 @@ struct ControlPanelView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(v).monospacedDigit()
         }
+    }
+
+    /// 개발 패널에서 몰입 공간 생성과 실내 씬 전환을 한 번에 수행한다.
+    /// `openImmersiveSpace` 반환 직후에는 RealityView의 worldRoot가 아직 준비 중일 수 있어
+    /// 제한 시간 동안 기다린 뒤 기존 SceneSwitcher 경로를 그대로 호출한다.
+    @MainActor
+    private func enterCafeForDevelopment() async {
+        guard await openImmersiveSpaceIfNeeded() else { return }
+
+        for _ in 0..<100 where model.worldRoot == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard model.worldRoot != nil else {
+            immersiveError = "몰입 공간은 열렸지만 카페 씬 준비가 지연되고 있습니다. 다시 눌러 주세요."
+            return
+        }
+
+        if InteractionModel.shared.scene == .outdoor {
+            await SceneSwitcher.switchToIndoor()
+        }
+        if InteractionModel.shared.scene != .indoor {
+            immersiveError = InteractionModel.shared.transitionError
+                ?? "카페 실내로 전환하지 못했습니다."
+        }
+    }
+
+    @MainActor
+    private func openImmersiveSpaceIfNeeded() async -> Bool {
+        if model.isImmersive || model.worldRoot != nil { return true }
+
+        switch await openSpace(id: "wheelchair") {
+        case .opened:
+            return true
+        case .userCancelled:
+            immersiveError = "몰입 공간 열기가 취소되었습니다."
+        case .error:
+            immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+        @unknown default:
+            immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+        }
+        return false
     }
 
     private var handTrackingBinding: Binding<Bool> {
