@@ -50,7 +50,6 @@ enum NPCClerkTuning {
     static let baristaForwardYawOffset: Float = .pi
 
     static let dialogueHeight: Float = 1.55
-    static let dialogueForwardOffset: Float = 0.25
 
     static let fallbackStaffHome = SIMD2<Float>(0, 5.2)
     static let fallbackServicePoint = SIMD2<Float>(0, 3.1)
@@ -75,7 +74,6 @@ final class NPCClerkController {
 
     let dialogue: NPCDialogueController
 
-    @ObservationIgnored private weak var worldRoot: Entity?
     @ObservationIgnored private var locomotionRoot: Entity?
     @ObservationIgnored private var baristaEntity: Entity?
     @ObservationIgnored private var interactionBubble: Entity?
@@ -102,7 +100,6 @@ final class NPCClerkController {
         panel.scale = SIMD3(repeating: 0.9)
         worldRoot.addChild(panel)
         interactionBubble = panel
-        self.worldRoot = worldRoot
     }
 
     /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
@@ -135,7 +132,6 @@ final class NPCClerkController {
         locomotionRoot?.removeFromParent()
         dialogue.reset()
 
-        self.worldRoot = worldRoot
         handledAnimationSequence = 0
         handledMissionSequence = 0
         isInteractionBubbleVisible = false
@@ -176,6 +172,15 @@ final class NPCClerkController {
         locomotion.position = [staffHome.x, NPCClerkTuning.baristaBaseY, staffHome.y]
         locomotion.scale = SIMD3(repeating: NPCClerkTuning.baristaScale)
         locomotion.addChild(barista)
+        if let bubble = interactionBubble {
+            // 월드 좌표를 매 프레임 추종하지 않고 NPC 이동 wrapper에 직접 결합한다.
+            // 위치와 회전이 동일한 transform 계층에서 갱신되므로 추종 지연이 없고,
+            // 사용자의 시선을 향한 별도 forward/yaw 보정도 적용하지 않는다.
+            bubble.removeFromParent()
+            locomotion.addChild(bubble)
+            bubble.position = [0, NPCClerkTuning.dialogueHeight, 0]
+            bubble.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+        }
         worldRoot.addChild(locomotion)
 
         locomotionRoot = locomotion
@@ -226,7 +231,6 @@ final class NPCClerkController {
             face(point: player, deltaTime: dt)
         }
 
-        updateInteractionBubble()
     }
 
     /// Barista 위의 공간 버튼에서 호출한다. 자동 근접 인사 대신 사용자의 명시적인
@@ -494,29 +498,4 @@ final class NPCClerkController {
         interactionBubble?.isEnabled = visible
     }
 
-    private func updateInteractionBubble() {
-        guard let panel = interactionBubble, let worldRoot else { return }
-        guard isInteractionBubbleVisible else {
-            panel.isEnabled = false
-            return
-        }
-        panel.isEnabled = true
-        let clerkPosition = currentClerkPosition
-        panel.setPosition([clerkPosition.x, NPCClerkTuning.dialogueHeight, clerkPosition.y],
-                          relativeTo: worldRoot)
-
-        // worldRoot가 플레이어의 반대로 움직이므로 실제 사용자는 world 원점에 있다.
-        var worldPosition = panel.position(relativeTo: nil)
-        let horizontal = SIMD2<Float>(worldPosition.x, worldPosition.z)
-        let distance = simd_length(horizontal)
-        if distance > NPCClerkTuning.dialogueForwardOffset + 0.05 {
-            let pulled = horizontal
-                - simd_normalize(horizontal) * NPCClerkTuning.dialogueForwardOffset
-            worldPosition.x = pulled.x
-            worldPosition.z = pulled.y
-            panel.setPosition(worldPosition, relativeTo: nil)
-        }
-        let yaw = atan2(-worldPosition.x, -worldPosition.z)
-        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
-    }
 }
