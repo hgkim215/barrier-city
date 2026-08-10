@@ -55,6 +55,7 @@ final class NPCDialogueController {
     private var orchestrator: DialogueOrchestrator
     private var history: [Message] = []
     private var animationSequence = 0
+    private var hasRequestedGreetingAnimation = false
     private var automaticTurnCount = 0
     private var automaticConversationTask: Task<Void, Never>?
 
@@ -99,6 +100,7 @@ final class NPCDialogueController {
         history = []
         automaticTurnCount = 0
         animationSequence = 0
+        hasRequestedGreetingAnimation = false
         animationRequest = nil
         lastMissionEvent = nil
         missionEventSequence = 0
@@ -125,7 +127,12 @@ final class NPCDialogueController {
         userText = ""
         npcSubtitle = ""
         status = .speaking
-        requestAnimation(.greet)
+        if hasRequestedGreetingAnimation {
+            requestAnimation(.idle)
+        } else {
+            hasRequestedGreetingAnimation = true
+            requestAnimation(.greet)
+        }
         await voice.speak("안녕하세요. 필요하신 거 있으세요?") { [weak self] line in
             self?.npcSubtitle = line
         }
@@ -223,14 +230,8 @@ final class NPCDialogueController {
 
         rapport = await orchestrator.climate.rapport
         tone = await orchestrator.climate.tone
-        if !result.usedFallback {
-            switch tone {
-            case .supportive, .warm:
-                requestAnimation(.greet)
-            case .neutral, .dismissive, .hostile:
-                requestAnimation(.idle)
-            }
-        }
+        // Greet는 세션의 첫 인사 전용이다. 이후 감정 톤이 좋아져도 다시 호출하지 않는다.
+        if !result.usedFallback { requestAnimation(.idle) }
         if let event = result.event {
             lastEvent = String(describing: event)
             lastMissionEvent = event

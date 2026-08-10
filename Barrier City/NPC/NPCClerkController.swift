@@ -88,6 +88,7 @@ final class NPCClerkController {
     private var workPauseRemaining: Float = 0
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
+    private var hasPlayedGreetingAnimation = false
 
     init(dialogue: NPCDialogueController) {
         self.dialogue = dialogue
@@ -120,6 +121,7 @@ final class NPCClerkController {
         placementSummary = ""
         handledAnimationSequence = 0
         handledMissionSequence = 0
+        hasPlayedGreetingAnimation = false
         dialogue.reset()
     }
 
@@ -134,6 +136,7 @@ final class NPCClerkController {
 
         handledAnimationSequence = 0
         handledMissionSequence = 0
+        hasPlayedGreetingAnimation = false
         isInteractionBubbleVisible = false
         isTalkAvailable = false
         interactionBubble?.isEnabled = false
@@ -242,7 +245,7 @@ final class NPCClerkController {
 
     /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
     func playForTesting(_ cue: NPCAnimationCue) {
-        playAnimation(cue, restart: true)
+        playAnimation(cue, restart: true, allowsGreetingReplay: true)
     }
 
     // MARK: - Placement
@@ -455,8 +458,11 @@ final class NPCClerkController {
 
     // MARK: - Animation
 
-    private func playAnimation(_ cue: NPCAnimationCue, restart: Bool = false) {
+    private func playAnimation(_ cue: NPCAnimationCue,
+                               restart: Bool = false,
+                               allowsGreetingReplay: Bool = false) {
         guard restart || lastPlayedAnimation != cue.rawValue else { return }
+        guard cue != .greet || !hasPlayedGreetingAnimation || allowsGreetingReplay else { return }
         guard let barista = baristaEntity,
               let match = findAnimation(named: cue.rawValue, in: barista) else {
             print("⚠️ NPC 애니메이션 '\(cue.rawValue)'을 찾지 못함 — 현재 키: \(availableAnimationNames)")
@@ -465,6 +471,7 @@ final class NPCClerkController {
         animationPlayback?.stop(blendOutDuration: 0.05)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.10)
+        if cue == .greet, !allowsGreetingReplay { hasPlayedGreetingAnimation = true }
         lastPlayedAnimation = cue.rawValue
     }
 
