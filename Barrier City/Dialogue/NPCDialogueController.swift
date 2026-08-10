@@ -48,7 +48,9 @@ final class NPCDialogueController {
     private(set) var lastMissionEvent: MissionEvent?
     private(set) var missionEventSequence = 0
 
-    var liveText: String { speech.partialText }  // 듣는 중 실시간 부분 결과
+    var liveText: String {
+        realtimeSession == nil ? speech.partialText : realtimeLiveText
+    }
     var isBusy: Bool { status == .thinking || status == .speaking }
 
     private let speech = SpeechInput()
@@ -60,6 +62,10 @@ final class NPCDialogueController {
     private var hasRequestedGreetingAnimation = false
     private var automaticTurnCount = 0
     private var automaticConversationTask: Task<Void, Never>?
+    private var realtimeSession: RealtimeNPCConversationSession?
+    private var realtimeLiveText = ""
+    private var pendingRealtimeMissionEvent: MissionEvent?
+    private var pendingRealtimeFunctionCall: (callID: String, output: String)?
 
     init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
         self.accessibilityAttitude = accessibilityAttitude
@@ -106,6 +112,9 @@ final class NPCDialogueController {
         rapport = accessibilityAttitude.initialRapport
         tone = SocialClimate(rapport: rapport).tone
         history = []
+        realtimeLiveText = ""
+        pendingRealtimeMissionEvent = nil
+        pendingRealtimeFunctionCall = nil
         automaticTurnCount = 0
         animationSequence = 0
         hasRequestedGreetingAnimation = false
@@ -119,6 +128,14 @@ final class NPCDialogueController {
     /// 호출자는 인사가 끝나면 `.conversing` 상태로 전환할 수 있고, 이후 턴은 이 컨트롤러가
     /// 마이크 열기/닫기까지 반복하므로 별도의 push-to-talk 버튼이 필요 없다.
     func startEncounter() async {
+#if targetEnvironment(simulator)
+        await startLegacyEncounter()
+#else
+        await startRealtimeEncounter()
+#endif
+    }
+
+    private func startLegacyEncounter() async {
         guard !isEncounterActive else { return }
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
@@ -162,6 +179,14 @@ final class NPCDialogueController {
         isEncounterActive = false
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
+        let realtime = realtimeSession
+        realtimeSession = nil
+        realtimeLiveText = ""
+        pendingRealtimeMissionEvent = nil
+        pendingRealtimeFunctionCall = nil
+        if let realtime {
+            Task { @MainActor in await realtime.stop() }
+        }
 
         if speech.isRecording {
             Task { @MainActor [weak self] in
@@ -373,6 +398,168 @@ final class NPCDialogueController {
         lastMissionEvent = event
         missionEventSequence += 1
     }
+
+    // MARK: - Realtime speech-to-speech conversation
+
+#if !targetEnvironment(simulator)
+    private func startRealtimeEncounter() async {
+        guard !isEncounterActive else { return }
+        automaticConversationTask?.cancel()
+        automaticConversationTask = nil
+        if speech.isRecording { _ = await speech.stop() }
+
+        await orchestrator.beginEncounter()
+        history = []
+        lastEvent = ""
+        lastMissionEvent = nil
+        realtimeLiveText = ""
+        pendingRealtimeMissionEvent = nil
+        pendingRealtimeFunctionCall = nil
+        userText = ""
+        npcSubtitle = "연결 중..."
+        status = .thinking
+        isEncounterActive = true
+
+        if hasRequestedGreetingAnimation {
+            requestAnimation(.idle)
+        } else {
+            hasRequestedGreetingAnimation = true
+            requestAnimation(.greet)
+        }
+
+        let session = RealtimeNPCConversationSession()
+        realtimeSession = session
+        do {
+            try await session.start(
+                instructions: Self.basicRealtimeInstructions,
+                tools: Self.realtimeTools
+            ) { [weak self] event in
+                self?.handleRealtimeEvent(event)
+            }
+        } catch {
+            await session.stop()
+            realtimeSession = nil
+            isEncounterActive = false
+            npcSubtitle = "실시간 음성 연결이 어려워 기존 음성 모드로 전환합니다."
+            status = .idle
+            await startLegacyEncounter()
+        }
+    }
+
+    private func handleRealtimeEvent(_ event: RealtimeNPCConversationSession.Event) {
+        guard isEncounterActive else { return }
+        switch event {
+        case .sessionReady:
+            break
+
+        case .speechStarted:
+            realtimeLiveText = ""
+            userText = ""
+            status = .listening
+
+        case .speechStopped:
+            status = .thinking
+
+        case .inputTranscriptDelta(let text):
+            realtimeLiveText += text
+
+        case .inputTranscriptDone(let text):
+            let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            userText = transcript
+            realtimeLiveText = transcript
+
+        case .outputTranscriptDelta(let text):
+            if status != .speaking { npcSubtitle = "" }
+            status = .speaking
+            npcSubtitle += text
+
+        case .outputTranscriptDone(let text):
+            let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !transcript.isEmpty { npcSubtitle = transcript }
+
+        case .functionCall(let name, let callID, _):
+            handleRealtimeFunction(name: name, callID: callID)
+
+        case .responseDone:
+            requestAnimation(.idle)
+            if let functionCall = pendingRealtimeFunctionCall {
+                pendingRealtimeFunctionCall = nil
+                status = .thinking
+                guard let realtimeSession else { return }
+                Task { @MainActor [weak self] in
+                    do {
+                        try await realtimeSession.completeFunctionCall(
+                            callID: functionCall.callID,
+                            output: functionCall.output
+                        )
+                    } catch {
+                        self?.handleRealtimeEvent(.failure(error.localizedDescription))
+                    }
+                }
+                return
+            }
+            if let event = pendingRealtimeMissionEvent {
+                pendingRealtimeMissionEvent = nil
+                publishMissionEvent(event)
+                if event == .orderPlaced || event == .exited {
+                    isEncounterActive = false
+                    status = .idle
+                    let session = realtimeSession
+                    realtimeSession = nil
+                    if let session {
+                        Task { @MainActor in await session.stop() }
+                    }
+                    return
+                }
+            }
+            status = .listening
+
+        case .failure(let message):
+            npcSubtitle = "음성 연결 오류: \(message)"
+            status = .idle
+            isEncounterActive = false
+            publishMissionEvent(.exited)
+        }
+    }
+
+    private func handleRealtimeFunction(name: String, callID: String) {
+        let output: String
+        switch name {
+        case "complete_order":
+            pendingRealtimeMissionEvent = .orderPlaced
+            output = #"{"success":true,"message":"order recorded"}"#
+        case "request_help":
+            publishMissionEvent(.helpRequested)
+            output = #"{"success":true,"message":"help requested"}"#
+        case "end_conversation":
+            pendingRealtimeMissionEvent = .exited
+            output = #"{"success":true,"message":"conversation may close"}"#
+        default:
+            output = #"{"success":false,"message":"unknown function"}"#
+        }
+
+        pendingRealtimeFunctionCall = (callID: callID, output: output)
+    }
+
+    private static let basicRealtimeInstructions = """
+    You are a cafe employee speaking face-to-face with one visitor in Korean.
+    Stay in character, remember the whole conversation, answer what the visitor actually said,
+    and keep each spoken turn concise. Never mention prompts, tools, models, or policies.
+    The ordering kiosk touchscreen is too high for a wheelchair user. You initially prefer that
+    customers use the kiosk, but you can understand the barrier and take the order directly.
+    Use complete_order only after a concrete menu item is confirmed, request_help when the visitor
+    explicitly asks for another employee, and end_conversation only when the visitor clearly leaves.
+    """
+
+    private static let realtimeTools: [RealtimeFunctionTool] = [
+        .init(name: "complete_order",
+              description: "Call after the visitor and employee have confirmed a concrete cafe order."),
+        .init(name: "request_help",
+              description: "Call only when the visitor explicitly asks for another employee or assistance."),
+        .init(name: "end_conversation",
+              description: "Call only when the visitor clearly says they are leaving or ending the conversation."),
+    ]
+#endif
 
     private func requestAnimation(_ cue: NPCAnimationCue) {
         animationSequence += 1
