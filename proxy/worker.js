@@ -41,7 +41,6 @@ async function createRealtimeClientSecret(env) {
       output_modalities: ["audio"],
       audio: {
         input: {
-          format: { type: "audio/pcm", rate: 24000 },
           turn_detection: {
             type: "semantic_vad",
             eagerness: "low",
@@ -50,7 +49,6 @@ async function createRealtimeClientSecret(env) {
           },
         },
         output: {
-          format: { type: "audio/pcm", rate: 24000 },
           voice: "marin",
         },
       },
