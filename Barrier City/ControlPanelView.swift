@@ -8,7 +8,6 @@ struct ControlPanelView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
-    @State private var isImmersiveTransitioning = false
     @State private var immersiveError: String?
 
     var body: some View {
@@ -82,38 +81,43 @@ struct ControlPanelView: View {
             .padding(12)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-            if model.isImmersive {
+            switch model.immersiveSessionState.phase {
+            case .open, .closing:
                 Button(role: .destructive) {
                     Task { @MainActor in
-                        guard !isImmersiveTransitioning else { return }
-                        isImmersiveTransitioning = true
+                        guard let generation = model.beginImmersiveClose() else { return }
                         await dismissSpace()
-                        isImmersiveTransitioning = false
+                        model.completeImmersiveClose(generation: generation)
                     }
                 } label: {
-                    Label("체험 종료", systemImage: "xmark.circle.fill")
+                    Label(model.immersiveSessionState.controlTitle,
+                          systemImage: "xmark.circle.fill")
                 }
-            } else {
+            case .closed, .opening:
                 Button {
                     Task { @MainActor in
-                        guard !isImmersiveTransitioning else { return }
-                        isImmersiveTransitioning = true
+                        guard let generation = model.beginImmersiveOpen() else { return }
                         immersiveError = nil
-                        defer { isImmersiveTransitioning = false }
 
                         switch await openSpace(id: "wheelchair") {
                         case .opened:
-                            break
+                            model.completeImmersiveOpen(generation: generation, succeeded: true)
                         case .userCancelled:
-                            immersiveError = "몰입 공간 열기가 취소되었습니다."
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "몰입 공간 열기가 취소되었습니다."
+                            }
                         case .error:
-                            immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+                            }
                         @unknown default:
-                            immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                            }
                         }
                     }
                 } label: {
-                    Label(isImmersiveTransitioning ? "여는 중…" : "체험 시작",
+                    Label(model.immersiveSessionState.controlTitle,
                           systemImage: "figure.roll")
                 }
                 .buttonStyle(.borderedProminent)
@@ -225,7 +229,7 @@ struct ControlPanelView: View {
             .frame(width: 460)
         }
         .frame(width: 460, height: 720)
-        .disabled(isImmersiveTransitioning)
+        .disabled(model.immersiveSessionState.isTransitioning)
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {

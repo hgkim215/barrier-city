@@ -16,6 +16,7 @@ struct ImmersiveView: View {
     @State private var leftHiMats: [any RealityKit.Material] = []     // 발광 틴트 머티리얼
     @State private var rightHiMats: [any RealityKit.Material] = []
     @State private var handTracker = HandTrackingManager()
+    @State private var immersiveSessionGeneration: Int?
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
     private static let chairScale: Float = 0.95                  // 전체(몸체 기준) 크기
@@ -195,15 +196,19 @@ struct ImmersiveView: View {
             }
         }
         .onAppear {
-            model.isImmersive = true
+            immersiveSessionGeneration = model.immersiveSessionAppeared()
             AppModel.current = model
         }
         .onDisappear {
+            handTracker.stopSession()
+            guard let immersiveSessionGeneration,
+                  model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
+                return
+            }
             QuestSetup.stop()
             InteractionModel.shared.endImmersiveSession()
-            model.isImmersive = false
             model.npcClerk.resetForOutdoor()
-            handTracker.stop(model: model)
+            handTracker.clearModelInput(model: model)
         }
         .task(id: model.useHandTracking) {
             // 창 토글을 몰입 공간 진입 뒤에 바꿔도 즉시 세션을 시작/종료한다.
