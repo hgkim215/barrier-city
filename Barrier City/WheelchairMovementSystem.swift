@@ -86,9 +86,15 @@ struct WheelchairMovementSystem: System {
 
         do {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
-            model.tick += 1
-
             let now = ProcessInfo.processInfo.systemUptime
+            let updateStartedAt = now
+            var raycastCount = 0
+            defer {
+                model.recordPerformance(
+                    deltaTime: dt,
+                    updateSeconds: ProcessInfo.processInfo.systemUptime - updateStartedAt,
+                    raycasts: raycastCount)
+            }
             if model.testFistDriveEnabled,
                model.fistDriveActive,
                now - model.fistDriveLastUpdate > Self.fistDriveStaleTimeout {
@@ -97,11 +103,17 @@ struct WheelchairMovementSystem: System {
                     status: "손 추적이 끊겼습니다 · 손을 펴고 다시 쥐세요")
             }
 
-            // 한 점 바닥 높이(down-ray, groundGroup만). 없으면 nil(허공).
-            func groundY(_ x: Float, _ z: Float) -> Float? {
+            // 한 점의 (바닥높이, 법선). 없으면 nil(허공).
+            func groundHit(_ x: Float, _ z: Float) -> (height: Float, normal: SIMD3<Float>)? {
+                raycastCount += 1
                 let hits = scene.raycast(origin: [x, 4, z], direction: [0, -1, 0],
                                          length: 8, query: .nearest, mask: AppModel.groundGroup)
-                return hits.first?.position.y
+                guard let hit = hits.first else { return nil }
+                return (hit.position.y, hit.normal)
+            }
+            // 한 점 바닥 높이(down-ray, groundGroup만). 없으면 nil(허공).
+            func groundY(_ x: Float, _ z: Float) -> Float? {
+                groundHit(x, z)?.height
             }
             // 진행 방향의 수직 벽까지 가장 가까운 거리. 휠체어 폭을 5점으로 훑어
             // 좁은 기둥/테이블 다리가 3개 레이 사이로 빠지는 것을 막는다.
@@ -117,6 +129,7 @@ struct WheelchairMovementSystem: System {
                 for fraction: Float in [-1, -0.5, 0, 0.5, 1] {
                     let off = Self.bodyHalfWidth * fraction
                     let ox = fromX + px * off, oz = fromZ + pz * off
+                    raycastCount += 1
                     let hits = scene.raycast(origin: [ox, baseY + Self.wallRayY, oz],
                                              direction: [dxn, 0, dzn], length: dist,
                                              query: .all, mask: AppModel.groundGroup)
@@ -236,23 +249,24 @@ struct WheelchairMovementSystem: System {
 
             // 몸체 앞/뒤 끝뿐 아니라 이번 프레임에 이동할 구간까지 훑어 저프레임에서도
             // 얇은 벽을 한 번에 통과(tunneling)하지 않게 한다.
-            let sweepDistance = leadExtent + abs(forward) * dt + Self.collisionSkin
-            if let hitDistance = wallDistance(fromX: model.posX,
-                                              fromZ: model.posZ,
-                                              dxn: leadDirX,
-                                              dzn: leadDirZ,
-                                              dist: sweepDistance,
-                                              baseY: model.chairY) {
+            let requestedTravel = abs(forward) * dt
+            let sweepDistance = leadExtent + requestedTravel + Self.collisionSkin
+            if requestedTravel > 0.0001,
+               let hitDistance = wallDistance(fromX: model.posX,
+                                               fromZ: model.posZ,
+                                               dxn: leadDirX,
+                                               dzn: leadDirZ,
+                                               dist: sweepDistance,
+                                               baseY: model.chairY) {
                 // 수직 벽: 이번 프레임의 이동을 통째로 버리지 않고, 외곽이 skin만
                 // 남기고 닿는 지점까지만 이동한다. 저프레임에서도 관통하거나 멀찍이
                 // 떠서 멈추지 않고 실제 접촉 위치가 일정해진다.
-                let requestedTravel = abs(forward) * dt
                 let allowedTravel = max(0, hitDistance - leadExtent - Self.collisionSkin)
                 let contactTravel = min(requestedTravel, allowedTravel)
                 model.posX += leadDirX * contactTravel
                 model.posZ += leadDirZ * contactTravel
                 stopAtObstacle(impactSpeed: forward)
-            } else {
+            } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
                 let lz = newZ + leadDirZ * stepLeadExtent
@@ -276,7 +290,8 @@ struct WheelchairMovementSystem: System {
             }
 
             // 7) 수직 위치: 여러 점 평균 높이(격자 노이즈 완화) + 부드럽게 따라가기(저역통과).
-            let g0 = groundY(model.posX, model.posZ)
+            let g0Hit = groundHit(model.posX, model.posZ)
+            let g0 = g0Hit?.height
             let gAh = groundY(model.posX + dirX * 0.18, model.posZ + dirZ * 0.18)
             let gBk = groundY(model.posX - dirX * 0.18, model.posZ - dirZ * 0.18)
             let solids = [g0, gAh, gBk].compactMap { $0 }
@@ -318,20 +333,13 @@ struct WheelchairMovementSystem: System {
             func contact(_ ro: Float, _ fo: Float) -> (Float, Float) {
                 (px + rightX * ro + dirX * fo, pz + rightZ * ro + dirZ * fo)
             }
-            // 한 점의 (바닥높이, 법선). 없으면 nil(허공).
-            func groundHit(_ x: Float, _ z: Float) -> (Float, SIMD3<Float>)? {
-                let hits = scene.raycast(origin: [x, 4, z], direction: [0, -1, 0],
-                                         length: 8, query: .nearest, mask: AppModel.groundGroup)
-                if let h = hits.first { return (h.position.y, h.normal) }
-                return nil
-            }
             let rl = contact(-Self.contactHalfTrack, Self.rearForward)
             let rr = contact( Self.contactHalfTrack, Self.rearForward)
             let fl = contact(-Self.contactHalfTrack, Self.frontForward)
             let fr = contact( Self.contactHalfTrack, Self.frontForward)
             let hRL = groundHit(rl.0, rl.1), hRR = groundHit(rr.0, rr.1)
             let hFL = groundHit(fl.0, fl.1), hFR = groundHit(fr.0, fr.1)
-            let hC  = groundHit(px, pz)
+            let hC = g0Hit
 
             // 법선 평균 → 경사(가끔 격자 구멍을 때려도 평균이라 매끈).
             var nSum = SIMD3<Float>(0, 0, 0)

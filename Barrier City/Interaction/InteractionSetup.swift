@@ -126,10 +126,10 @@ enum InteractionSetup {
                                       trigger: ProximityTrigger?, forwardOffset: Float) {
         guard let panel else { return }
         guard active, let t = trigger else {
-            panel.isEnabled = false
+            if panel.isEnabled { panel.isEnabled = false }
             return
         }
-        panel.isEnabled = true
+        if !panel.isEnabled { panel.isEnabled = true }
         // 1) 트리거 중심 위 눈높이(맵 로컬)에 놓고 월드 위치를 얻는다.
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)

@@ -216,8 +216,8 @@ struct ControlPanelView: View {
             HStack(spacing: 24) {
                 stat("속도", String(format: "%.2f m/s", model.speed))
                 stat("방향", String(format: "%.0f°", model.headingDegrees))
-                stat("엔진 틱", "\(model.tick)")
-                stat("매칭", "\(model.matched)")
+                stat("FPS", String(format: "%.0f", model.frameRate))
+                stat("물리", String(format: "%.2f ms", model.physicsUpdateMilliseconds))
                 stat("누름", "\(model.pushCount)")
                 stat("충격수신", "\(model.impulseApplied)")
             }
@@ -226,6 +226,8 @@ struct ControlPanelView: View {
             // 물리 진단(CharacterController)
             HStack(spacing: 24) {
                 stat("콜리전", "\(model.collisionShapes)")
+                stat("레이/프레임", String(format: "%.1f", model.raycastsPerFrame))
+                stat("프레임", String(format: "%.1f ms", model.frameTimeMilliseconds))
                 stat("바닥Y", String(format: "%.2f", model.groundY))
                 stat("의자Y", String(format: "%.2f", model.chairY))
                 stat("pitch", String(format: "%.2f", model.pitch))

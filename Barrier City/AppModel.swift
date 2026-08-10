@@ -172,6 +172,16 @@ final class AppModel {
     var pushCount: Int = 0
     /// System이 0이 아닌 충격량을 실제로 받은 횟수(엔진 측).
     var impulseApplied: Int = 0
+    /// 0.25초 구간 평균 성능 진단. UI 관찰 갱신도 이 주기로 제한한다.
+    var frameRate: Float = 0
+    var frameTimeMilliseconds: Float = 0
+    var physicsUpdateMilliseconds: Float = 0
+    var raycastsPerFrame: Float = 0
+    @ObservationIgnored private var diagnosticElapsed: Float = 0
+    @ObservationIgnored private var diagnosticUpdateSeconds: Double = 0
+    @ObservationIgnored private var diagnosticRaycasts = 0
+    @ObservationIgnored private var diagnosticFrames = 0
+    @ObservationIgnored private var totalPhysicsFrames = 0
 
     // MARK: - 손 추적 진단
     /// 손 앵커 업데이트를 받은 총 횟수(0에서 안 변하면 데이터가 안 들어옴).
@@ -309,5 +319,40 @@ final class AppModel {
         blocked = false; reachedGoal = false; groundY = 0
         chairY = 0; fallVelY = 0
         fallen = false; fallDirPitch = 0; fallDirRoll = 0
+        resetPerformanceDiagnostics()
+    }
+
+    /// 고빈도 프레임 샘플을 모아 4Hz로만 관찰 상태에 게시한다.
+    func recordPerformance(deltaTime: Float, updateSeconds: Double, raycasts: Int) {
+        diagnosticElapsed += deltaTime
+        diagnosticUpdateSeconds += updateSeconds
+        diagnosticRaycasts += raycasts
+        diagnosticFrames += 1
+        totalPhysicsFrames += 1
+        guard diagnosticElapsed >= 0.25 else { return }
+
+        let frames = max(diagnosticFrames, 1)
+        tick = totalPhysicsFrames
+        frameRate = Float(frames) / diagnosticElapsed
+        frameTimeMilliseconds = diagnosticElapsed / Float(frames) * 1_000
+        physicsUpdateMilliseconds = Float(diagnosticUpdateSeconds / Double(frames) * 1_000)
+        raycastsPerFrame = Float(diagnosticRaycasts) / Float(frames)
+        diagnosticElapsed = 0
+        diagnosticUpdateSeconds = 0
+        diagnosticRaycasts = 0
+        diagnosticFrames = 0
+    }
+
+    private func resetPerformanceDiagnostics() {
+        tick = 0
+        frameRate = 0
+        frameTimeMilliseconds = 0
+        physicsUpdateMilliseconds = 0
+        raycastsPerFrame = 0
+        diagnosticElapsed = 0
+        diagnosticUpdateSeconds = 0
+        diagnosticRaycasts = 0
+        diagnosticFrames = 0
+        totalPhysicsFrames = 0
     }
 }

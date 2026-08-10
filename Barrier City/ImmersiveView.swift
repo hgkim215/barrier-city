@@ -15,6 +15,7 @@ struct ImmersiveView: View {
     @State private var rightBaseMats: [any RealityKit.Material] = []
     @State private var leftHiMats: [any RealityKit.Material] = []     // 발광 틴트 머티리얼
     @State private var rightHiMats: [any RealityKit.Material] = []
+    @State private var wheelsHighlighted = false
     @State private var handTracker = HandTrackingManager()
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
@@ -171,10 +172,12 @@ struct ImmersiveView: View {
             applyRoll(leftWheel, angle: model.wheelAngleLeft)
             applyRoll(rightWheel, angle: model.wheelAngleRight)
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
-            setMaterials(leftWheelMesh,
-                         (model.leftGrabbed || model.fistDriveActive) ? leftHiMats : leftBaseMats)
-            setMaterials(rightWheelMesh,
-                         (model.rightGrabbed || model.fistDriveActive) ? rightHiMats : rightBaseMats)
+            let shouldHighlight = model.leftGrabbed || model.rightGrabbed || model.fistDriveActive
+            if wheelsHighlighted != shouldHighlight {
+                wheelsHighlighted = shouldHighlight
+                setMaterials(leftWheelMesh, shouldHighlight ? leftHiMats : leftBaseMats)
+                setMaterials(rightWheelMesh, shouldHighlight ? rightHiMats : rightBaseMats)
+            }
         } attachments: {
             // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
