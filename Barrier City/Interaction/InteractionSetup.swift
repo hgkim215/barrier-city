@@ -51,10 +51,10 @@ enum InteractionSetup {
             } else {
                 print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
             }
-            if let npcDialogue = attachments.entity(for: "npcDialogue") {
-                appModel.npcClerk.installDialoguePanel(npcDialogue, in: worldRoot)
+            if let npcInteraction = attachments.entity(for: "npcInteraction") {
+                appModel.npcClerk.installInteractionBubble(npcInteraction, in: worldRoot)
             } else {
-                print("⚠️ npcDialogue attachment 없음 — 점원 대화 패널 비활성")
+                print("⚠️ npcInteraction attachment 없음 — 점원 인터랙션 비활성")
             }
         } else {
             print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")

@@ -33,7 +33,7 @@ enum NPCClerkPhase: String {
 enum NPCClerkTuning {
     /// 점원이 돌아다니는 동안에도 사용자를 놓치지 않도록 실제 NPC 위치 기준으로 넉넉히 감지한다.
     static let detectionRadius: Float = 4.0
-    /// 진입 반경보다 1m 넓혀 경계에서 인사/종료가 반복되지 않게 한다.
+    /// 진입 반경보다 1m 넓혀 대화 중 경계에서 종료가 반복되지 않게 한다.
     static let conversationExitRadius: Float = detectionRadius + 1.0
     static let moveSpeed: Float = 0.8
     static let turnResponse: Float = 7
@@ -70,14 +70,15 @@ final class NPCClerkController {
     private(set) var availableAnimationNames: [String] = []
     private(set) var lastPlayedAnimation: String = ""
     private(set) var placementSummary: String = ""
-    private(set) var isDialogueVisible = false
+    private(set) var isInteractionBubbleVisible = false
+    private(set) var isTalkAvailable = false
 
     let dialogue: NPCDialogueController
 
     @ObservationIgnored private weak var worldRoot: Entity?
     @ObservationIgnored private var locomotionRoot: Entity?
     @ObservationIgnored private var baristaEntity: Entity?
-    @ObservationIgnored private var dialoguePanel: Entity?
+    @ObservationIgnored private var interactionBubble: Entity?
     @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
 
@@ -89,19 +90,18 @@ final class NPCClerkController {
     private var workPauseRemaining: Float = 0
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
-    private var requiresReentry = false
 
     init(dialogue: NPCDialogueController) {
         self.dialogue = dialogue
     }
 
     /// ImmersiveView가 생성될 때 attachment를 맵 루트에 한 번 연결한다.
-    func installDialoguePanel(_ panel: Entity, in worldRoot: Entity) {
+    func installInteractionBubble(_ panel: Entity, in worldRoot: Entity) {
         panel.removeFromParent()
         panel.isEnabled = false
         panel.scale = SIMD3(repeating: 0.9)
         worldRoot.addChild(panel)
-        dialoguePanel = panel
+        interactionBubble = panel
         self.worldRoot = worldRoot
     }
 
@@ -114,15 +114,15 @@ final class NPCClerkController {
         locomotionRoot?.removeFromParent()
         locomotionRoot = nil
         baristaEntity = nil
-        dialoguePanel?.isEnabled = false
-        isDialogueVisible = false
+        interactionBubble?.isEnabled = false
+        isInteractionBubbleVisible = false
+        isTalkAvailable = false
         phase = .unavailable
         availableAnimationNames = []
         lastPlayedAnimation = ""
         placementSummary = ""
         handledAnimationSequence = 0
         handledMissionSequence = 0
-        requiresReentry = false
         dialogue.reset()
     }
 
@@ -138,9 +138,9 @@ final class NPCClerkController {
         self.worldRoot = worldRoot
         handledAnimationSequence = 0
         handledMissionSequence = 0
-        requiresReentry = false
-        isDialogueVisible = false
-        dialoguePanel?.isEnabled = false
+        isInteractionBubbleVisible = false
+        isTalkAvailable = false
+        interactionBubble?.isEnabled = false
 
         let placement = makePlacement(in: indoorMap,
                                       relativeTo: worldRoot,
@@ -184,6 +184,7 @@ final class NPCClerkController {
         print("NPC 배치: \(placementSummary)")
         print("NPC 애니메이션: \(availableAnimationNames)")
         phase = .working
+        setInteractionBubbleVisible(true)
         playAnimation(.idle)
     }
 
@@ -191,7 +192,8 @@ final class NPCClerkController {
     /// deltaTime 기반으로 직접 보간해 일정한 속도로 움직인다.
     func update(deltaTime rawDeltaTime: Float, appModel: AppModel) {
         guard phase != .unavailable, locomotionRoot != nil else {
-            dialoguePanel?.isEnabled = false
+            interactionBubble?.isEnabled = false
+            isTalkAvailable = false
             return
         }
 
@@ -202,26 +204,15 @@ final class NPCClerkController {
         let playerDistance = simd_distance(player, currentClerkPosition)
         handleDialogueSignals()
 
-        // timeout/작별 뒤에는 사용자가 실제로 자리를 벗어나야 같은 점원이 다시 인사한다.
-        if requiresReentry,
-           playerDistance > NPCClerkTuning.conversationExitRadius {
-            requiresReentry = false
-        }
+        isTalkAvailable = (phase == .working || phase == .completed)
+            && playerDistance <= NPCClerkTuning.detectionRadius
 
         switch phase {
         case .unavailable:
             break
 
         case .working:
-            if requiresReentry {
-                // 작별 직후 NPC가 움직여 거리 잠금이 저절로 풀리지 않도록 사용자가 떠날 때까지 대기한다.
-                face(point: player, deltaTime: dt)
-            } else if shouldStartConversation(player: player) {
-                // 계산대로 걸어오는 과정을 생략하고 발견한 자리에서 즉시 멈춰 대화를 시작한다.
-                beginGreeting()
-            } else {
-                updateWorkLoop(deltaTime: dt)
-            }
+            updateWorkLoop(deltaTime: dt)
 
         case .greeting, .conversing:
             if playerDistance > NPCClerkTuning.conversationExitRadius {
@@ -235,7 +226,14 @@ final class NPCClerkController {
             face(point: player, deltaTime: dt)
         }
 
-        updateDialoguePanel()
+        updateInteractionBubble()
+    }
+
+    /// Barista 위의 공간 버튼에서 호출한다. 자동 근접 인사 대신 사용자의 명시적인
+    /// 선택으로만 대화를 시작해 NPC가 갑자기 말을 거는 느낌을 없앤다.
+    func startConversation() {
+        guard isTalkAvailable else { return }
+        beginGreeting()
     }
 
     /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
@@ -339,12 +337,6 @@ final class NPCClerkController {
         return SIMD2(root.position.x, root.position.z)
     }
 
-    private func shouldStartConversation(player: SIMD2<Float>) -> Bool {
-        guard !requiresReentry else { return false }
-        guard QuestModel.shared.currentStep?.completionEvent == .npcHelpDone else { return false }
-        return simd_distance(player, currentClerkPosition) <= NPCClerkTuning.detectionRadius
-    }
-
     private func updateWorkLoop(deltaTime: Float) {
         guard !workWaypoints.isEmpty else { return }
         if workPauseRemaining > 0 {
@@ -400,10 +392,11 @@ final class NPCClerkController {
     }
 
     private func beginGreeting() {
-        guard phase == .working else { return }
+        guard phase == .working || phase == .completed else { return }
         phase = .greeting
+        isTalkAvailable = false
         playAnimation(.idle)
-        setDialogueVisible(true)
+        setInteractionBubbleVisible(true)
 
         // 키오스크 장벽 패널과 대화 패널이 겹치지 않게 현재 키오스크 UI를 닫는다.
         let interactions = InteractionModel.shared
@@ -438,25 +431,22 @@ final class NPCClerkController {
             greetingTask?.cancel()
             greetingTask = nil
             dialogue.cancelEncounter()
-            setDialogueVisible(false)
+            setInteractionBubbleVisible(true)
             phase = .working
             workPauseRemaining = NPCClerkTuning.workPauseSeconds
-            requiresReentry = true
         case .helpRequested, .none:
             break
         }
     }
 
-    /// 대화 중 사용자가 멀어지면 즉시 마이크/패널을 닫고, 감지 반경 안으로 다시 들어올 때까지
-    /// 새 인사를 하지 않는다.
+    /// 대화 중 사용자가 멀어지면 즉시 마이크를 닫고 말 걸기 상태로 돌아간다.
     private func endEncounterForDeparture() {
         greetingTask?.cancel()
         greetingTask = nil
         dialogue.cancelEncounter()
-        setDialogueVisible(false)
+        setInteractionBubbleVisible(true)
         phase = .working
         workPauseRemaining = NPCClerkTuning.workPauseSeconds
-        requiresReentry = true
     }
 
     // MARK: - Animation
@@ -497,16 +487,16 @@ final class NPCClerkController {
         return Array(Set(names))
     }
 
-    // MARK: - Spatial dialogue panel
+    // MARK: - Spatial interaction bubble
 
-    private func setDialogueVisible(_ visible: Bool) {
-        isDialogueVisible = visible
-        dialoguePanel?.isEnabled = visible
+    private func setInteractionBubbleVisible(_ visible: Bool) {
+        isInteractionBubbleVisible = visible
+        interactionBubble?.isEnabled = visible
     }
 
-    private func updateDialoguePanel() {
-        guard let panel = dialoguePanel, let worldRoot else { return }
-        guard isDialogueVisible else {
+    private func updateInteractionBubble() {
+        guard let panel = interactionBubble, let worldRoot else { return }
+        guard isInteractionBubbleVisible else {
             panel.isEnabled = false
             return
         }

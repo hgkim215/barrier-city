@@ -188,8 +188,8 @@ struct ImmersiveView: View {
             Attachment(id: "questHUD") {
                 QuestHUDView()
             }
-            // 점원이 계산대에 도착한 뒤 표시되는 공간 대화 패널.
-            Attachment(id: "npcDialogue") {
+            // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
+            Attachment(id: "npcInteraction") {
                 NPCDialoguePanelView(controller: model.npcDialogue,
                                      clerk: model.npcClerk)
             }
