@@ -18,6 +18,18 @@ import simd
 @MainActor
 enum SceneSwitcher {
 
+    private struct PreparedIndoorScene {
+        let visible: Entity
+        let collision: Entity
+        let collisionShapeCount: Int
+    }
+
+    private struct IndoorLayout {
+        let kioskCenter: SIMD2<Float>
+        let spawn: SIMD2<Float>
+        let heading: Float
+    }
+
     /// "예" 선택 시 호출. Outdoor에서만 동작하며, 실패 시 Outdoor를 유지하고
     /// 패널에 안내 문구를 띄운다.
     static func switchToIndoor() async {
@@ -27,52 +39,114 @@ enum SceneSwitcher {
         im.isTransitioning = true
         defer { im.isTransitioning = false }
 
-        // 1) 실내 시각 맵 로드(실패 시 전환 취소, Outdoor 유지)
-        guard let indoorVisible = try? await Entity(named: "Indoor", in: realityKitContentBundle) else {
+        // 1) 새 시각·콜리전 엔티티를 기존 장면 밖에서 모두 준비한다. 이 구간에서는
+        //    현재 맵, 플레이어 포즈, 인터랙션 상태를 전혀 변경하지 않는다.
+        let prepared: PreparedIndoorScene
+        do {
+            prepared = try await prepareIndoorScene()
+        } catch is CancellationError {
+            return
+        } catch {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
-            print("⚠️ Indoor 씬(시각) 로드 실패 — 이름/번들 확인")
+            print("⚠️ Indoor 씬 준비 실패 — 기존 Outdoor 유지: \(error)")
             return
         }
-        ImmersiveView.stripPhysics(indoorVisible)
-        brighten(indoorVisible)
 
-        // 2) 시각 맵 교체(worldRoot 아래)
-        im.visibleMap?.removeFromParent()
-        worldRoot.addChild(indoorVisible)
-        im.visibleMap = indoorVisible
-
-        // 3) 콜리전 사본 교체(기존 사본과 같은 부모에).
-        //    Indoor에 아직 'collision' 네이밍 메시가 없으면 0개가 부여되지만,
-        //    씬에 상주하는 debugFloorCollision이 바닥을 담당해 주행은 정상이다
-        //    (실내 벽 통과는 1차 스코프에서 허용 — 김선환 RCP 콜리전 작업 대기).
-        if let oldCollision = im.collisionMap, let parent = oldCollision.parent {
-            if let indoorCollision = try? await Entity(named: "Indoor", in: realityKitContentBundle) {
-                ImmersiveView.stripPhysics(indoorCollision)
-                let n = await ImmersiveView.addStaticCollision(indoorCollision)
-                app.collisionShapes = n
-                indoorCollision.components.set(OpacityComponent(opacity: 0))
-                parent.addChild(indoorCollision)
-                oldCollision.removeFromParent()
-                im.collisionMap = indoorCollision
-            } else {
-                print("⚠️ Indoor 씬(콜리전) 로드 실패 — 기존 콜리전 유지")
-            }
+        // 로드 중 몰입 공간이 닫혔거나 다른 세션으로 교체됐다면 준비한 엔티티를 버린다.
+        guard !Task.isCancelled,
+              AppModel.current === app,
+              app.worldRoot === worldRoot,
+              im.scene == .outdoor,
+              let oldVisible = im.visibleMap,
+              let oldCollision = im.collisionMap,
+              let collisionParent = oldCollision.parent else {
+            return
         }
 
-        // 4) Kiosk 프림의 맵 좌표(worldRoot 기준)를 찾고, 실패 시 폴백 상수를 쓴다.
+        guard prepared.visible.findEntity(named: "Barista") != nil else {
+            im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
+            print("⚠️ Indoor Barista 없음 — 기존 Outdoor 유지")
+            return
+        }
+
+        // 좌표 계산을 위해 새 엔티티를 비활성 상태로 같은 계층에 잠시 붙인다.
+        // 엔티티 자체가 비활성이므로 렌더링·충돌 판정에는 아직 참여하지 않는다.
+        prepared.visible.isEnabled = false
+        prepared.collision.isEnabled = false
+        worldRoot.addChild(prepared.visible)
+        collisionParent.addChild(prepared.collision)
+        let layout = resolveIndoorLayout(in: prepared.visible, relativeTo: worldRoot)
+
+        // 2) 이 아래에는 await/throw가 없다. 화면, 콜리전, 포즈, 인터랙션과 퀘스트를
+        //    한 MainActor 실행 구간에서 커밋해 외부가 중간 상태를 관찰하지 못하게 한다.
+        app.npcClerk.enterIndoor(worldRoot: worldRoot,
+                                 indoorMap: prepared.visible,
+                                 kioskCenter: layout.kioskCenter)
+        app.restart()
+        app.posX = layout.spawn.x
+        app.posZ = layout.spawn.y
+        app.heading = layout.heading
+        app.collisionShapes = prepared.collisionShapeCount
+
+        im.scene = .indoor
+        im.visibleMap = prepared.visible
+        im.collisionMap = prepared.collision
+        im.triggers = [ProximityTrigger(
+            id: "kiosk.order",
+            center: layout.kioskCenter,
+            radius: InteractionTuning.kioskTriggerRadius,
+            kind: .kioskScreen,
+            prompt: InteractionTuning.kioskTitle)]
+        im.activeTrigger = nil
+        im.dismissedTriggerID = nil
+        im.transitionError = nil
+        im.kioskTooHighShown = false
+        im.panelEntity?.isEnabled = false
+        im.kioskPanelEntity?.isEnabled = false
+
+        oldVisible.isEnabled = false
+        oldCollision.isEnabled = false
+        prepared.visible.isEnabled = true
+        prepared.collision.isEnabled = true
+        oldVisible.removeFromParent()
+        oldCollision.removeFromParent()
+
+        QuestModel.shared.advance(on: .enteredIndoor)
+    }
+
+    /// 모든 실패 가능 작업을 현재 장면과 분리된 엔티티에서 끝낸다.
+    private static func prepareIndoorScene() async throws -> PreparedIndoorScene {
+        let visible = try await Entity(named: "Indoor", in: realityKitContentBundle)
+        try Task.checkCancellation()
+        ImmersiveView.stripPhysics(visible)
+        brighten(visible)
+
+        let collision = try await Entity(named: "Indoor", in: realityKitContentBundle)
+        try Task.checkCancellation()
+        ImmersiveView.stripPhysics(collision)
+        let collisionShapeCount = await ImmersiveView.addStaticCollision(collision)
+        try Task.checkCancellation()
+        collision.components.set(OpacityComponent(opacity: 0))
+
+        // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
+        // debugFloorCollision이 바닥을 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
+        return PreparedIndoorScene(visible: visible,
+                                   collision: collision,
+                                   collisionShapeCount: collisionShapeCount)
+    }
+
+    /// 비활성 상태로 worldRoot에 연결된 Indoor 엔티티에서 트리거와 스폰 포즈를 계산한다.
+    private static func resolveIndoorLayout(in indoorVisible: Entity,
+                                            relativeTo worldRoot: Entity) -> IndoorLayout {
         var kioskCenter = InteractionTuning.kioskFallbackCenter
         if let kiosk = indoorVisible.findEntity(named: "Kiosk") {
-            // 트리거 중심은 엔티티 원점(pivot)이 아니라 '보이는 메시의 중심'(visualBounds)으로.
-            // 메시가 pivot에서 벗어나 있으면 원점과 실제 키오스크 위치가 다르다.
-            let b = kiosk.visualBounds(relativeTo: worldRoot)
-            kioskCenter = SIMD2(b.center.x, b.center.z)
-            print("키오스크 트리거 등록: (\(b.center.x), \(b.center.z))")
+            let bounds = kiosk.visualBounds(relativeTo: worldRoot)
+            kioskCenter = SIMD2(bounds.center.x, bounds.center.z)
+            print("키오스크 트리거 등록: (\(bounds.center.x), \(bounds.center.z))")
         } else {
             print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
         }
 
-        // 5) 포즈 리셋: DOOR1에서 Kiosk로 향하는 방향을 이용해 실제 문 안쪽에 스폰한다.
-        //    이전 고정값 (0, 4)는 BarTable의 직원 구역과 겹쳐 NPC가 즉시 반응했다.
         var spawn = SIMD2<Float>(InteractionTuning.indoorSpawnX,
                                  InteractionTuning.indoorSpawnZ)
         var heading = InteractionTuning.indoorSpawnHeading
@@ -90,33 +164,7 @@ enum SceneSwitcher {
         } else {
             print("⚠️ Indoor DOOR1을 찾지 못해 스폰 폴백 사용: \(spawn)")
         }
-        app.restart()
-        app.posX = spawn.x
-        app.posZ = spawn.y
-        app.heading = heading
-
-        // 6) 인터랙션 상태 전환: 실내에는 키오스크 트리거를 등록한다.
-        im.scene = .indoor
-        im.triggers = [ProximityTrigger(
-            id: "kiosk.order",
-            center: kioskCenter,
-            radius: InteractionTuning.kioskTriggerRadius,
-            kind: .kioskScreen,
-            prompt: InteractionTuning.kioskTitle)]
-        im.activeTrigger = nil
-        im.dismissedTriggerID = nil
-        im.transitionError = nil
-        im.kioskTooHighShown = false
-        im.panelEntity?.isEnabled = false
-        im.kioskPanelEntity?.isEnabled = false
-
-        // 7) 점원 프로토타입 배치: Human/AreaK/BarTable marker와 애니메이션 씬을 연결한다.
-        await app.npcClerk.enterIndoor(worldRoot: worldRoot,
-                                       indoorMap: indoorVisible,
-                                       kioskCenter: kioskCenter)
-
-        // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
-        QuestModel.shared.advance(on: .enteredIndoor)
+        return IndoorLayout(kioskCenter: kioskCenter, spawn: spawn, heading: heading)
     }
 
     /// Indoor 프로토타입의 검정 벽 임시 보정: 모든 메시를 밝은 단색으로 덮어쓴다.

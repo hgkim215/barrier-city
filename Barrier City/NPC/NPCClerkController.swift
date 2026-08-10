@@ -132,7 +132,7 @@ final class NPCClerkController {
     /// Indoor의 authoring marker(BarTable/Human/AreaK)로 동선과 계산대 위치를 구성한다.
     func enterIndoor(worldRoot: Entity,
                      indoorMap: Entity,
-                     kioskCenter: SIMD2<Float>) async {
+                     kioskCenter: SIMD2<Float>) {
         greetingTask?.cancel()
         animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
