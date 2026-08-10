@@ -87,18 +87,19 @@ final class RealtimeAudioIO {
             isPlayerAttached = true
         }
 
-        input.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) {
-            [inputLevelSampler] buffer, _ in
-            if let level = inputLevelSampler.consume(buffer) {
-                onInputLevel(level)
-            }
-            guard let data = Self.convertInput(
-                buffer,
-                using: converter,
-                outputFormat: streamFormat
-            ), !data.isEmpty else { return }
-            onInput(data)
-        }
+        let inputTap = Self.makeInputTap(
+            converter: converter,
+            streamFormat: streamFormat,
+            levelSampler: inputLevelSampler,
+            onInput: onInput,
+            onInputLevel: onInputLevel
+        )
+        input.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: inputFormat,
+            block: inputTap
+        )
         isInputTapInstalled = true
 
         engine.prepare()
@@ -202,6 +203,29 @@ final class RealtimeAudioIO {
             bytes: samples,
             count: Int(output.frameLength) * MemoryLayout<Int16>.size
         )
+    }
+
+    /// 프로젝트의 기본 격리가 MainActor이므로 start() 안에서 tap 클로저를 만들면
+    /// CoreAudio가 백그라운드 큐에서 진입하는 순간 dispatch queue assertion이 발생한다.
+    /// 클로저 생성 자체를 nonisolated 함수로 옮겨 실행자 요구가 없는 콜백을 만든다.
+    nonisolated private static func makeInputTap(
+        converter: AVAudioConverter,
+        streamFormat: AVAudioFormat,
+        levelSampler: MicrophoneLevelSampler,
+        onInput: @escaping @Sendable (Data) -> Void,
+        onInputLevel: @escaping @Sendable (Float) -> Void
+    ) -> AVAudioNodeTapBlock {
+        { buffer, _ in
+            if let level = levelSampler.consume(buffer) {
+                onInputLevel(level)
+            }
+            guard let data = convertInput(
+                buffer,
+                using: converter,
+                outputFormat: streamFormat
+            ), !data.isEmpty else { return }
+            onInput(data)
+        }
     }
 
     private static func makePlaybackBuffer(

@@ -15,7 +15,7 @@ import DialogueKitOpenAI
 
 // AVAudioPlayer는 강참조로 살려둬야 재생이 끊기지 않음 → 보관 객체.
 @MainActor
-final class AudioBox: NSObject, @preconcurrency AVAudioPlayerDelegate {
+final class AudioBox: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private var hasAudioSessionClaim = false
 
@@ -35,12 +35,12 @@ final class AudioBox: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        finishPlayback()
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor [weak self] in self?.finishPlayback() }
     }
 
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        finishPlayback()
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Task { @MainActor [weak self] in self?.finishPlayback() }
     }
 
     private func finishPlayback() {

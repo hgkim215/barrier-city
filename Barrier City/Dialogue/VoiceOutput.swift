@@ -159,8 +159,9 @@ final class VoiceOutput {
     }
 }
 
-// 재생 완료를 async로 잇기 위한 델리게이트(강참조로 유지).
-final class PlayerDoneDelegate: NSObject, AVAudioPlayerDelegate {
+// AVFoundation은 완료 델리게이트를 임의의 큐에서 호출할 수 있다. 델리게이트 진입점은
+// nonisolated로 두고, 실제 VoiceOutput 상태 변경만 MainActor로 전달한다.
+nonisolated final class PlayerDoneDelegate: NSObject, AVAudioPlayerDelegate {
     private let onDone: @MainActor @Sendable () -> Void
     init(onDone: @escaping @MainActor @Sendable () -> Void) { self.onDone = onDone }
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -171,7 +172,7 @@ final class PlayerDoneDelegate: NSObject, AVAudioPlayerDelegate {
     }
 }
 
-final class SynthDoneDelegate: NSObject, AVSpeechSynthesizerDelegate {
+nonisolated final class SynthDoneDelegate: NSObject, AVSpeechSynthesizerDelegate {
     private let onDone: @MainActor @Sendable () -> Void
     init(onDone: @escaping @MainActor @Sendable () -> Void) { self.onDone = onDone }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {

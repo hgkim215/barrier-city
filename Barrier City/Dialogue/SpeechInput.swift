@@ -46,9 +46,7 @@ final class SpeechInput {
 
     /// 음성인식 + 마이크 권한 요청
     func requestPermission() async -> Bool {
-        let speech = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
-            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) }
-        }
+        let speech = await SpeechCallbackBridge.requestAuthorization()
         let mic = await AVAudioApplication.requestRecordPermission()
         return speech && mic
     }
@@ -96,13 +94,17 @@ final class SpeechInput {
                 self?.inputLevel = level
             }
         }
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) {
-            [weak req, inputLevelSampler, levelContinuation = inputLevels.continuation] buffer, _ in
-            req?.append(buffer)
-            if let level = inputLevelSampler.consume(buffer) {
-                levelContinuation.yield(level)
-            }
-        }
+        let inputTap = SpeechCallbackBridge.makeInputTap(
+            request: req,
+            levelSampler: inputLevelSampler,
+            levelContinuation: inputLevels.continuation
+        )
+        input.installTap(
+            onBus: 0,
+            bufferSize: 1024,
+            format: format,
+            block: inputTap
+        )
         isInputTapInstalled = true
         engine.prepare()
         do {
@@ -117,20 +119,16 @@ final class SpeechInput {
         }
         isRecording = true
 
-        task = recognizer.recognitionTask(with: req) { [weak self] result, _ in
-            guard let result else { return }
-            let text = result.bestTranscription.formattedString
-            Task { @MainActor [weak self] in
-                self?.partialText = text
-            }
+        let recognitionHandler = SpeechCallbackBridge.makeLiveRecognitionHandler {
+            [weak self] text in
+            self?.partialText = text
         }
+        task = recognizer.recognitionTask(with: req, resultHandler: recognitionHandler)
     }
 
     /// 음성인식 권한만 요청(파일 인식은 마이크 불필요).
     func requestSpeechAuth() async -> Bool {
-        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
-            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) }
-        }
+        await SpeechCallbackBridge.requestAuthorization()
     }
 
     /// 오디오 파일을 STT로 인식 — 시뮬레이터에서도 동작(마이크 불필요).
@@ -141,15 +139,9 @@ final class SpeechInput {
         let req = SFSpeechURLRecognitionRequest(url: url)
         req.shouldReportPartialResults = false
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
-            var resumed = false
-            recognizer.recognitionTask(with: req) { result, error in
-                if resumed { return }
-                if let error { resumed = true; cont.resume(throwing: error); return }
-                if let result, result.isFinal {
-                    resumed = true
-                    cont.resume(returning: result.bestTranscription.formattedString)
-                }
-            }
+            let completion = SpeechFileRecognitionCompletion(continuation: cont)
+            let handler = SpeechCallbackBridge.makeFileRecognitionHandler(completion: completion)
+            recognizer.recognitionTask(with: req, resultHandler: handler)
         }
     }
 
@@ -186,5 +178,78 @@ final class SpeechInput {
         inputLevelTask = nil
         inputLevelSampler.reset()
         inputLevel = 0
+    }
+}
+
+/// Speech/AVFoundation 콜백은 시스템 작업 큐에서 호출된다. 프로젝트의 기본 MainActor
+/// 격리를 상속하지 않도록 모든 콜백 클로저를 이 nonisolated 경계에서 생성한다.
+private nonisolated enum SpeechCallbackBridge {
+    static func requestAuthorization() async -> Bool {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+    }
+
+    static func makeInputTap(
+        request: SFSpeechAudioBufferRecognitionRequest,
+        levelSampler: MicrophoneLevelSampler,
+        levelContinuation: AsyncStream<Float>.Continuation
+    ) -> AVAudioNodeTapBlock {
+        { [weak request] buffer, _ in
+            request?.append(buffer)
+            if let level = levelSampler.consume(buffer) {
+                levelContinuation.yield(level)
+            }
+        }
+    }
+
+    static func makeLiveRecognitionHandler(
+        onText: @escaping @MainActor @Sendable (String) -> Void
+    ) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
+        { result, _ in
+            guard let result else { return }
+            let text = result.bestTranscription.formattedString
+            Task { @MainActor in onText(text) }
+        }
+    }
+
+    static func makeFileRecognitionHandler(
+        completion: SpeechFileRecognitionCompletion
+    ) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
+        { result, error in
+            if let error {
+                completion.resume(throwing: error)
+            } else if let result, result.isFinal {
+                completion.resume(returning: result.bestTranscription.formattedString)
+            }
+        }
+    }
+}
+
+/// Speech가 결과/오류 콜백을 중복 호출해도 continuation은 정확히 한 번만 완료한다.
+private nonisolated final class SpeechFileRecognitionCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<String, Error>?
+
+    init(continuation: CheckedContinuation<String, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning text: String) {
+        takeContinuation()?.resume(returning: text)
+    }
+
+    func resume(throwing error: Error) {
+        takeContinuation()?.resume(throwing: error)
+    }
+
+    private func takeContinuation() -> CheckedContinuation<String, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        let result = continuation
+        continuation = nil
+        return result
     }
 }
