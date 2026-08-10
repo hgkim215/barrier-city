@@ -74,7 +74,14 @@ public actor RealtimeWebSocketClient {
 
     public func send(_ data: Data) async throws {
         guard let socket else { throw RealtimeClientError.notConnected }
-        try await socket.send(.data(data))
+        try await socket.send(.string(try Self.outboundText(from: data)))
+    }
+
+    static func outboundText(from data: Data) throws -> String {
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw RealtimeClientError.invalidEvent
+        }
+        return text
     }
 
     public func disconnect() {

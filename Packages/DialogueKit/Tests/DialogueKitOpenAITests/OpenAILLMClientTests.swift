@@ -142,6 +142,23 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
 
+    func test_realtimeClient_convertsJSONEventToWebSocketTextPayload() throws {
+        let data = try RealtimeClientEvent.createResponse(instructions: "자연스럽게 응답해.")
+
+        let text = try RealtimeWebSocketClient.outboundText(from: data)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+        )
+
+        XCTAssertEqual(object["type"] as? String, "response.create")
+    }
+
+    func test_realtimeClient_rejectsNonUTF8WebSocketPayload() {
+        XCTAssertThrowsError(
+            try RealtimeWebSocketClient.outboundText(from: Data([0xFF, 0xFE]))
+        )
+    }
+
     func test_realtimeTruncation_preservesPlaybackPosition() throws {
         let data = try RealtimeClientEvent.truncateAudio(
             itemID: "item-9",
