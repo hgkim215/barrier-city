@@ -38,6 +38,11 @@ public actor DialogueOrchestrator {
         isTakingOrder = false
     }
 
+    /// 응답 없는 만남도 다음 대화의 태도에 반영되도록 관계 상태에 감점을 누적한다.
+    public func applyInactivityPenalty(_ amount: Float = 0.1) {
+        climate.applyInactivityPenalty(amount)
+    }
+
     public func handle(utterance: String, history: [Message],
                        onSentence: @Sendable (String) -> Void = { _ in }) async -> TurnResult {
         // 1) 입력 가드

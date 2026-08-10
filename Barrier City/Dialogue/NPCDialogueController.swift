@@ -25,6 +25,7 @@ final class NPCDialogueController {
         static let maximumUtteranceDuration: TimeInterval = 30
         static let pollingInterval = Duration.milliseconds(120)
         static let maximumTurns = 14
+        static let inactivityRapportPenalty: Float = 0.1
         static let inactivityFarewell = "필요하시면 다시 불러 주세요."
         static let turnLimitFarewell = "잠깐 일 좀 보고 올게요. 더 필요하시면 다시 불러 주세요."
     }
@@ -64,6 +65,7 @@ final class NPCDialogueController {
     private var automaticConversationTask: Task<Void, Never>?
     private var realtimeSession: RealtimeNPCConversationSession?
     private var realtimeCommandTask: Task<Void, Never>?
+    private var realtimeResponseTimeoutTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
@@ -195,6 +197,8 @@ final class NPCDialogueController {
         automaticConversationTask = nil
         realtimeCommandTask?.cancel()
         realtimeCommandTask = nil
+        realtimeResponseTimeoutTask?.cancel()
+        realtimeResponseTimeoutTask = nil
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
@@ -321,6 +325,7 @@ final class NPCDialogueController {
                 }
 
             case .timedOut:
+                await applyInactivityPenalty()
                 await finishAutomaticEncounter(
                     farewell: AutomaticConversationTuning.inactivityFarewell)
                 return
@@ -432,6 +437,8 @@ final class NPCDialogueController {
         lastMissionEvent = nil
         realtimeLiveText = ""
         realtimeMission.reset()
+        realtimeResponseTimeoutTask?.cancel()
+        realtimeResponseTimeoutTask = nil
         userText = ""
         npcSubtitle = "연결 중..."
         status = .thinking
@@ -473,6 +480,8 @@ final class NPCDialogueController {
             break
 
         case .speechStarted:
+            realtimeResponseTimeoutTask?.cancel()
+            realtimeResponseTimeoutTask = nil
             realtimeLiveText = ""
             userText = ""
             status = .listening
@@ -530,6 +539,7 @@ final class NPCDialogueController {
                 }
             }
             status = .listening
+            armRealtimeResponseTimeout()
 
         case .failure(let message):
             cancelEncounter()
@@ -544,6 +554,44 @@ final class NPCDialogueController {
         guard let task = cleanupTask else { return }
         await task.value
         if cleanupGeneration == generation { cleanupTask = nil }
+    }
+
+    /// Realtime API의 서버 VAD에는 "아예 말하지 않음" 이벤트가 없으므로 NPC 응답이
+    /// 끝난 시점부터 별도 타이머를 건다. 사용자가 발화를 시작하면 즉시 취소한다.
+    private func armRealtimeResponseTimeout() {
+        realtimeResponseTimeoutTask?.cancel()
+        realtimeResponseTimeoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(
+                    for: .seconds(AutomaticConversationTuning.responseTimeout))
+            } catch {
+                return
+            }
+            guard let self,
+                  self.isEncounterActive,
+                  self.realtimeSession != nil,
+                  self.status == .listening else { return }
+            self.realtimeResponseTimeoutTask = nil
+            await self.finishRealtimeEncounterForInactivity()
+        }
+    }
+
+    private func finishRealtimeEncounterForInactivity() async {
+        guard isEncounterActive else { return }
+        await applyInactivityPenalty()
+        guard isEncounterActive, !Task.isCancelled else { return }
+        npcSubtitle = AutomaticConversationTuning.inactivityFarewell
+        requestAnimation(.idle)
+        cancelEncounter()
+        status = .idle
+        publishMissionEvent(.exited)
+    }
+
+    private func applyInactivityPenalty() async {
+        await orchestrator.applyInactivityPenalty(
+            AutomaticConversationTuning.inactivityRapportPenalty)
+        rapport = await orchestrator.climate.rapport
+        tone = await orchestrator.climate.tone
     }
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
