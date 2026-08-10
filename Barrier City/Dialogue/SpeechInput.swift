@@ -51,10 +51,12 @@ final class SpeechInput {
     /// push-to-talk 시작 — 누르고 있는 동안 부분 결과가 partialText로 흐른다.
     func start() async throws {
 #if targetEnvironment(simulator)
-        // visionOS Simulator에는 안정적인 라이브 마이크 입력이 없다. AVAudioEngine을
-        // 시작하면 0채널 포맷/빈 버퍼 경고가 발생하므로 오디오 세션 구성 전에 중단한다.
-        throw STTError.inputUnavailable
-#else
+        // 기본값은 안전하게 차단하고, 개발 패널에서 명시적으로 켠 경우에만 Mac의
+        // 마이크 입력을 시도한다. 실제 입력 가능 여부는 아래 포맷 검사에서 다시 확인한다.
+        guard DevelopmentOptions.simulatorMicrophoneEnabled else {
+            throw STTError.inputUnavailable
+        }
+#endif
         guard await requestPermission() else { throw STTError.notAuthorized }
         guard let recognizer, recognizer.isAvailable else { throw STTError.recognizerUnavailable }
 
@@ -97,7 +99,6 @@ final class SpeechInput {
             guard let self, let result else { return }
             self.partialText = result.bestTranscription.formattedString
         }
-#endif
     }
 
     /// 음성인식 권한만 요청(파일 인식은 마이크 불필요).

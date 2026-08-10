@@ -49,8 +49,10 @@ final class RealtimeAudioIO {
     /// 즉시 비동기 큐/스트림으로 넘기고 콜백 안에서 네트워크를 기다리면 안 된다.
     func start(onInput: @escaping @Sendable (Data) -> Void) async throws {
 #if targetEnvironment(simulator)
-        throw AudioError.simulatorUnavailable
-#else
+        guard DevelopmentOptions.simulatorMicrophoneEnabled else {
+            throw AudioError.simulatorUnavailable
+        }
+#endif
         guard !isRunning else { return }
         guard await AVAudioApplication.requestRecordPermission() else {
             throw AudioError.permissionDenied
@@ -103,7 +105,6 @@ final class RealtimeAudioIO {
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             throw error
         }
-#endif
     }
 
     /// 서버가 보낸 little-endian PCM16 mono/24kHz chunk를 순서대로 재생한다.

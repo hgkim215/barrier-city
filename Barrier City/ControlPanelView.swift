@@ -10,6 +10,8 @@ struct ControlPanelView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
     @State private var isImmersiveTransitioning = false
     @State private var immersiveError: String?
+    @AppStorage(DevelopmentOptions.simulatorMicrophoneKey)
+    private var simulatorMicrophoneEnabled = false
 
     var body: some View {
         ScrollView {
@@ -140,6 +142,23 @@ struct ControlPanelView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
+
+#if targetEnvironment(simulator)
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $simulatorMicrophoneEnabled) {
+                    Label("개발: Mac 마이크로 NPC 대화", systemImage: "mic.fill")
+                }
+                .toggleStyle(.switch)
+                .disabled(model.npcDialogue.isEncounterActive)
+
+                Text("다음 대화부터 Realtime 음성을 사용합니다. visionOS Simulator의 오디오 입력 상태에 따라 동작하지 않거나 CoreAudio 경고가 발생할 수 있습니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+#endif
 
             if model.isImmersive {
                 VStack(spacing: 8) {

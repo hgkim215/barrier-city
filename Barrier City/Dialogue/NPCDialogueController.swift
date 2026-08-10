@@ -135,7 +135,11 @@ final class NPCDialogueController {
     /// 마이크 열기/닫기까지 반복하므로 별도의 push-to-talk 버튼이 필요 없다.
     func startEncounter() async {
 #if targetEnvironment(simulator)
-        await startLegacyEncounter()
+        if DevelopmentOptions.simulatorMicrophoneEnabled {
+            await startRealtimeEncounter()
+        } else {
+            await startLegacyEncounter()
+        }
 #else
         await startRealtimeEncounter()
 #endif
@@ -407,7 +411,6 @@ final class NPCDialogueController {
 
     // MARK: - Realtime speech-to-speech conversation
 
-#if !targetEnvironment(simulator)
     private func startRealtimeEncounter() async {
         guard !isEncounterActive else { return }
         automaticConversationTask?.cancel()
@@ -558,7 +561,6 @@ final class NPCDialogueController {
         .init(name: "end_conversation",
               description: "Call only when the visitor clearly says they are leaving or ending the conversation."),
     ]
-#endif
 
     private func requestAnimation(_ cue: NPCAnimationCue) {
         animationSequence += 1
