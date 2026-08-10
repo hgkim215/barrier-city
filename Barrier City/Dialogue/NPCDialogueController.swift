@@ -63,7 +63,13 @@ final class NPCDialogueController {
         self.accessibilityAttitude = accessibilityAttitude
         rapport = accessibilityAttitude.initialRapport
         tone = SocialClimate(rapport: accessibilityAttitude.initialRapport).tone
+#if targetEnvironment(simulator)
+        // Simulator의 AVSpeech voice catalog가 손상된 메타데이터를 반환하는 경우가 있어
+        // 개발 환경에서는 프록시 TTS를 우선 사용한다.
+        voice = VoiceOutput(config: AppConfig.proxy, mode: .cloud)
+#else
         voice = VoiceOutput(config: AppConfig.proxy, mode: .lowLatency)
+#endif
         orchestrator = Self.makeOrchestrator(accessibilityAttitude: accessibilityAttitude)
     }
 
@@ -275,8 +281,23 @@ final class NPCDialogueController {
                     farewell: AutomaticConversationTuning.inactivityFarewell)
                 return
 
-            case .unavailable, .cancelled:
-                // 권한 거부/거리 이탈 때 반복해서 마이크를 열지 않는다.
+            case .unavailable:
+#if targetEnvironment(simulator)
+                // 시뮬레이터에서는 마이크를 재시도하지 않고 세션/위치 잠금은 유지한다.
+                // 개발용 텍스트 입력이나 거리 이탈로 명시적으로 대화를 진행/종료할 수 있다.
+                status = .idle
+                npcSubtitle = "시뮬레이터에서는 마이크 대신 개발용 텍스트 입력을 사용해 주세요."
+                automaticConversationTask = nil
+                return
+#else
+                isEncounterActive = false
+                automaticConversationTask = nil
+                publishMissionEvent(.exited)
+                return
+#endif
+
+            case .cancelled:
+                // 거리 이탈이나 명시적 취소 후에는 반복해서 마이크를 열지 않는다.
                 isEncounterActive = false
                 automaticConversationTask = nil
                 publishMissionEvent(.exited)

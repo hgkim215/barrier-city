@@ -18,11 +18,12 @@ import AVFoundation
 @Observable
 final class SpeechInput {
     enum STTError: LocalizedError {
-        case notAuthorized, recognizerUnavailable
+        case notAuthorized, recognizerUnavailable, inputUnavailable
         var errorDescription: String? {
             switch self {
             case .notAuthorized: return "마이크/음성인식 권한이 필요합니다."
             case .recognizerUnavailable: return "한국어 음성인식을 사용할 수 없습니다."
+            case .inputUnavailable: return "현재 환경에서는 마이크 입력을 사용할 수 없습니다."
             }
         }
     }
@@ -32,7 +33,8 @@ final class SpeechInput {
     private(set) var isRecording: Bool = false
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ko-KR"))
-    private let engine = AVAudioEngine()
+    /// Simulator에서는 생성 자체가 CoreAudio 채널 경고를 낼 수 있어 실제 녹음 시점까지 지연한다.
+    @ObservationIgnored private lazy var engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var isInputTapInstalled = false
@@ -48,6 +50,11 @@ final class SpeechInput {
 
     /// push-to-talk 시작 — 누르고 있는 동안 부분 결과가 partialText로 흐른다.
     func start() async throws {
+#if targetEnvironment(simulator)
+        // visionOS Simulator에는 안정적인 라이브 마이크 입력이 없다. AVAudioEngine을
+        // 시작하면 0채널 포맷/빈 버퍼 경고가 발생하므로 오디오 세션 구성 전에 중단한다.
+        throw STTError.inputUnavailable
+#else
         guard await requestPermission() else { throw STTError.notAuthorized }
         guard let recognizer, recognizer.isAvailable else { throw STTError.recognizerUnavailable }
 
@@ -65,6 +72,11 @@ final class SpeechInput {
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        guard format.channelCount > 0, format.sampleRate > 0 else {
+            self.request = nil
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw STTError.inputUnavailable
+        }
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buffer, _ in
             req?.append(buffer)
         }
@@ -85,6 +97,7 @@ final class SpeechInput {
             guard let self, let result else { return }
             self.partialText = result.bestTranscription.formattedString
         }
+#endif
     }
 
     /// 음성인식 권한만 요청(파일 인식은 마이크 불필요).

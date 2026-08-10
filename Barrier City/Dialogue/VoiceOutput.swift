@@ -18,7 +18,8 @@ final class VoiceOutput {
     private let config: ProxyConfig
     private let session: URLSession
     private let mode: VoiceMode
-    private let synth = AVSpeechSynthesizer()
+    /// Cloud 모드에서는 로컬 voice catalog를 전혀 열지 않도록 실제 폴백 시점까지 지연한다.
+    private lazy var synth = AVSpeechSynthesizer()
     private var player: AVAudioPlayer?
     private var playerDelegate: PlayerDoneDelegate?
     private var synthDelegate: SynthDoneDelegate?
@@ -42,7 +43,13 @@ final class VoiceOutput {
             let data = try await fetchTTS(trimmed)
             try await playData(data)
         } catch {
+#if targetEnvironment(simulator)
+            // Simulator의 AVSpeech voice 목록 오류를 다시 유발하지 않는다. 자막은 이미
+            // 표시됐으므로 네트워크 TTS 실패 시 무음으로 정상 복귀한다.
+            return
+#else
             await speakOnDevice(trimmed)   // 네트워크/재생 실패 → 온디바이스 폴백
+#endif
         }
     }
 

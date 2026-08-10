@@ -8,6 +8,7 @@ import simd
 ///  - 바닥/경사로/낮은 턱/기울기: 바퀴·캐스터 접지점에 down-ray로 높이를 읽어 옛 엔진 그대로.
 ///  - 벽(수직): 진행 방향 forward-ray 3발(몸체 박스 폭). 법선이 수직이면 막힘(경사로는 안 막음).
 /// 위치/자세는 모두 우리가 적분하고, worldRoot를 그 역(inverse)으로 배치(world-inverse 시야).
+@MainActor
 struct WheelchairMovementSystem: System {
 
     // 구동
@@ -83,7 +84,7 @@ struct WheelchairMovementSystem: System {
         guard dt > 0 else { return }
         let scene = context.scene
 
-        MainActor.assumeIsolated {
+        do {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
             model.tick += 1
 
