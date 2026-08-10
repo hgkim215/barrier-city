@@ -29,6 +29,8 @@ final class RealtimeNPCConversationSession {
     private var audioSendTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<Data>.Continuation?
     private var eventHandler: (@MainActor (Event) -> Void)?
+    private var currentOutputItem: (id: String, contentIndex: Int)?
+    private var interruptedOutputItemID: String?
 
     func start(
         instructions: String,
@@ -113,6 +115,8 @@ final class RealtimeNPCConversationSession {
         if let client { await client.disconnect() }
         client = nil
         eventHandler = nil
+        currentOutputItem = nil
+        interruptedOutputItemID = nil
     }
 
     private func handle(_ event: RealtimeServerEvent) {
@@ -120,7 +124,24 @@ final class RealtimeNPCConversationSession {
         case .sessionReady:
             eventHandler?(.sessionReady)
         case .speechStarted:
-            audio.interruptOutput()
+            let playedMilliseconds = audio.interruptOutput()
+            interruptedOutputItemID = currentOutputItem?.id
+            if let currentOutputItem, let playedMilliseconds, let client {
+                Task { @MainActor [weak self] in
+                    do {
+                        try await client.send(
+                            RealtimeClientEvent.truncateAudio(
+                                itemID: currentOutputItem.id,
+                                contentIndex: currentOutputItem.contentIndex,
+                                audioEndMilliseconds: playedMilliseconds
+                            )
+                        )
+                    } catch {
+                        self?.eventHandler?(.failure(error.localizedDescription))
+                    }
+                }
+            }
+            currentOutputItem = nil
             eventHandler?(.speechStarted)
         case .speechStopped:
             eventHandler?(.speechStopped)
@@ -128,8 +149,13 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.inputTranscriptDelta(text))
         case .inputTranscriptDone(let text):
             eventHandler?(.inputTranscriptDone(text))
-        case .outputAudio(let data):
-            audio.enqueueOutput(data)
+        case .outputAudio(let itemID, let contentIndex, let data):
+            guard itemID != interruptedOutputItemID else { return }
+            interruptedOutputItemID = nil
+            let beginsResponse = currentOutputItem?.id != itemID
+                || currentOutputItem?.contentIndex != contentIndex
+            currentOutputItem = (itemID, contentIndex)
+            audio.enqueueOutput(data, beginsResponse: beginsResponse)
         case .outputTranscriptDelta(let text):
             eventHandler?(.outputTranscriptDelta(text))
         case .outputTranscriptDone(let text):

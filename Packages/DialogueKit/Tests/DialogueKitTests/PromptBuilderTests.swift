@@ -75,4 +75,37 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertEqual(msgs[1].content, "m4")
         XCTAssertEqual(msgs.last?.content, "latest")
     }
+
+    func test_realtimeGuide_prioritizesNaturalConversationOverScripts() {
+        let guide = RealtimeConversationGuide().instructions(
+            persona: persona,
+            climate: SocialClimate(rapport: 0.1)
+        )
+
+        XCTAssertTrue(guide.contains("natural everyday Korean"))
+        XCTAssertTrue(guide.contains("Listen for meaning"))
+        XCTAssertTrue(guide.contains("not trigger words"))
+        XCTAssertTrue(guide.contains("Do not follow a fixed script"))
+        XCTAssertTrue(guide.contains("Accept interruptions, corrections, topic changes"))
+        XCTAssertTrue(guide.contains("After each answer, stop and wait"))
+    }
+
+    func test_realtimeGuide_keepsMissionTransitionsDeterministic() {
+        let ableist = NPCPersona(
+            id: "staff",
+            role: "cafe staff",
+            englishSystemBase: "You are busy.",
+            accessibilityAttitude: .ableist
+        )
+        let guide = RealtimeConversationGuide().instructions(
+            persona: ableist,
+            climate: SocialClimate(rapport: ableist.accessibilityAttitude.initialRapport)
+        )
+
+        XCTAssertTrue(guide.contains("Begin with an ableist assumption"))
+        XCTAssertTrue(guide.contains("instead of repeating a stock refusal"))
+        XCTAssertTrue(guide.contains("Call complete_order exactly once"))
+        XCTAssertTrue(guide.contains("never call it for silence"))
+        XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
+    }
 }

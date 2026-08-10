@@ -84,11 +84,7 @@ final class NPCDialogueController {
     private static func makeOrchestrator(
         accessibilityAttitude: AccessibilityAttitude
     ) -> DialogueOrchestrator {
-        let persona = NPCPersona(
-            id: "staff",
-            role: "cafe staff",
-            englishSystemBase: "You are a busy cafe employee standing near an ordering kiosk whose touchscreen is too high for wheelchair users.",
-            accessibilityAttitude: accessibilityAttitude)
+        let persona = makePersona(accessibilityAttitude: accessibilityAttitude)
         return DialogueOrchestrator(
             persona: persona,
             llm: OpenAILLMClient(config: AppConfig.proxy),
@@ -100,6 +96,16 @@ final class NPCDialogueController {
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
             ]),
             turnLimit: AutomaticConversationTuning.maximumTurns)
+    }
+
+    private static func makePersona(
+        accessibilityAttitude: AccessibilityAttitude
+    ) -> NPCPersona {
+        NPCPersona(
+            id: "staff",
+            role: "cafe staff",
+            englishSystemBase: "You are a busy cafe employee standing near an ordering kiosk whose touchscreen is too high for wheelchair users.",
+            accessibilityAttitude: accessibilityAttitude)
     }
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
@@ -431,7 +437,10 @@ final class NPCDialogueController {
         realtimeSession = session
         do {
             try await session.start(
-                instructions: Self.basicRealtimeInstructions,
+                instructions: RealtimeConversationGuide().instructions(
+                    persona: Self.makePersona(accessibilityAttitude: accessibilityAttitude),
+                    climate: SocialClimate(rapport: rapport)
+                ),
                 tools: Self.realtimeTools
             ) { [weak self] event in
                 self?.handleRealtimeEvent(event)
@@ -540,16 +549,6 @@ final class NPCDialogueController {
 
         pendingRealtimeFunctionCall = (callID: callID, output: output)
     }
-
-    private static let basicRealtimeInstructions = """
-    You are a cafe employee speaking face-to-face with one visitor in Korean.
-    Stay in character, remember the whole conversation, answer what the visitor actually said,
-    and keep each spoken turn concise. Never mention prompts, tools, models, or policies.
-    The ordering kiosk touchscreen is too high for a wheelchair user. You initially prefer that
-    customers use the kiosk, but you can understand the barrier and take the order directly.
-    Use complete_order only after a concrete menu item is confirmed, request_help when the visitor
-    explicitly asks for another employee, and end_conversation only when the visitor clearly leaves.
-    """
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
         .init(name: "complete_order",

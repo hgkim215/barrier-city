@@ -108,13 +108,16 @@ final class OpenAILLMClientTests: XCTestCase {
     func test_realtimeProtocol_parsesAudioAndFunctionEvents() throws {
         let audio = Data([0, 1, 2, 3])
         let audioEvent = Data(
-            #"{"type":"response.output_audio.delta","delta":"\#(audio.base64EncodedString())"}"#.utf8
+            #"{"type":"response.output_audio.delta","item_id":"item-1","content_index":0,"delta":"\#(audio.base64EncodedString())"}"#.utf8
         )
         let functionEvent = Data(
             #"{"type":"response.function_call_arguments.done","name":"complete_order","call_id":"call-1","arguments":"{}"}"#.utf8
         )
 
-        XCTAssertEqual(try RealtimeServerEvent.parse(audioEvent), .outputAudio(audio))
+        XCTAssertEqual(
+            try RealtimeServerEvent.parse(audioEvent),
+            .outputAudio(itemID: "item-1", contentIndex: 0, data: audio)
+        )
         XCTAssertEqual(
             try RealtimeServerEvent.parse(functionEvent),
             .functionCall(name: "complete_order", callID: "call-1", arguments: "{}")
@@ -137,5 +140,19 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(session["instructions"] as? String, "자연스럽게 대화해.")
         XCTAssertEqual(transcription["model"] as? String, "gpt-live-transcribe")
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
+    }
+
+    func test_realtimeTruncation_preservesPlaybackPosition() throws {
+        let data = try RealtimeClientEvent.truncateAudio(
+            itemID: "item-9",
+            contentIndex: 0,
+            audioEndMilliseconds: 1_250
+        )
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["type"] as? String, "conversation.item.truncate")
+        XCTAssertEqual(object["item_id"] as? String, "item-9")
+        XCTAssertEqual(object["content_index"] as? Int, 0)
+        XCTAssertEqual(object["audio_end_ms"] as? Int, 1_250)
     }
 }

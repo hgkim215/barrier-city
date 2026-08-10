@@ -41,6 +41,8 @@ final class RealtimeAudioIO {
     )!
     private var isInputTapInstalled = false
     private var isPlayerAttached = false
+    private var outputStartedAt: ContinuousClock.Instant?
+    private var receivedOutputFrames = 0
     private(set) var isRunning = false
 
     /// Audio I/O를 시작한다. 콜백은 Core Audio 스레드에서 호출되므로 전달받은 Data를
@@ -105,20 +107,38 @@ final class RealtimeAudioIO {
     }
 
     /// 서버가 보낸 little-endian PCM16 mono/24kHz chunk를 순서대로 재생한다.
-    func enqueueOutput(_ pcm16: Data) {
+    func enqueueOutput(_ pcm16: Data, beginsResponse: Bool) {
         guard isRunning,
               pcm16.count >= MemoryLayout<Int16>.size,
               let buffer = Self.makePlaybackBuffer(from: pcm16, format: playbackFormat) else {
             return
         }
+        if beginsResponse || outputStartedAt == nil {
+            outputStartedAt = .now
+            receivedOutputFrames = 0
+        }
+        receivedOutputFrames += Int(buffer.frameLength)
         player.scheduleBuffer(buffer)
         if !player.isPlaying { player.play() }
     }
 
     /// 사용자가 NPC 발화 중 끼어들면 아직 재생하지 않은 음성까지 즉시 버린다.
-    func interruptOutput() {
-        guard isPlayerAttached else { return }
+    func interruptOutput() -> Int? {
+        guard isPlayerAttached else { return nil }
+        let playedMilliseconds: Int?
+        if let outputStartedAt {
+            let elapsed = outputStartedAt.duration(to: .now)
+            let elapsedSeconds = Double(elapsed.components.seconds)
+                + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000_000
+            let receivedSeconds = Double(receivedOutputFrames) / Self.sampleRate
+            playedMilliseconds = Int(min(elapsedSeconds, receivedSeconds) * 1_000)
+        } else {
+            playedMilliseconds = nil
+        }
         player.stop()
+        outputStartedAt = nil
+        receivedOutputFrames = 0
+        return playedMilliseconds
     }
 
     func stop() {
@@ -130,6 +150,8 @@ final class RealtimeAudioIO {
         if isPlayerAttached { player.stop() }
         if engine.isRunning { engine.stop() }
         isRunning = false
+        outputStartedAt = nil
+        receivedOutputFrames = 0
         try? AVAudioSession.sharedInstance().setActive(
             false,
             options: .notifyOthersOnDeactivation
