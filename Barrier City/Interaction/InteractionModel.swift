@@ -136,6 +136,24 @@ final class InteractionModel {
         activeTrigger = nil
     }
 
+    /// 몰입 공간 종료 시 이전 RealityKit 장면과 구독을 더 이상 붙잡지 않는다.
+    /// 다음 진입은 `InteractionSetup.install`이 완전히 새로운 참조로 다시 구성한다.
+    func tearDown() {
+        updateSubscription?.cancel()
+        updateSubscription = nil
+        panelEntity = nil
+        kioskPanelEntity = nil
+        visibleMap = nil
+        collisionMap = nil
+        triggers = []
+        activeTrigger = nil
+        dismissedTriggerID = nil
+        isTransitioning = false
+        transitionError = nil
+        kioskTooHighShown = false
+        scene = .outdoor
+    }
+
     // MARK: - 순수 판정 로직
 
     /// 플레이어 위치와 트리거 목록으로 "어느 패널을 보여줄지"를 판정한다.

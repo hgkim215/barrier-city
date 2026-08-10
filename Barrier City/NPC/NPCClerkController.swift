@@ -115,6 +115,7 @@ final class NPCClerkController {
         locomotionRoot = nil
         baristaEntity = nil
         interactionBubble?.isEnabled = false
+        interactionBubble = nil
         isInteractionBubbleVisible = false
         isTalkAvailable = false
         phase = .unavailable

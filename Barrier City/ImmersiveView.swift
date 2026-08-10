@@ -203,6 +203,13 @@ struct ImmersiveView: View {
             model.npcClerk.resetForOutdoor()
             ImpactAudio.shared.stop()
             handTracker.stop(model: model)
+            QuestSetup.stop()
+            InteractionModel.shared.tearDown()
+            model.worldRoot = nil
+            model.characterBody = nil
+            if AppModel.current === model {
+                AppModel.current = nil
+            }
         }
         .task(id: model.useHandTracking) {
             // 창 토글을 몰입 공간 진입 뒤에 바꿔도 즉시 세션을 시작/종료한다.

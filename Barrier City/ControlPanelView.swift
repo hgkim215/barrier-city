@@ -295,7 +295,9 @@ struct ControlPanelView: View {
 
     @MainActor
     private func openImmersiveSpaceIfNeeded() async -> Bool {
-        if model.isImmersive || model.worldRoot != nil { return true }
+        // worldRoot는 RealityKit 장면의 구현 참조일 뿐 몰입 공간의 수명주기 상태가 아니다.
+        // 종료 콜백보다 늦게 정리되거나 이전 장면 참조가 남아 있어도 재오픈을 막지 않는다.
+        if model.isImmersive { return true }
 
         switch await openSpace(id: "wheelchair") {
         case .opened:

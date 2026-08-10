@@ -19,6 +19,7 @@ enum QuestSetup {
     static func install(content: RealityViewContent,
                         attachments: RealityViewAttachments,
                         appModel: AppModel) {
+        stop()
         // 재진입마다 1단계로 리셋(InteractionModel 리셋 패턴과 동일).
         QuestModel.shared.reset()
 
@@ -37,5 +38,15 @@ enum QuestSetup {
             guard let panel = hudPanel, let f = follower else { return }
             f.update(panel: panel, dt: Float(event.deltaTime))
         }
+    }
+
+    /// 몰입 공간과 함께 HUD 구독 및 독립 ARKit 세션을 종료한다.
+    static func stop() {
+        subscription?.cancel()
+        subscription = nil
+        follower?.stop()
+        follower = nil
+        hudPanel?.removeFromParent()
+        hudPanel = nil
     }
 }

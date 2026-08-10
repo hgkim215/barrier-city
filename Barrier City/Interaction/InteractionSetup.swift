@@ -23,7 +23,8 @@ enum InteractionSetup {
                         appModel: AppModel) {
         let im = InteractionModel.shared
 
-        // 0) 매 진입마다 Outdoor 초기 상태로 리셋.
+        // 0) 매 진입마다 주행과 Outdoor 인터랙션을 새 세션 상태로 리셋.
+        appModel.restart()
         //    InteractionModel은 싱글턴이라 '체험 종료' 후에도 상태가 남는다. 첫 입장에서
         //    scene이 .indoor가 된 채 재진입하면 switchToIndoor의 `scene == .outdoor` 가드가
         //    막혀 "예"를 눌러도 전환이 안 되던 버그를 방지한다.
