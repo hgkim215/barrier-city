@@ -7,17 +7,22 @@ struct NPCDialoguePanelView: View {
     let clerk: NPCClerkController
 
     var body: some View {
-        Group {
-            if showsTalkButton {
-                talkButton
-                    .transition(.scale(scale: 0.92).combined(with: .opacity))
-            } else {
-                subtitleBubble
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+        VStack(spacing: 10) {
+            RapportHeartGauge(rapport: controller.rapport)
+
+            Group {
+                if showsTalkButton {
+                    talkButton
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
+                } else {
+                    subtitleBubble
+                        .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
             }
         }
         .frame(width: 420)
         .animation(.easeInOut(duration: 0.2), value: controller.isEncounterActive)
+        .animation(.easeInOut(duration: 0.3), value: controller.rapport)
     }
 
     private var talkButton: some View {
@@ -99,5 +104,51 @@ struct NPCDialoguePanelView: View {
         case .thinking: "ellipsis.bubble.fill"
         case .idle: "bubble.left.fill"
         }
+    }
+}
+
+/// -1...1 관계 점수를 NPC 머리 위의 5칸 하트 게이지로 표시한다.
+private struct RapportHeartGauge: View {
+    let rapport: Float
+
+    private static let gaugeWidth: CGFloat = 132
+    private static let heartCount = 5
+
+    private var progress: CGFloat {
+        CGFloat(max(0, min(1, (rapport + 1) * 0.5)))
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("호감도")
+                .font(.caption.bold())
+
+            ZStack(alignment: .leading) {
+                heartRow
+                    .foregroundStyle(.white.opacity(0.28))
+
+                heartRow
+                    .foregroundStyle(.pink)
+                    .frame(width: Self.gaugeWidth * progress, alignment: .leading)
+                    .clipped()
+            }
+            .frame(width: Self.gaugeWidth, height: 24, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .glassBackgroundEffect(in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("직원 호감도")
+        .accessibilityValue("\(Int((progress * 100).rounded()))퍼센트")
+    }
+
+    private var heartRow: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<Self.heartCount, id: \.self) { _ in
+                Image(systemName: "heart.fill")
+                    .frame(width: 22, height: 22)
+            }
+        }
+        .font(.title3)
     }
 }
