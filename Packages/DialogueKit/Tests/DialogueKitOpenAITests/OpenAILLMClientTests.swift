@@ -124,6 +124,14 @@ final class OpenAILLMClientTests: XCTestCase {
         )
     }
 
+    func test_realtimeProtocol_waitsForUpdatedSessionBeforeReportingReady() throws {
+        let created = try RealtimeServerEvent.parse(Data(#"{"type":"session.created"}"#.utf8))
+        let updated = try RealtimeServerEvent.parse(Data(#"{"type":"session.updated"}"#.utf8))
+
+        XCTAssertEqual(created, .sessionCreated)
+        XCTAssertEqual(updated, .sessionReady)
+    }
+
     func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
         let data = try RealtimeClientEvent.sessionUpdate(
             instructions: "자연스럽게 대화해.",

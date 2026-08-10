@@ -39,6 +39,7 @@ public struct RealtimeFunctionTool: Sendable, Equatable {
 }
 
 public enum RealtimeServerEvent: Sendable, Equatable {
+    case sessionCreated
     case sessionReady
     case speechStarted
     case speechStopped
@@ -59,7 +60,9 @@ public enum RealtimeServerEvent: Sendable, Equatable {
         }
 
         switch type {
-        case "session.created", "session.updated":
+        case "session.created":
+            return .sessionCreated
+        case "session.updated":
             return .sessionReady
         case "input_audio_buffer.speech_started":
             return .speechStarted

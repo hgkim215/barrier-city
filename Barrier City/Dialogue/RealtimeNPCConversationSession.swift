@@ -29,6 +29,7 @@ final class RealtimeNPCConversationSession {
     private var audioSendTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<Data>.Continuation?
     private var eventHandler: (@MainActor (Event) -> Void)?
+    private var sessionConfigurationContinuation: CheckedContinuation<Void, Error>?
     private var currentOutputItem: (id: String, contentIndex: Int)?
     private var interruptedOutputItemID: String?
 
@@ -57,8 +58,9 @@ final class RealtimeNPCConversationSession {
                         self.handle(event)
                     }
                 } catch is CancellationError {
-                    // 정상 종료
+                    self.resumeSessionConfiguration(throwing: CancellationError())
                 } catch {
+                    self.resumeSessionConfiguration(throwing: error)
                     self.eventHandler?(.failure(error.localizedDescription))
                 }
             }
@@ -76,18 +78,20 @@ final class RealtimeNPCConversationSession {
                 }
             }
 
+            try await configureSession(
+                client,
+                instructions: instructions,
+                tools: tools
+            )
             try await audio.start { chunk in
                 audioStream.continuation.yield(chunk)
             }
             try await client.send(
-                RealtimeClientEvent.sessionUpdate(
-                    instructions: instructions,
-                    tools: tools
-                )
-            )
-            try await client.send(
                 RealtimeClientEvent.createResponse(
-                    instructions: "Greet the visitor naturally and briefly, then wait for their reply."
+                    instructions: """
+                    Respond ONLY in Korean. Briefly greet the visitor in natural spoken Korean,
+                    then stop and wait for their reply. Do not use any English words.
+                    """
                 )
             )
         } catch {
@@ -105,6 +109,7 @@ final class RealtimeNPCConversationSession {
     }
 
     func stop() async {
+        resumeSessionConfiguration(throwing: CancellationError())
         audioContinuation?.finish()
         audioContinuation = nil
         audioSendTask?.cancel()
@@ -121,7 +126,10 @@ final class RealtimeNPCConversationSession {
 
     private func handle(_ event: RealtimeServerEvent) {
         switch event {
+        case .sessionCreated:
+            break
         case .sessionReady:
+            resumeSessionConfiguration()
             eventHandler?(.sessionReady)
         case .speechStarted:
             let playedMilliseconds = audio.interruptOutput()
@@ -165,9 +173,54 @@ final class RealtimeNPCConversationSession {
         case .responseDone:
             eventHandler?(.responseDone)
         case .error(let message):
+            resumeSessionConfiguration(
+                throwing: NSError(
+                    domain: "OpenAI.Realtime",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: message]
+                )
+            )
             eventHandler?(.failure(message))
         case .ignored:
             break
+        }
+    }
+
+    private func configureSession(
+        _ client: RealtimeWebSocketClient,
+        instructions: String,
+        tools: [RealtimeFunctionTool]
+    ) async throws {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                sessionConfigurationContinuation = continuation
+                Task { @MainActor [weak self] in
+                    do {
+                        try await client.send(
+                            RealtimeClientEvent.sessionUpdate(
+                                instructions: instructions,
+                                tools: tools
+                            )
+                        )
+                    } catch {
+                        self?.resumeSessionConfiguration(throwing: error)
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.resumeSessionConfiguration(throwing: CancellationError())
+            }
+        }
+    }
+
+    private func resumeSessionConfiguration(throwing error: Error? = nil) {
+        guard let continuation = sessionConfigurationContinuation else { return }
+        sessionConfigurationContinuation = nil
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
         }
     }
 }

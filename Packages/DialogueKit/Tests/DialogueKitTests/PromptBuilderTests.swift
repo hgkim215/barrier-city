@@ -83,6 +83,9 @@ final class PromptBuilderTests: XCTestCase {
         )
 
         XCTAssertTrue(guide.contains("natural everyday Korean"))
+        XCTAssertTrue(guide.contains("Korean is the ONLY language"))
+        XCTAssertTrue(guide.contains("Never answer in English or switch languages"))
+        XCTAssertTrue(guide.contains("including the first greeting"))
         XCTAssertTrue(guide.contains("Listen for meaning"))
         XCTAssertTrue(guide.contains("not trigger words"))
         XCTAssertTrue(guide.contains("Do not follow a fixed script"))
