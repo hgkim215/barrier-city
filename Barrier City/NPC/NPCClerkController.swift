@@ -159,8 +159,8 @@ final class NPCClerkController {
         // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
         indoorMap.findEntity(named: "Human")?.isEnabled = false
 
-        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. 이 엔티티에
-        // Idle/Greet/Walk AnimationLibrary가 연결되어 있어 별도 테스트 씬이 필요 없다.
+        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle/Walk는
+        // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
         guard let barista = indoorMap.findEntity(named: "Barista") else {
             phase = .unavailable
             print("⚠️ Barista를 찾지 못함 — Indoor.usda의 Barista 엔티티 확인")
@@ -468,9 +468,9 @@ final class NPCClerkController {
             print("⚠️ NPC 애니메이션 '\(cue.rawValue)'을 찾지 못함 — 현재 키: \(availableAnimationNames)")
             return
         }
-        animationPlayback?.stop(blendOutDuration: 0.05)
+        animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
-        animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.10)
+        animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
         if cue == .greet, !allowsGreetingReplay { hasPlayedGreetingAnimation = true }
         lastPlayedAnimation = cue.rawValue
     }
