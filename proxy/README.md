@@ -7,8 +7,10 @@
 - `POST /chat` → `gpt-4o-mini`
 - `POST /tts` → `gpt-4o-mini-tts`
 - `POST /embeddings` → `text-embedding-3-small`
+- `POST /realtime-token` → `gpt-realtime-2.1` 단기 클라이언트 토큰
 
 그 외 경로·모델과 128KiB를 넘는 요청은 거절한다. OpenAI 키는 Worker Secret에만 저장한다.
+Realtime 토큰 경로는 모델·음성·VAD 구성을 Worker에서 고정하며 응답을 캐시하지 않는다.
 
 ## 사전 준비 (개발자 — 키/계정 필요)
 1. **OpenAI 키 발급:** platform.openai.com → Billing 활성화 → API keys → 프로젝트 전용 키 생성.
@@ -44,6 +46,11 @@ curl -N -X POST "$WORKER_URL/chat" -H "Content-Type: application/json" \
 # TTS 확인 (wav 바이트가 내려오면 성공)
 curl -X POST "$WORKER_URL/tts" -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini-tts","voice":"alloy","input":"안녕하세요","response_format":"wav"}' --output /tmp/tts.wav
+```
+
+```bash
+# 앱에는 장기 API 키 대신 수명이 짧은 value만 전달된다.
+curl -X POST "$WORKER_URL/realtime-token"
 ```
 
 ## 보안 메모

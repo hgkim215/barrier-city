@@ -3,6 +3,7 @@
 // 시크릿: OPENAI_API_KEY (wrangler secret put OPENAI_API_KEY) — 소스/앱에 저장하지 않는다.
 
 const MAX_BODY_BYTES = 128 * 1024;
+const REALTIME_MODEL = "gpt-realtime-2.1";
 
 const ROUTES = {
   "/chat": {
@@ -25,6 +26,52 @@ function jsonResponse(body, status) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+async function createRealtimeClientSecret(env) {
+  // 앱이 모델이나 세션 종류를 바꿔 프록시를 범용 OpenAI 게이트웨이로 쓰지 못하도록
+  // 세션의 민감한 기본값은 신뢰할 수 있는 Worker에서 고정한다.
+  const body = JSON.stringify({
+    session: {
+      type: "realtime",
+      model: REALTIME_MODEL,
+      output_modalities: ["audio"],
+      audio: {
+        input: {
+          format: { type: "audio/pcm", rate: 24000 },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "low",
+            create_response: true,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          format: { type: "audio/pcm" },
+          voice: "marin",
+        },
+      },
+    },
+  });
+
+  const upstream = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body,
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      "Content-Type": upstream.headers.get("Content-Type") || "application/json",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
     },
   });
 }
@@ -36,11 +83,16 @@ export default {
       return jsonResponse({ error: "POST only" }, 405);
     }
 
-    const route = ROUTES[url.pathname];
-    if (!route) return jsonResponse({ error: "Not found" }, 404);
     if (!env.OPENAI_API_KEY) {
       return jsonResponse({ error: "Server is not configured" }, 503);
     }
+
+    if (url.pathname === "/realtime-token") {
+      return createRealtimeClientSecret(env);
+    }
+
+    const route = ROUTES[url.pathname];
+    if (!route) return jsonResponse({ error: "Not found" }, 404);
 
     const contentType = request.headers.get("Content-Type") || "";
     if (!contentType.toLowerCase().startsWith("application/json")) {
