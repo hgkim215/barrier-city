@@ -43,6 +43,7 @@ final class RealtimeAudioIO {
     private var isPlayerAttached = false
     private var outputStartedAt: ContinuousClock.Instant?
     private var receivedOutputFrames = 0
+    private var hasAudioSessionClaim = false
     private(set) var isRunning = false
 
     /// Audio I/O를 시작한다. 콜백은 Core Audio 스레드에서 호출되므로 전달받은 Data를
@@ -58,14 +59,13 @@ final class RealtimeAudioIO {
             throw AudioError.permissionDenied
         }
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat)
-        try session.setActive(true)
+        try AudioSessionCoordinator.shared.acquire(.realtimeConversation)
+        hasAudioSessionClaim = true
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            releaseAudioSessionClaim()
             throw AudioError.inputUnavailable
         }
         guard let streamFormat = AVAudioFormat(
@@ -74,7 +74,7 @@ final class RealtimeAudioIO {
             channels: 1,
             interleaved: false
         ), let converter = AVAudioConverter(from: inputFormat, to: streamFormat) else {
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            releaseAudioSessionClaim()
             throw AudioError.converterUnavailable
         }
 
@@ -102,7 +102,7 @@ final class RealtimeAudioIO {
         } catch {
             input.removeTap(onBus: 0)
             isInputTapInstalled = false
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            releaseAudioSessionClaim()
             throw error
         }
     }
@@ -143,7 +143,7 @@ final class RealtimeAudioIO {
     }
 
     func stop() {
-        guard isRunning || isInputTapInstalled else { return }
+        guard isRunning || isInputTapInstalled || hasAudioSessionClaim else { return }
         if isInputTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             isInputTapInstalled = false
@@ -153,10 +153,13 @@ final class RealtimeAudioIO {
         isRunning = false
         outputStartedAt = nil
         receivedOutputFrames = 0
-        try? AVAudioSession.sharedInstance().setActive(
-            false,
-            options: .notifyOthersOnDeactivation
-        )
+        releaseAudioSessionClaim()
+    }
+
+    private func releaseAudioSessionClaim() {
+        guard hasAudioSessionClaim else { return }
+        hasAudioSessionClaim = false
+        AudioSessionCoordinator.shared.release(.realtimeConversation)
     }
 
     private static func convertInput(

@@ -38,6 +38,7 @@ final class SpeechInput {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var isInputTapInstalled = false
+    private var hasAudioSessionClaim = false
 
     /// 음성인식 + 마이크 권한 요청
     func requestPermission() async -> Bool {
@@ -68,15 +69,14 @@ final class SpeechInput {
         }
         self.request = req
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try AudioSessionCoordinator.shared.acquire(.recording)
+        hasAudioSessionClaim = true
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.channelCount > 0, format.sampleRate > 0 else {
             self.request = nil
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            releaseAudioSessionClaim()
             throw STTError.inputUnavailable
         }
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buffer, _ in
@@ -90,7 +90,7 @@ final class SpeechInput {
             input.removeTap(onBus: 0)
             isInputTapInstalled = false
             self.request = nil
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            releaseAudioSessionClaim()
             throw error
         }
         isRecording = true
@@ -143,7 +143,13 @@ final class SpeechInput {
         task = nil
         request = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        releaseAudioSessionClaim()
         return partialText
+    }
+
+    private func releaseAudioSessionClaim() {
+        guard hasAudioSessionClaim else { return }
+        hasAudioSessionClaim = false
+        AudioSessionCoordinator.shared.release(.recording)
     }
 }

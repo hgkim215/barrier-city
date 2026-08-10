@@ -201,6 +201,7 @@ struct ImmersiveView: View {
         .onDisappear {
             model.isImmersive = false
             model.npcClerk.resetForOutdoor()
+            ImpactAudio.shared.stop()
             handTracker.stop(model: model)
         }
         .task(id: model.useHandTracking) {
