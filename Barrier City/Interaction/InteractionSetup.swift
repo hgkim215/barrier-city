@@ -98,10 +98,19 @@ enum InteractionSetup {
     private static func tick(deltaTime: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
-        if GuideFlowModel.shared.isInteractionLocked {
+        let guide = GuideFlowModel.shared
+        let isIndoor = im.scene == .indoor
+        let isMissionTwoActive = guide.phase == .missionActive(index: 1)
+
+        if guide.isInteractionLocked {
             im.activeTrigger = nil
             im.panelEntity?.isEnabled = false
-            im.kioskPanelEntity?.isEnabled = false
+            im.updateKioskContext(
+                isIndoor: isIndoor,
+                isNear: false,
+                isMissionTwoActive: false,
+                isGuideLocked: true)
+            updatePanel(im)
             app.npcClerk.setGuideInteractionLocked(true)
             return
         }
@@ -120,6 +129,20 @@ enum InteractionSetup {
             if im.activeTrigger == nil { im.transitionError = nil }   // 닫힐 때 안내 문구도 정리
             im.kioskTooHighShown = false   // 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋
         }
+        let isNearKiosk = im.activeTrigger?.kind == .kioskScreen
+        im.updateKioskContext(
+            isIndoor: isIndoor,
+            isNear: isNearKiosk,
+            isMissionTwoActive: isMissionTwoActive,
+            isGuideLocked: false)
+
+        if isIndoor,
+           im.kioskPanelEntity == nil,
+           isMissionTwoActive,
+           !im.kioskFailOpenSent {
+            im.kioskFailOpenSent = true
+            guide.handleQuestEvent(.kioskFailed)
+        }
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
     }
@@ -130,8 +153,15 @@ enum InteractionSetup {
         let trigger = im.activeTrigger
         showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
                       trigger: trigger, forwardOffset: 0)
-        showBillboard(im.kioskPanelEntity, active: trigger?.kind == .kioskScreen,
-                      trigger: trigger, forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+        if im.kioskUsesBillboardFallback {
+            showBillboard(
+                im.kioskPanelEntity,
+                active: im.kioskMenuVisible && trigger?.kind == .kioskScreen,
+                trigger: trigger,
+                forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+        } else {
+            im.kioskPanelEntity?.isEnabled = im.kioskMenuVisible
+        }
     }
 
     /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, forwardOffset만큼 사용자(세계 원점)

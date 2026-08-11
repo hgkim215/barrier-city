@@ -13,7 +13,7 @@ import simd
 import Observation
 
 /// 현재 배경 씬.
-enum GameScene {
+enum GameScene: Equatable {
     case outdoor
     case indoor
 }
@@ -121,6 +121,12 @@ final class InteractionModel {
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?
+    /// 실제 Screen 배치 성공 시 손 위치를 변환할 기준 Plane.
+    @ObservationIgnored var kioskScreenPlane: Entity?
+    /// Screen Plane의 로컬 반너비·반높이.
+    @ObservationIgnored var kioskScreenHalfSize = SIMD2<Float>.zero
+    /// true면 Screen 배치 실패로 기존 월드 빌보드 배치를 사용한다.
+    @ObservationIgnored var kioskUsesBillboardFallback = true
     /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
     /// 트리거 이탈/재진입 시 리셋.
     var kioskTooHighShown = false
@@ -211,10 +217,47 @@ final class InteractionModel {
         }
     }
 
+    func processKioskHandSample(
+        side: KioskHandSide,
+        worldPosition: SIMD3<Float>,
+        timestamp: TimeInterval,
+        isTracked: Bool
+    ) {
+        guard let plane = kioskScreenPlane else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        let localPosition = plane.convert(position: worldPosition, from: nil)
+        processKioskLocalHandSample(
+            side: side,
+            localPosition: localPosition,
+            timestamp: timestamp,
+            isTracked: isTracked,
+            halfWidth: kioskScreenHalfSize.x,
+            halfHeight: kioskScreenHalfSize.y)
+    }
+
+    func applyKioskScreenPlacement(_ placement: KioskScreenPlacement) {
+        switch placement {
+        case .attached(let plane, let halfSize):
+            kioskScreenPlane = plane
+            kioskScreenHalfSize = halfSize
+            kioskUsesBillboardFallback = false
+        case .billboardFallback:
+            kioskScreenPlane = nil
+            kioskScreenHalfSize = .zero
+            kioskUsesBillboardFallback = true
+        }
+        resetKioskReachDetectors()
+    }
+
     func resetKioskSession() {
         kioskState.reset()
         kioskTooHighShown = false
         kioskFailOpenSent = false
+        kioskScreenPlane = nil
+        kioskScreenHalfSize = .zero
+        kioskUsesBillboardFallback = true
         resetKioskReachDetectors()
     }
 

@@ -118,7 +118,23 @@ enum SceneSwitcher {
         im.transitionError = nil
         im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
-        im.kioskPanelEntity?.isEnabled = false
+        im.updateKioskContext(
+            isIndoor: true,
+            isNear: false,
+            isMissionTwoActive: false,
+            isGuideLocked: GuideFlowModel.shared.isInteractionLocked)
+
+        if let kioskPanel = im.kioskPanelEntity {
+            let placement = KioskScreenPresenter.install(
+                attachment: kioskPanel,
+                in: indoorVisible,
+                worldRoot: worldRoot)
+            im.applyKioskScreenPlacement(placement)
+            kioskPanel.isEnabled = !im.kioskUsesBillboardFallback
+        } else {
+            im.applyKioskScreenPlacement(.billboardFallback)
+            print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
+        }
 
         // 7) 점원 프로토타입 배치: Human/AreaK/BarTable marker와 애니메이션 씬을 연결한다.
         await app.npcClerk.enterIndoor(worldRoot: worldRoot,
