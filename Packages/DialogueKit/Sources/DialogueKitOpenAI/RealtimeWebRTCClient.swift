@@ -1,0 +1,342 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+@preconcurrency import LiveKitWebRTC
+
+/// OpenAI Realtime의 WebRTC 연결을 담당한다. 음성은 WebRTC 미디어 트랙으로,
+/// 세션 이벤트와 함수 호출은 `oai-events` 데이터 채널로 전달한다.
+public actor RealtimeWebRTCClient: RealtimeTransport {
+    public nonisolated let kind = RealtimeTransportKind.webRTC
+    public nonisolated let audioDelivery = RealtimeAudioDelivery.mediaTrack
+    public nonisolated let events: AsyncThrowingStream<RealtimeServerEvent, Error>
+    public private(set) var lastTokenRequestMilliseconds: Int?
+
+    private let secretProvider: RealtimeClientSecretProvider
+    private let session: URLSession
+    private let endpoint: URL
+    private let continuation: AsyncThrowingStream<RealtimeServerEvent, Error>.Continuation
+    private let delegateBridge = RealtimeWebRTCDelegateBridge()
+    private var factory: LKRTCPeerConnectionFactory?
+    private var peerConnection: LKRTCPeerConnection?
+    private var dataChannel: LKRTCDataChannel?
+    private var audioSource: LKRTCAudioSource?
+    private var audioTrack: LKRTCAudioTrack?
+    private static let sslInitialized = LKRTCInitializeSSL()
+
+    public init(
+        config: ProxyConfig,
+        session: URLSession = .shared,
+        endpoint: URL = URL(string: "https://api.openai.com/v1/realtime/calls")!
+    ) {
+        secretProvider = RealtimeClientSecretProvider(config: config, session: session)
+        self.session = session
+        self.endpoint = endpoint
+
+        var capturedContinuation: AsyncThrowingStream<RealtimeServerEvent, Error>.Continuation!
+        events = AsyncThrowingStream { capturedContinuation = $0 }
+        continuation = capturedContinuation
+    }
+
+    deinit {
+        dataChannel?.close()
+        peerConnection?.close()
+        continuation.finish()
+    }
+
+    public func connect() async throws {
+        guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }
+
+        let tokenStartedAt = ContinuousClock.now
+        let secret = try await secretProvider.fetch()
+        lastTokenRequestMilliseconds = Self.milliseconds(tokenStartedAt.duration(to: .now))
+        try Task.checkCancellation()
+
+        _ = Self.sslInitialized
+        let factory = LKRTCPeerConnectionFactory()
+        let configuration = LKRTCConfiguration()
+        configuration.sdpSemantics = .unifiedPlan
+        let constraints = LKRTCMediaConstraints(
+            mandatoryConstraints: nil,
+            optionalConstraints: ["DtlsSrtpKeyAgreement": "true"]
+        )
+        guard let peerConnection = factory.peerConnection(
+            with: configuration,
+            constraints: constraints,
+            delegate: delegateBridge
+        ) else {
+            throw RealtimeClientError.invalidResponse
+        }
+
+        let audioSource = factory.audioSource(with: constraints)
+        let audioTrack = factory.audioTrack(with: audioSource, trackId: "barrier-city-microphone")
+        guard peerConnection.add(audioTrack, streamIds: ["barrier-city-audio"]) != nil else {
+            peerConnection.close()
+            throw RealtimeClientError.invalidResponse
+        }
+
+        let channelConfiguration = LKRTCDataChannelConfiguration()
+        channelConfiguration.isOrdered = true
+        guard let dataChannel = peerConnection.dataChannel(
+            forLabel: "oai-events",
+            configuration: channelConfiguration
+        ) else {
+            peerConnection.close()
+            throw RealtimeClientError.channelUnavailable
+        }
+        dataChannel.delegate = delegateBridge
+
+        delegateBridge.onMessage = { [weak self] data in
+            Task { await self?.receive(data) }
+        }
+        delegateBridge.onChannelStateChange = { [weak self] in
+            Task { await self?.handleChannelStateChange() }
+        }
+        delegateBridge.onConnectionFailure = { [weak self] in
+            Task { await self?.finishWithConnectionFailure() }
+        }
+
+        self.factory = factory
+        self.peerConnection = peerConnection
+        self.dataChannel = dataChannel
+        self.audioSource = audioSource
+        self.audioTrack = audioTrack
+
+        do {
+            let offer = try await Self.createOffer(peerConnection, constraints: constraints)
+            try await Self.setLocalDescription(offer, on: peerConnection)
+            let answerSDP = try await exchangeSDP(offer.sdp, bearerToken: secret.value)
+            let answer = LKRTCSessionDescription(type: .answer, sdp: answerSDP)
+            try await Self.setRemoteDescription(answer, on: peerConnection)
+            try await waitForDataChannelOpen()
+        } catch {
+            await disconnect()
+            throw error
+        }
+    }
+
+    public func send(_ data: Data) async throws {
+        guard let dataChannel, dataChannel.readyState == .open else {
+            throw RealtimeClientError.notConnected
+        }
+        let buffer = LKRTCDataBuffer(data: data, isBinary: false)
+        guard dataChannel.sendData(buffer) else {
+            throw RealtimeClientError.channelUnavailable
+        }
+    }
+
+    public func disconnect() async {
+        delegateBridge.clearCallbacks()
+        dataChannel?.delegate = nil
+        dataChannel?.close()
+        peerConnection?.delegate = nil
+        peerConnection?.close()
+        dataChannel = nil
+        peerConnection = nil
+        audioTrack = nil
+        audioSource = nil
+        factory = nil
+        continuation.finish()
+    }
+
+    private func exchangeSDP(_ offer: String, bearerToken: String) async throws -> String {
+        let request = Self.makeSDPRequest(
+            endpoint: endpoint,
+            offer: offer,
+            bearerToken: bearerToken
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw RealtimeClientError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RealtimeClientError.httpStatus(http.statusCode)
+        }
+        guard let answer = String(data: data, encoding: .utf8), !answer.isEmpty else {
+            throw RealtimeClientError.invalidResponse
+        }
+        return answer
+    }
+
+    static func makeSDPRequest(
+        endpoint: URL,
+        offer: String,
+        bearerToken: String
+    ) -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/sdp", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(offer.utf8)
+        return request
+    }
+
+    private func waitForDataChannelOpen() async throws {
+        for _ in 0..<100 {
+            guard let dataChannel else { throw RealtimeClientError.notConnected }
+            if dataChannel.readyState == .open { return }
+            if dataChannel.readyState == .closed { throw RealtimeClientError.channelUnavailable }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        throw RealtimeClientError.channelUnavailable
+    }
+
+    private func receive(_ data: Data) {
+        do {
+            continuation.yield(try RealtimeServerEvent.parse(data))
+        } catch {
+            continuation.finish(throwing: error)
+        }
+    }
+
+    private func handleChannelStateChange() {
+        guard let dataChannel, dataChannel.readyState == .closed else { return }
+        continuation.finish()
+    }
+
+    private func finishWithConnectionFailure() {
+        continuation.finish(throwing: RealtimeClientError.notConnected)
+    }
+
+    private static func createOffer(
+        _ peerConnection: LKRTCPeerConnection,
+        constraints: LKRTCMediaConstraints
+    ) async throws -> LKRTCSessionDescription {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<LKRTCSessionDescription, Error>) in
+            peerConnection.offer(for: constraints) { description, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let description {
+                    continuation.resume(returning: description)
+                } else {
+                    continuation.resume(throwing: RealtimeClientError.invalidResponse)
+                }
+            }
+        }
+    }
+
+    private static func setLocalDescription(
+        _ description: LKRTCSessionDescription,
+        on peerConnection: LKRTCPeerConnection
+    ) async throws {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            peerConnection.setLocalDescription(description) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private static func setRemoteDescription(
+        _ description: LKRTCSessionDescription,
+        on peerConnection: LKRTCPeerConnection
+    ) async throws {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            peerConnection.setRemoteDescription(description) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private static func milliseconds(_ duration: Duration) -> Int {
+        let components = duration.components
+        let seconds = Double(components.seconds)
+        let fractionalSeconds = Double(components.attoseconds) / 1_000_000_000_000_000_000
+        return max(0, Int(((seconds + fractionalSeconds) * 1_000).rounded()))
+    }
+}
+
+private final class RealtimeWebRTCDelegateBridge: NSObject,
+    LKRTCPeerConnectionDelegate,
+    LKRTCDataChannelDelegate,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var messageHandler: (@Sendable (Data) -> Void)?
+    private var channelStateHandler: (@Sendable () -> Void)?
+    private var connectionFailureHandler: (@Sendable () -> Void)?
+
+    var onMessage: (@Sendable (Data) -> Void)? {
+        get { lock.withLock { messageHandler } }
+        set { lock.withLock { messageHandler = newValue } }
+    }
+
+    var onChannelStateChange: (@Sendable () -> Void)? {
+        get { lock.withLock { channelStateHandler } }
+        set { lock.withLock { channelStateHandler = newValue } }
+    }
+
+    var onConnectionFailure: (@Sendable () -> Void)? {
+        get { lock.withLock { connectionFailureHandler } }
+        set { lock.withLock { connectionFailureHandler = newValue } }
+    }
+
+    func clearCallbacks() {
+        lock.withLock {
+            messageHandler = nil
+            channelStateHandler = nil
+            connectionFailureHandler = nil
+        }
+    }
+
+    func dataChannelDidChangeState(_ dataChannel: LKRTCDataChannel) {
+        onChannelStateChange?()
+    }
+
+    func dataChannel(
+        _ dataChannel: LKRTCDataChannel,
+        didReceiveMessageWith buffer: LKRTCDataBuffer
+    ) {
+        onMessage?(buffer.data)
+    }
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didChange stateChanged: LKRTCSignalingState
+    ) {}
+
+    func peerConnection(_ peerConnection: LKRTCPeerConnection, didAdd stream: LKRTCMediaStream) {}
+    func peerConnection(_ peerConnection: LKRTCPeerConnection, didRemove stream: LKRTCMediaStream) {}
+    func peerConnectionShouldNegotiate(_ peerConnection: LKRTCPeerConnection) {}
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didChange newState: LKRTCIceConnectionState
+    ) {
+        if newState == .failed || newState == .closed {
+            onConnectionFailure?()
+        }
+    }
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didChange newState: LKRTCIceGatheringState
+    ) {}
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didGenerate candidate: LKRTCIceCandidate
+    ) {}
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didRemove candidates: [LKRTCIceCandidate]
+    ) {}
+
+    func peerConnection(
+        _ peerConnection: LKRTCPeerConnection,
+        didOpen dataChannel: LKRTCDataChannel
+    ) {}
+}

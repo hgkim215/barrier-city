@@ -16,6 +16,7 @@ public enum RealtimeClientError: LocalizedError, Sendable {
     case invalidEvent
     case alreadyConnected
     case notConnected
+    case channelUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -24,6 +25,7 @@ public enum RealtimeClientError: LocalizedError, Sendable {
         case .invalidEvent: "Realtime event was invalid."
         case .alreadyConnected: "Realtime client is already connected."
         case .notConnected: "Realtime client is not connected."
+        case .channelUnavailable: "Realtime WebRTC data channel is unavailable."
         }
     }
 }

@@ -167,6 +167,25 @@ final class OpenAILLMClientTests: XCTestCase {
         )
     }
 
+    func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {
+        let endpoint = try XCTUnwrap(URL(string: "https://api.openai.test/v1/realtime/calls"))
+
+        let request = RealtimeWebRTCClient.makeSDPRequest(
+            endpoint: endpoint,
+            offer: "v=0\r\no=test-offer",
+            bearerToken: "ephemeral-test-token"
+        )
+
+        XCTAssertEqual(request.url, endpoint)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/sdp")
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer ephemeral-test-token"
+        )
+        XCTAssertEqual(request.httpBody, Data("v=0\r\no=test-offer".utf8))
+    }
+
     func test_realtimeTruncation_preservesPlaybackPosition() throws {
         let data = try RealtimeClientEvent.truncateAudio(
             itemID: "item-9",

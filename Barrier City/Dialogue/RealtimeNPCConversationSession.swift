@@ -34,6 +34,7 @@ final class RealtimeNPCConversationSession {
     )
 
     private let audio = RealtimeAudioIO()
+    private let mediaTrackAudioSession = RealtimeMediaTrackAudioSession()
     private let makeTransport: TransportFactory
     private var diagnostics = RealtimeMetricsRecorder(transport: .webSocket)
     private var transport: (any RealtimeTransport)?
@@ -66,23 +67,16 @@ final class RealtimeNPCConversationSession {
         guard transport == nil else { throw RealtimeClientError.alreadyConnected }
         try Task.checkCancellation()
         let transport = makeTransport()
+        let usesEventAudio = transport.audioDelivery == .events
         diagnostics = RealtimeMetricsRecorder(transport: transport.kind)
         diagnostics.beginSession()
         self.transport = transport
         eventHandler = onEvent
 
-        let audioStream = AsyncStream.makeStream(
-            of: Data.self,
-            bufferingPolicy: .bufferingNewest(64)
-        )
-        audioContinuation = audioStream.continuation
-        let inputLevelStream = AsyncStream.makeStream(
-            of: Float.self,
-            bufferingPolicy: .bufferingNewest(1)
-        )
-        inputLevelContinuation = inputLevelStream.continuation
-
         do {
+            if !usesEventAudio {
+                try await mediaTrackAudioSession.start()
+            }
             try await transport.connect()
             if let tokenMilliseconds = await transport.lastTokenRequestMilliseconds {
                 diagnostics.recordToken(milliseconds: tokenMilliseconds)
@@ -103,23 +97,36 @@ final class RealtimeNPCConversationSession {
                 }
             }
 
-            audioSendTask = Task { @MainActor [weak self] in
-                do {
-                    for await chunk in audioStream.stream {
-                        guard !Task.isCancelled else { return }
-                        try await transport.send(RealtimeClientEvent.appendAudio(chunk))
-                    }
-                } catch is CancellationError {
-                    // 정상 종료
-                } catch {
-                    self?.reportFailure(error.localizedDescription)
-                }
-            }
+            if usesEventAudio {
+                let audioStream = AsyncStream.makeStream(
+                    of: Data.self,
+                    bufferingPolicy: .bufferingNewest(64)
+                )
+                audioContinuation = audioStream.continuation
+                let inputLevelStream = AsyncStream.makeStream(
+                    of: Float.self,
+                    bufferingPolicy: .bufferingNewest(1)
+                )
+                inputLevelContinuation = inputLevelStream.continuation
 
-            inputLevelTask = Task { @MainActor [weak self] in
-                for await level in inputLevelStream.stream {
-                    guard !Task.isCancelled else { return }
-                    self?.handleInputLevel(level)
+                audioSendTask = Task { @MainActor [weak self] in
+                    do {
+                        for await chunk in audioStream.stream {
+                            guard !Task.isCancelled else { return }
+                            try await transport.send(RealtimeClientEvent.appendAudio(chunk))
+                        }
+                    } catch is CancellationError {
+                        // 정상 종료
+                    } catch {
+                        self?.reportFailure(error.localizedDescription)
+                    }
+                }
+
+                inputLevelTask = Task { @MainActor [weak self] in
+                    for await level in inputLevelStream.stream {
+                        guard !Task.isCancelled else { return }
+                        self?.handleInputLevel(level)
+                    }
                 }
             }
 
@@ -129,10 +136,14 @@ final class RealtimeNPCConversationSession {
                 tools: tools
             )
             try Task.checkCancellation()
-            try await audio.start(
-                onInput: { chunk in audioStream.continuation.yield(chunk) },
-                onInputLevel: { level in inputLevelStream.continuation.yield(level) }
-            )
+            if usesEventAudio,
+               let audioContinuation,
+               let inputLevelContinuation {
+                try await audio.start(
+                    onInput: { chunk in audioContinuation.yield(chunk) },
+                    onInputLevel: { level in inputLevelContinuation.yield(level) }
+                )
+            }
             try Task.checkCancellation()
             try await transport.send(
                 RealtimeClientEvent.createResponse(
@@ -182,6 +193,7 @@ final class RealtimeNPCConversationSession {
         eventTask?.cancel()
         levelTask?.cancel()
         audio.stop()
+        mediaTrackAudioSession.stop()
         if let transport { await transport.disconnect() }
         transport = nil
         await configurationTask?.value
@@ -206,13 +218,17 @@ final class RealtimeNPCConversationSession {
             resumeSessionConfiguration()
             eventHandler?(.sessionReady)
         case .speechStarted:
-            let playedMilliseconds = audio.interruptOutput()
+            let usesEventAudio = transport?.audioDelivery == .events
+            let playedMilliseconds = usesEventAudio ? audio.interruptOutput() : nil
             isOutputActive = false
             if diagnostics.recordInterruptionCompleted() {
                 publishDiagnostics()
             }
             interruptedOutputItemID = currentOutputItem?.id
-            if let currentOutputItem, let playedMilliseconds, let transport {
+            if usesEventAudio,
+               let currentOutputItem,
+               let playedMilliseconds,
+               let transport {
                 truncateTask?.cancel()
                 truncateTask = Task { @MainActor [weak self] in
                     do {
@@ -239,6 +255,7 @@ final class RealtimeNPCConversationSession {
         case .inputTranscriptDone(let text):
             eventHandler?(.inputTranscriptDone(text))
         case .outputAudio(let itemID, let contentIndex, let data):
+            guard transport?.audioDelivery == .events else { return }
             guard itemID != interruptedOutputItemID else { return }
             interruptedOutputItemID = nil
             isOutputActive = true
