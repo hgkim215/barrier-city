@@ -149,14 +149,14 @@ Mission 3 확인
 | 상황 | 처리 |
 |---|---|
 | `Screen` 또는 `Plane` 없음 | 현재 월드 고정 패널 배치로 폴백하고 경고 로그 |
-| Plane/attachment bounds가 0 또는 비정상 | 튜닝 상수의 폴백 scale·offset 사용 |
-| attachment 없음 | 경고 로그 후 키오스크 근접 시 기존 Quest가 영구 잠기지 않도록 fail-open 경로 제공 |
+| Plane/attachment bounds가 0 또는 비정상 | 현재 월드 고정 패널 배치로 폴백하고 경고 로그 |
+| attachment 없음 | 경고 로그 후 키오스크 근접 시 `kioskFailed`를 한 번 발행해 Quest를 fail-open |
 | 손 추적 미지원·권한 거부 | 시선+핀치만 활성화 |
 | 손 추적 손실·샘플 정체 | 진행 중 손 시도 초기화 |
 | 두 입력 동시 발생 | 첫 시도만 수락, 나머지 무시 |
 | 씬 전환 취소·몰입 종료 | detector와 키오스크 상태 초기화 |
 
-attachment 자체가 없는 fail-open은 사용자에게 접근 불가 안내를 별도 HUD 문구로 보여준 뒤 `kioskFailed`를 한 번 발행한다. 정상 자산에서는 실행되지 않는 최후 방어선이다.
+attachment 자체가 없는 fail-open은 별도 신규 HUD를 만들지 않고 기존 Mission 3 안내가 다음 상태를 설명하도록 `kioskFailed`를 한 번 발행한다. 정상 자산에서는 실행되지 않는 최후 방어선이다.
 
 ## 8. 검증
 
