@@ -1,7 +1,7 @@
 # Indoor 키오스크 Screen UI 설계
 
-날짜: 2026-08-11  
-대상 브랜치: `codex/kiosk-screen-ui`  
+날짜: 2026-08-11
+대상 브랜치: `codex/kiosk-screen-ui`
 대상: visionOS `Barrier City` 몰입 체험
 
 ## 1. 목적
