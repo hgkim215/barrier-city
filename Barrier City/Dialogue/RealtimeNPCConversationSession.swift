@@ -2,7 +2,7 @@
 //  RealtimeNPCConversationSession.swift
 //  Barrier City
 //
-//  WebSocket, 마이크, 스트리밍 재생의 수명주기를 NPC UI 상태와 분리한다.
+//  Realtime 전송, 마이크, 스트리밍 재생의 수명주기를 NPC UI 상태와 분리한다.
 //
 
 import Foundation
@@ -11,6 +11,8 @@ import OSLog
 
 @MainActor
 final class RealtimeNPCConversationSession {
+    typealias TransportFactory = @MainActor () -> any RealtimeTransport
+
     enum Event: Sendable {
         case sessionReady
         case inputLevel(Float)
@@ -32,8 +34,9 @@ final class RealtimeNPCConversationSession {
     )
 
     private let audio = RealtimeAudioIO()
+    private let makeTransport: TransportFactory
     private var diagnostics = RealtimeMetricsRecorder(transport: .webSocket)
-    private var client: RealtimeWebSocketClient?
+    private var transport: (any RealtimeTransport)?
     private var receiveTask: Task<Void, Never>?
     private var audioSendTask: Task<Void, Never>?
     private var configurationSendTask: Task<Void, Never>?
@@ -47,16 +50,25 @@ final class RealtimeNPCConversationSession {
     private var interruptedOutputItemID: String?
     private var isOutputActive = false
 
+    init(
+        makeTransport: @escaping TransportFactory = {
+            RealtimeWebSocketClient(config: AppConfig.proxy)
+        }
+    ) {
+        self.makeTransport = makeTransport
+    }
+
     func start(
         instructions: String,
         tools: [RealtimeFunctionTool],
         onEvent: @escaping @MainActor (Event) -> Void
     ) async throws {
-        guard client == nil else { throw RealtimeClientError.alreadyConnected }
+        guard transport == nil else { throw RealtimeClientError.alreadyConnected }
         try Task.checkCancellation()
+        let transport = makeTransport()
+        diagnostics = RealtimeMetricsRecorder(transport: transport.kind)
         diagnostics.beginSession()
-        let client = RealtimeWebSocketClient(config: AppConfig.proxy)
-        self.client = client
+        self.transport = transport
         eventHandler = onEvent
 
         let audioStream = AsyncStream.makeStream(
@@ -71,8 +83,8 @@ final class RealtimeNPCConversationSession {
         inputLevelContinuation = inputLevelStream.continuation
 
         do {
-            try await client.connect()
-            if let tokenMilliseconds = await client.lastTokenRequestMilliseconds {
+            try await transport.connect()
+            if let tokenMilliseconds = await transport.lastTokenRequestMilliseconds {
                 diagnostics.recordToken(milliseconds: tokenMilliseconds)
                 publishDiagnostics()
             }
@@ -80,7 +92,7 @@ final class RealtimeNPCConversationSession {
             receiveTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {
-                    for try await event in client.events {
+                    for try await event in transport.events {
                         self.handle(event)
                     }
                 } catch is CancellationError {
@@ -95,7 +107,7 @@ final class RealtimeNPCConversationSession {
                 do {
                     for await chunk in audioStream.stream {
                         guard !Task.isCancelled else { return }
-                        try await client.send(RealtimeClientEvent.appendAudio(chunk))
+                        try await transport.send(RealtimeClientEvent.appendAudio(chunk))
                     }
                 } catch is CancellationError {
                     // 정상 종료
@@ -112,7 +124,7 @@ final class RealtimeNPCConversationSession {
             }
 
             try await configureSession(
-                client,
+                transport,
                 instructions: instructions,
                 tools: tools
             )
@@ -122,7 +134,7 @@ final class RealtimeNPCConversationSession {
                 onInputLevel: { level in inputLevelStream.continuation.yield(level) }
             )
             try Task.checkCancellation()
-            try await client.send(
+            try await transport.send(
                 RealtimeClientEvent.createResponse(
                     instructions: """
                     Respond ONLY in Korean. Briefly greet the visitor in natural spoken Korean,
@@ -140,11 +152,11 @@ final class RealtimeNPCConversationSession {
     }
 
     func completeFunctionCall(callID: String, output: String) async throws {
-        guard let client else { throw RealtimeClientError.notConnected }
-        try await client.send(
+        guard let transport else { throw RealtimeClientError.notConnected }
+        try await transport.send(
             RealtimeClientEvent.functionOutput(callID: callID, output: output)
         )
-        try await client.send(RealtimeClientEvent.createResponse())
+        try await transport.send(RealtimeClientEvent.createResponse())
     }
 
     func stop() async {
@@ -170,8 +182,8 @@ final class RealtimeNPCConversationSession {
         eventTask?.cancel()
         levelTask?.cancel()
         audio.stop()
-        if let client { await client.disconnect() }
-        client = nil
+        if let transport { await transport.disconnect() }
+        transport = nil
         await configurationTask?.value
         await pendingTruncateTask?.value
         await sendTask?.value
@@ -200,11 +212,11 @@ final class RealtimeNPCConversationSession {
                 publishDiagnostics()
             }
             interruptedOutputItemID = currentOutputItem?.id
-            if let currentOutputItem, let playedMilliseconds, let client {
+            if let currentOutputItem, let playedMilliseconds, let transport {
                 truncateTask?.cancel()
                 truncateTask = Task { @MainActor [weak self] in
                     do {
-                        try await client.send(
+                        try await transport.send(
                             RealtimeClientEvent.truncateAudio(
                                 itemID: currentOutputItem.id,
                                 contentIndex: currentOutputItem.contentIndex,
@@ -286,7 +298,7 @@ final class RealtimeNPCConversationSession {
     }
 
     private func configureSession(
-        _ client: RealtimeWebSocketClient,
+        _ transport: any RealtimeTransport,
         instructions: String,
         tools: [RealtimeFunctionTool]
     ) async throws {
@@ -296,7 +308,7 @@ final class RealtimeNPCConversationSession {
                 configurationSendTask?.cancel()
                 configurationSendTask = Task { @MainActor [weak self] in
                     do {
-                        try await client.send(
+                        try await transport.send(
                             RealtimeClientEvent.sessionUpdate(
                                 instructions: instructions,
                                 tools: tools

@@ -28,7 +28,8 @@ public struct RealtimeClientSecretProvider: Sendable {
     }
 }
 
-public actor RealtimeWebSocketClient {
+public actor RealtimeWebSocketClient: RealtimeTransport {
+    public nonisolated let kind = RealtimeTransportKind.webSocket
     public nonisolated let events: AsyncThrowingStream<RealtimeServerEvent, Error>
     public private(set) var lastTokenRequestMilliseconds: Int?
 
