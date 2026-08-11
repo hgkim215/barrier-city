@@ -114,4 +114,16 @@ WebRTC를 실험 기능으로 남긴다.
 
 | 날짜 | Commit | Worker version | Transport | 시나리오 | 결과 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | |
+| 2026-08-11 | `0351734` | `048291da-e54e-4067-9158-403e592a6a9f` | HTTP | Worker 배포 | 통과 | Startup 5ms, 허용 엔드포인트 4개 정상 |
+
+### 2026-08-11 Worker 배포 검증
+
+- 계정: 배포 전 `wrangler whoami`로 앱 소유 계정 확인
+- Secret: 이름이 `OPENAI_API_KEY`, 타입이 `secret_text`임을 확인하고 값은 조회하지 않음
+- 배포 URL: `https://barrier-city-openai-proxy.roiyeon.workers.dev`
+- 정상 경로: chat JSON 200, TTS PCM WAV 200, embeddings 1536차원 200,
+  Realtime `gpt-realtime-2.1` 단기 토큰 200
+- 거절 경로: 미허용 경로 404, GET 405, 미허용 모델 400, 잘못된 content type 415
+- Rate Limit: 로컬 회귀 테스트에서 429와 `Retry-After: 60`, upstream 미호출 확인
+- 로그: 배포 버전 ID, 요청 ID, 경로, 상태와 거절 코드가 구조화 로그에 남고
+  Worker 애플리케이션 로그에는 요청 본문, API 키, 단기 토큰을 기록하지 않음
