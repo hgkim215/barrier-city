@@ -4,13 +4,35 @@ import FoundationNetworking
 #endif
 @preconcurrency import LiveKitWebRTC
 
+public struct RealtimeClientSecretProvider: Sendable {
+    private let config: ProxyConfig
+    private let session: URLSession
+
+    public init(config: ProxyConfig, session: URLSession = .shared) {
+        self.config = config
+        self.session = session
+    }
+
+    public func fetch() async throws -> RealtimeClientSecret {
+        var request = URLRequest(url: config.realtimeTokenURL)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw RealtimeClientError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RealtimeClientError.httpStatus(http.statusCode)
+        }
+        return try JSONDecoder().decode(RealtimeClientSecret.self, from: data)
+    }
+}
+
 /// OpenAI Realtime의 WebRTC 연결을 담당한다. 음성은 WebRTC 미디어 트랙으로,
 /// 세션 이벤트와 함수 호출은 `oai-events` 데이터 채널로 전달한다.
-public actor RealtimeWebRTCClient: RealtimeTransport {
-    public nonisolated let kind = RealtimeTransportKind.webRTC
-    public nonisolated let audioDelivery = RealtimeAudioDelivery.mediaTrack
+public actor RealtimeWebRTCClient {
     public nonisolated let events: AsyncThrowingStream<RealtimeServerEvent, Error>
-    public private(set) var lastTokenRequestMilliseconds: Int?
 
     private let secretProvider: RealtimeClientSecretProvider
     private let session: URLSession
@@ -47,9 +69,7 @@ public actor RealtimeWebRTCClient: RealtimeTransport {
     public func connect() async throws {
         guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }
 
-        let tokenStartedAt = ContinuousClock.now
         let secret = try await secretProvider.fetch()
-        lastTokenRequestMilliseconds = Self.milliseconds(tokenStartedAt.duration(to: .now))
         try Task.checkCancellation()
 
         _ = Self.sslInitialized
@@ -250,12 +270,6 @@ public actor RealtimeWebRTCClient: RealtimeTransport {
         }
     }
 
-    private static func milliseconds(_ duration: Duration) -> Int {
-        let components = duration.components
-        let seconds = Double(components.seconds)
-        let fractionalSeconds = Double(components.attoseconds) / 1_000_000_000_000_000_000
-        return max(0, Int(((seconds + fractionalSeconds) * 1_000).rounded()))
-    }
 }
 
 private final class RealtimeWebRTCDelegateBridge: NSObject,

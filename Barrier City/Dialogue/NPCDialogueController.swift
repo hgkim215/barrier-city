@@ -48,8 +48,6 @@ final class NPCDialogueController {
     private(set) var animationRequest: NPCAnimationRequest?
     private(set) var lastMissionEvent: MissionEvent?
     private(set) var missionEventSequence = 0
-    private(set) var realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
-    private(set) var realtimeABMetrics = RealtimeABMetrics()
     private(set) var realtimeSpeechDetected = false
 
     var liveText: String {
@@ -66,10 +64,10 @@ final class NPCDialogueController {
         !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     var microphoneLevel: Float {
-        realtimeSession == nil ? speech.inputLevel : realtimeInputLevel
+        speech.inputLevel
     }
-    var hasRealtimeMicrophoneLevel: Bool {
-        realtimeSession == nil || realtimeMetrics.transport == .webSocket
+    var showsMicrophoneLevel: Bool {
+        realtimeSession == nil
     }
     var isBusy: Bool { status == .thinking || status == .speaking }
 
@@ -88,7 +86,6 @@ final class NPCDialogueController {
     private var cleanupTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
-    private var realtimeInputLevel: Float = 0
     private var realtimeMission = RealtimeMissionCoordinator()
 
     init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
@@ -143,9 +140,7 @@ final class NPCDialogueController {
         tone = SocialClimate(rapport: rapport).tone
         history = []
         realtimeLiveText = ""
-        realtimeInputLevel = 0
         realtimeSpeechDetected = false
-        realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
         realtimeMission.reset()
         automaticTurnCount = 0
         animationSequence = 0
@@ -225,7 +220,6 @@ final class NPCDialogueController {
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
-        realtimeInputLevel = 0
         realtimeSpeechDetected = false
         realtimeMission.reset()
         cleanupGeneration &+= 1
@@ -461,7 +455,6 @@ final class NPCDialogueController {
         lastEvent = ""
         lastMissionEvent = nil
         realtimeLiveText = ""
-        realtimeInputLevel = 0
         realtimeSpeechDetected = false
         realtimeMission.reset()
         realtimeResponseTimeoutTask?.cancel()
@@ -478,17 +471,7 @@ final class NPCDialogueController {
             requestAnimation(.greet)
         }
 
-        let transportOption = DevelopmentOptions.realtimeTransport
-        realtimeMetrics = RealtimeMetricsSnapshot(transport: transportOption.kind)
-        realtimeABMetrics.beginSession(transport: transportOption.kind)
-        let session = RealtimeNPCConversationSession {
-            switch transportOption {
-            case .webSocket:
-                RealtimeWebSocketClient(config: AppConfig.proxy)
-            case .webRTC:
-                RealtimeWebRTCClient(config: AppConfig.proxy)
-            }
-        }
+        let session = RealtimeNPCConversationSession()
         realtimeSession = session
         do {
             try await session.start(
@@ -515,9 +498,6 @@ final class NPCDialogueController {
         switch event {
         case .sessionReady:
             break
-
-        case .inputLevel(let level):
-            realtimeInputLevel = level
 
         case .speechStarted:
             realtimeResponseTimeoutTask?.cancel()
@@ -584,10 +564,6 @@ final class NPCDialogueController {
             status = .listening
             armRealtimeResponseTimeout()
 
-        case .diagnostics(let snapshot):
-            realtimeMetrics = snapshot
-            realtimeABMetrics.ingest(snapshot)
-
         case .failure(let message):
             cancelEncounter()
             npcSubtitle = "음성 연결 오류: \(message)"
@@ -601,11 +577,6 @@ final class NPCDialogueController {
         guard let task = cleanupTask else { return }
         await task.value
         if cleanupGeneration == generation { cleanupTask = nil }
-    }
-
-    func resetRealtimeABMetrics() {
-        guard !isEncounterActive else { return }
-        realtimeABMetrics.reset()
     }
 
     /// Realtime API의 서버 VAD에는 "아예 말하지 않음" 이벤트가 없으므로 NPC 응답이

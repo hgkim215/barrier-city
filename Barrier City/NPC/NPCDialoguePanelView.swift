@@ -50,7 +50,7 @@ struct NPCDialoguePanelView: View {
                 .foregroundStyle(.secondary)
 
             if controller.status == .listening {
-                if controller.hasRealtimeMicrophoneLevel {
+                if controller.showsMicrophoneLevel {
                     MicrophoneInputGauge(level: controller.microphoneLevel)
                 } else {
                     Label(

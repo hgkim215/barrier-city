@@ -41,16 +41,11 @@ public struct RealtimeFunctionTool: Sendable, Equatable {
 }
 
 public enum RealtimeServerEvent: Sendable, Equatable {
-    case sessionCreated
     case sessionReady
     case speechStarted
     case speechStopped
     case inputTranscriptDelta(String)
     case inputTranscriptDone(String)
-    case outputAudioBufferStarted
-    case outputAudioBufferCleared
-    case outputAudioBufferStopped
-    case outputAudio(itemID: String, contentIndex: Int, data: Data)
     case outputTranscriptDelta(String)
     case outputTranscriptDone(String)
     case functionCall(name: String, callID: String, arguments: String)
@@ -65,8 +60,6 @@ public enum RealtimeServerEvent: Sendable, Equatable {
         }
 
         switch type {
-        case "session.created":
-            return .sessionCreated
         case "session.updated":
             return .sessionReady
         case "input_audio_buffer.speech_started":
@@ -77,20 +70,6 @@ public enum RealtimeServerEvent: Sendable, Equatable {
             return .inputTranscriptDelta(object["delta"] as? String ?? "")
         case "conversation.item.input_audio_transcription.completed":
             return .inputTranscriptDone(object["transcript"] as? String ?? "")
-        case "output_audio_buffer.started":
-            return .outputAudioBufferStarted
-        case "output_audio_buffer.cleared":
-            return .outputAudioBufferCleared
-        case "output_audio_buffer.stopped":
-            return .outputAudioBufferStopped
-        case "response.output_audio.delta":
-            guard let itemID = object["item_id"] as? String,
-                  let contentIndex = object["content_index"] as? Int,
-                  let encoded = object["delta"] as? String,
-                  let audio = Data(base64Encoded: encoded) else {
-                throw RealtimeClientError.invalidEvent
-            }
-            return .outputAudio(itemID: itemID, contentIndex: contentIndex, data: audio)
         case "response.output_audio_transcript.delta":
             return .outputTranscriptDelta(object["delta"] as? String ?? "")
         case "response.output_audio_transcript.done":
@@ -160,13 +139,6 @@ public enum RealtimeClientEvent {
         ])
     }
 
-    public static func appendAudio(_ audio: Data) throws -> Data {
-        try encode([
-            "type": "input_audio_buffer.append",
-            "audio": audio.base64EncodedString(),
-        ])
-    }
-
     public static func createResponse(instructions: String? = nil) throws -> Data {
         var response: [String: Any] = ["output_modalities": ["audio"]]
         if let instructions { response["instructions"] = instructions }
@@ -181,23 +153,6 @@ public enum RealtimeClientEvent {
                 "call_id": callID,
                 "output": output,
             ],
-        ])
-    }
-
-    public static func cancelResponse() throws -> Data {
-        try encode(["type": "response.cancel"])
-    }
-
-    public static func truncateAudio(
-        itemID: String,
-        contentIndex: Int,
-        audioEndMilliseconds: Int
-    ) throws -> Data {
-        try encode([
-            "type": "conversation.item.truncate",
-            "item_id": itemID,
-            "content_index": contentIndex,
-            "audio_end_ms": max(0, audioEndMilliseconds),
         ])
     }
 

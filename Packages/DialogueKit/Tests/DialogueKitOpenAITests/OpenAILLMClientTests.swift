@@ -105,19 +105,11 @@ final class OpenAILLMClientTests: XCTestCase {
                        "https://proxy.test/realtime-token")
     }
 
-    func test_realtimeProtocol_parsesAudioAndFunctionEvents() throws {
-        let audio = Data([0, 1, 2, 3])
-        let audioEvent = Data(
-            #"{"type":"response.output_audio.delta","item_id":"item-1","content_index":0,"delta":"\#(audio.base64EncodedString())"}"#.utf8
-        )
+    func test_realtimeProtocol_parsesFunctionEvent() throws {
         let functionEvent = Data(
             #"{"type":"response.function_call_arguments.done","name":"complete_order","call_id":"call-1","arguments":"{}"}"#.utf8
         )
 
-        XCTAssertEqual(
-            try RealtimeServerEvent.parse(audioEvent),
-            .outputAudio(itemID: "item-1", contentIndex: 0, data: audio)
-        )
         XCTAssertEqual(
             try RealtimeServerEvent.parse(functionEvent),
             .functionCall(name: "complete_order", callID: "call-1", arguments: "{}")
@@ -128,24 +120,8 @@ final class OpenAILLMClientTests: XCTestCase {
         let created = try RealtimeServerEvent.parse(Data(#"{"type":"session.created"}"#.utf8))
         let updated = try RealtimeServerEvent.parse(Data(#"{"type":"session.updated"}"#.utf8))
 
-        XCTAssertEqual(created, .sessionCreated)
+        XCTAssertEqual(created, .ignored("session.created"))
         XCTAssertEqual(updated, .sessionReady)
-    }
-
-    func test_realtimeProtocol_parsesWebRTCAudioBufferLifecycle() throws {
-        let started = try RealtimeServerEvent.parse(
-            Data(#"{"type":"output_audio_buffer.started","response_id":"resp-1"}"#.utf8)
-        )
-        let cleared = try RealtimeServerEvent.parse(
-            Data(#"{"type":"output_audio_buffer.cleared","response_id":"resp-1"}"#.utf8)
-        )
-        let stopped = try RealtimeServerEvent.parse(
-            Data(#"{"type":"output_audio_buffer.stopped","response_id":"resp-1"}"#.utf8)
-        )
-
-        XCTAssertEqual(started, .outputAudioBufferStarted)
-        XCTAssertEqual(cleared, .outputAudioBufferCleared)
-        XCTAssertEqual(stopped, .outputAudioBufferStopped)
     }
 
     func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
@@ -172,23 +148,6 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
 
-    func test_realtimeClient_convertsJSONEventToWebSocketTextPayload() throws {
-        let data = try RealtimeClientEvent.createResponse(instructions: "자연스럽게 응답해.")
-
-        let text = try RealtimeWebSocketClient.outboundText(from: data)
-        let object = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
-        )
-
-        XCTAssertEqual(object["type"] as? String, "response.create")
-    }
-
-    func test_realtimeClient_rejectsNonUTF8WebSocketPayload() {
-        XCTAssertThrowsError(
-            try RealtimeWebSocketClient.outboundText(from: Data([0xFF, 0xFE]))
-        )
-    }
-
     func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {
         let endpoint = try XCTUnwrap(URL(string: "https://api.openai.test/v1/realtime/calls"))
 
@@ -208,77 +167,4 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(request.httpBody, Data("v=0\r\no=test-offer".utf8))
     }
 
-    func test_realtimeTruncation_preservesPlaybackPosition() throws {
-        let data = try RealtimeClientEvent.truncateAudio(
-            itemID: "item-9",
-            contentIndex: 0,
-            audioEndMilliseconds: 1_250
-        )
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-
-        XCTAssertEqual(object["type"] as? String, "conversation.item.truncate")
-        XCTAssertEqual(object["item_id"] as? String, "item-9")
-        XCTAssertEqual(object["content_index"] as? Int, 0)
-        XCTAssertEqual(object["audio_end_ms"] as? Int, 1_250)
-    }
-
-    func test_realtimeMetrics_recordsConnectionTurnAndInterruptionWithoutContent() {
-        let startedAt = ContinuousClock.now
-        var recorder = RealtimeMetricsRecorder(transport: .webSocket)
-
-        recorder.beginSession(at: startedAt)
-        recorder.recordToken(milliseconds: 42)
-        recorder.recordSessionCreated(at: startedAt.advanced(by: .milliseconds(120)))
-        recorder.recordSessionReady(at: startedAt.advanced(by: .milliseconds(180)))
-        recorder.recordSpeechStopped(at: startedAt.advanced(by: .seconds(1)))
-        XCTAssertTrue(
-            recorder.recordFirstOutput(at: startedAt.advanced(by: .milliseconds(1_350)))
-        )
-        recorder.recordLocalInterruptionStart(at: startedAt.advanced(by: .seconds(2)))
-        XCTAssertTrue(
-            recorder.recordInterruptionCompleted(at: startedAt.advanced(by: .milliseconds(2_075)))
-        )
-        recorder.recordError()
-
-        XCTAssertEqual(recorder.snapshot.transport, .webSocket)
-        XCTAssertEqual(recorder.snapshot.tokenMilliseconds, 42)
-        XCTAssertEqual(recorder.snapshot.connectMilliseconds, 120)
-        XCTAssertEqual(recorder.snapshot.readyMilliseconds, 180)
-        XCTAssertEqual(recorder.snapshot.lastTurnMilliseconds, 350)
-        XCTAssertEqual(recorder.snapshot.lastInterruptMilliseconds, 75)
-        XCTAssertEqual(recorder.snapshot.completedTurns, 1)
-        XCTAssertEqual(recorder.snapshot.interruptionCount, 1)
-        XCTAssertEqual(recorder.snapshot.errorCount, 1)
-    }
-
-    func test_realtimeABMetrics_deduplicatesSnapshotsAndSeparatesTransports() {
-        var comparison = RealtimeABMetrics()
-        var webSocket = RealtimeMetricsSnapshot(transport: .webSocket)
-        webSocket.tokenMilliseconds = 40
-        webSocket.connectMilliseconds = 120
-        webSocket.readyMilliseconds = 180
-        webSocket.lastTurnMilliseconds = 320
-        webSocket.completedTurns = 1
-        webSocket.errorCount = 1
-
-        comparison.beginSession(transport: .webSocket)
-        comparison.ingest(webSocket)
-        comparison.ingest(webSocket)
-
-        var webRTC = RealtimeMetricsSnapshot(transport: .webRTC)
-        webRTC.connectMilliseconds = 90
-        webRTC.readyMilliseconds = 130
-        webRTC.lastTurnMilliseconds = 240
-        webRTC.completedTurns = 1
-
-        comparison.beginSession(transport: .webRTC)
-        comparison.ingest(webRTC)
-
-        XCTAssertEqual(comparison.webSocket.sessionCount, 1)
-        XCTAssertEqual(comparison.webSocket.turnSamples, [320])
-        XCTAssertEqual(comparison.webSocket.errorCount, 1)
-        XCTAssertEqual(comparison.webRTC.sessionCount, 1)
-        XCTAssertEqual(comparison.webRTC.averageConnectMilliseconds, 90)
-        XCTAssertEqual(comparison.webRTC.p95TurnMilliseconds, 240)
-    }
 }
