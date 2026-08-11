@@ -19,9 +19,18 @@ struct InteractionFlowRegressionTests {
         let interactions = InteractionModel()
         interactions.triggers = [kiosk]
         interactions.activeTrigger = kiosk
-        interactions.kioskTooHighShown = true
+        interactions.updateKioskContext(
+            isIndoor: true,
+            isNear: true,
+            isMissionTwoActive: true,
+            isGuideLocked: false)
+        expect(interactions.kioskMenuVisible, true, "Indoor menu remains visible")
+        expect(interactions.kioskInputEnabled, true, "Mission 2 proximity enables input")
+        expect(interactions.attemptKioskUse(.gazePinch), true, "first kiosk attempt accepted")
+        expect(interactions.kioskBarrierVisible, true, "attempt opens accessibility barrier")
 
-        interactions.acknowledgeKioskBarrier()
+        expect(interactions.requestKioskStaffHelp(), true, "first help request accepted")
+        expect(interactions.requestKioskStaffHelp(), false, "help request is idempotent")
 
         var guide = GuideFlowState(phase: .missionActive(index: 1))
         guide.send(.questAdvanced(nextIndex: 2))
@@ -35,7 +44,12 @@ struct InteractionFlowRegressionTests {
             activeID: interactions.activeTrigger?.id,
             dismissedID: interactions.dismissedTriggerID)
         expect(verdict.showID, nil, "acknowledged kiosk stays dismissed while still in radius")
-        expect(interactions.kioskTooHighShown, false, "acknowledgement clears the barrier detail state")
+        expect(interactions.kioskBarrierVisible, false, "help closes barrier detail state")
+        expect(interactions.kioskInputEnabled, false, "help locks kiosk input for the session")
+
+        interactions.resetKioskSession()
+        expect(interactions.kioskMenuVisible, false, "session reset clears kiosk visibility")
+        expect(interactions.kioskBarrierVisible, false, "session reset clears barrier state")
 
         print("InteractionFlowRegressionTests: PASS")
     }

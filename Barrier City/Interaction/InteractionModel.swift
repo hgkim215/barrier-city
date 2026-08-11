@@ -7,6 +7,7 @@
 //  생기면 바로 단위 테스트를 붙일 수 있게 한다.
 //
 
+import Foundation
 import RealityKit
 import simd
 import Observation
@@ -123,6 +124,12 @@ final class InteractionModel {
     /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
     /// 트리거 이탈/재진입 시 리셋.
     var kioskTooHighShown = false
+    /// 키오스크 메뉴 표시·입력·장벽·도움 요청 상태.
+    private var kioskState = KioskInteractionState()
+    /// 왼손과 오른손의 이동 이력을 섞지 않도록 손별 detector를 유지한다.
+    @ObservationIgnored private var kioskReachDetectors: [KioskHandSide: KioskReachAttemptDetector] = [:]
+    /// attachment가 없을 때 Mission 2를 한 번만 fail-open하기 위한 세션 플래그.
+    @ObservationIgnored var kioskFailOpenSent = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.
@@ -145,18 +152,90 @@ final class InteractionModel {
         kioskPanelEntity?.isEnabled = false
     }
 
+    // MARK: - 키오스크 상태
+
+    var kioskMenuVisible: Bool { kioskState.menuVisible }
+    var kioskInputEnabled: Bool { kioskState.inputEnabled }
+    var kioskBarrierVisible: Bool { kioskState.barrierVisible }
+
+    func updateKioskContext(
+        isIndoor: Bool,
+        isNear: Bool,
+        isMissionTwoActive: Bool,
+        isGuideLocked: Bool
+    ) {
+        kioskState.updateContext(
+            isIndoor: isIndoor,
+            isNear: isNear,
+            isMissionTwoActive: isMissionTwoActive,
+            isGuideLocked: isGuideLocked)
+        if !kioskState.inputEnabled {
+            resetKioskReachDetectors()
+        }
+    }
+
+    @discardableResult
+    func attemptKioskUse(_ source: KioskAttemptSource) -> Bool {
+        kioskState.attempt(source)
+    }
+
+    @discardableResult
+    func requestKioskStaffHelp() -> Bool {
+        guard kioskState.requestStaffHelp() else { return false }
+        dismissActive()
+        kioskTooHighShown = false
+        resetKioskReachDetectors()
+        return true
+    }
+
+    func processKioskLocalHandSample(
+        side: KioskHandSide,
+        localPosition: SIMD3<Float>,
+        timestamp: TimeInterval,
+        isTracked: Bool,
+        halfWidth: Float,
+        halfHeight: Float
+    ) {
+        guard kioskState.inputEnabled else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        let attempted = kioskReachDetectors[side, default: KioskReachAttemptDetector()].sample(
+            position: localPosition,
+            timestamp: timestamp,
+            isTracked: isTracked,
+            halfWidth: halfWidth,
+            halfHeight: halfHeight)
+        if attempted {
+            _ = attemptKioskUse(.handReach)
+        }
+    }
+
+    func resetKioskSession() {
+        kioskState.reset()
+        kioskTooHighShown = false
+        kioskFailOpenSent = false
+        resetKioskReachDetectors()
+    }
+
+    private func resetKioskReachDetectors() {
+        kioskReachDetectors.removeAll(keepingCapacity: true)
+    }
+
     // MARK: - 씬 전환 수명주기
 
     func beginImmersiveSession() {
         transitionTask?.cancel()
         transitionTask = nil
         transitionSession.beginSession()
+        resetKioskSession()
     }
 
     func endImmersiveSession() {
         transitionTask?.cancel()
         transitionTask = nil
         transitionSession.endSession()
+        resetKioskSession()
     }
 
     func startSceneTransition(
