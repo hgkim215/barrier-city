@@ -26,12 +26,14 @@ eventual consistency 방식이므로 정확한 과금 장부나 사용자 인증
 ```bash
 cd proxy
 npm install
+npm run types:check
+npm run deploy:check
 npm run deploy
 npx wrangler secret put OPENAI_API_KEY   # 프롬프트에 키 입력 — git/앱 미포함
 ```
 배포 후 출력된 `https://<name>.<account>.workers.dev` 가 `WORKER_URL`. 이 값을 앱의 `ProxyConfig(base:)`에 넣는다(키 아님, URL만).
 
-`wrangler.toml`의 rate limit `namespace_id`는 Cloudflare 계정 전체에서 고유해야 한다.
+`wrangler.jsonc`의 rate limit `namespace_id`는 Cloudflare 계정 전체에서 고유해야 한다.
 동일 계정에 이미 같은 ID가 있다면 배포 전에 네 값을 다른 양의 정수 문자열로 변경한다.
 
 ## 검증 (스트림 확인)
