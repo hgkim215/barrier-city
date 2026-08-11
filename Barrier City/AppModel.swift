@@ -28,9 +28,6 @@ final class AppModel {
     let npcClerk: NPCClerkController
     /// 주행 물리 상태는 입력·앱 수명 상태와 분리해 MovementSystem의 변경 범위를 제한한다.
     let motion = WheelchairMotionState()
-    /// 실기기 반복 시나리오의 앱 내부 성능 기준선을 누적한다.
-    let performance = SpatialPerformanceRecorder()
-
     /// 캐릭터 캡슐 전체 높이(m). 바닥 접지 = 중심.y - charHeight/2.
     static let charHeight: Float = 1.0
     static let charRadius: Float = 0.34

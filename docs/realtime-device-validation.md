@@ -128,14 +128,14 @@ WebRTC를 실험 기능으로 남긴다.
 - 로그: 배포 버전 ID, 요청 ID, 경로, 상태와 거절 코드가 구조화 로그에 남고
   Worker 애플리케이션 로그에는 요청 본문, API 키, 단기 토큰을 기록하지 않음
 
-## 앱 내 측정 절차
+## Realtime 앱 내 측정 절차
 
 1. Debug 빌드의 제어 패널에서 `Realtime 전송`을 WebSocket 또는 WebRTC로 선택한다.
-2. `공간 성능 측정`에서 S1~S7 중 수행할 시나리오를 선택하고 측정을 시작한다.
-3. NPC 대화를 수행한다. 현재 세션 지표와 전송별 누적 평균/p95가 자동 갱신된다.
-4. 측정을 종료하고 Xcode Console의 `RealtimeMetrics`, `SpatialPerformance` 로그를 보관한다.
-5. 같은 장소·기기·네트워크·thermal state에서 반대 전송 방식으로 반복한다.
-6. Instruments의 RealityKit Trace와 Time Profiler 결과를 실행 결과 표에 연결한다.
+2. NPC 대화를 수행한다. 현재 세션 지표와 전송별 누적 평균/p95가 자동 갱신된다.
+3. Xcode Console의 `RealtimeMetrics` 로그를 보관한다.
+4. 같은 장소·기기·네트워크 조건에서 반대 전송 방식으로 반복한다.
+5. 공간 성능은 앱 내부 계측 대신 Instruments의 RealityKit Trace, Time Profiler,
+   Metal System Trace로 측정하고 실행 결과 표에 연결한다.
 
 WebRTC의 끼어들기 시간은 `input_audio_buffer.speech_started`부터 WebRTC 전용
 `output_audio_buffer.cleared`까지 측정한다. WebSocket은 로컬 마이크 임계값 감지부터

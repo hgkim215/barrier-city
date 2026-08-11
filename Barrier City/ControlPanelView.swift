@@ -187,8 +187,6 @@ struct ControlPanelView: View {
                 realtimeABMetricsSection
             }
 
-            spatialPerformanceSection
-
             if model.isImmersive {
                 VStack(spacing: 8) {
                     Text("NPC: \(model.npcClerk.phase.rawValue)"
@@ -363,63 +361,6 @@ struct ControlPanelView: View {
         }
     }
 
-    private var spatialPerformanceSection: some View {
-        let performance = model.performance
-        let snapshot = performance.snapshot
-
-        return VStack(alignment: .leading, spacing: 10) {
-            Label("공간 성능 측정", systemImage: "gauge.with.dots.needle.50percent")
-                .font(.headline)
-
-            Picker("시나리오", selection: performanceScenarioBinding) {
-                ForEach(SpatialPerformanceScenario.allCases) { scenario in
-                    Text(scenario.rawValue).tag(scenario)
-                }
-            }
-            .disabled(performance.isRunning)
-
-            Text(performance.selectedScenario.guidance)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                if performance.isRunning {
-                    performance.stop(model: model)
-                } else {
-                    performance.start(model: model)
-                }
-            } label: {
-                Label(
-                    performance.isRunning ? "측정 종료" : "측정 시작",
-                    systemImage: performance.isRunning ? "stop.circle.fill" : "record.circle"
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(performance.isRunning ? .red : .blue)
-
-            HStack(spacing: 18) {
-                stat("시간", String(format: "%.0f s", snapshot.elapsedSeconds))
-                stat("평균/최저 FPS", String(format: "%.0f / %.0f", snapshot.averageFPS, snapshot.minimumFPS))
-                stat("최대 프레임", String(format: "%.1f ms", snapshot.maximumFrameMilliseconds))
-            }
-            HStack(spacing: 18) {
-                stat("최대 물리", String(format: "%.2f ms", snapshot.maximumPhysicsMilliseconds))
-                stat("메모리", String(format: "%.0f MB", snapshot.peakResidentMemoryMB))
-                stat("열 상태", snapshot.thermalState)
-            }
-            HStack(spacing: 18) {
-                stat("손 업데이트", "+\(snapshot.handUpdateDelta)")
-                stat("World 폴백", "+\(snapshot.worldTrackingFallbackDelta)")
-                stat("음성 오류", "+\(snapshot.realtimeErrorDelta)")
-            }
-        }
-        .font(.callout)
-        .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
     private func metricText(_ milliseconds: Int?) -> String {
         milliseconds.map { "\($0) ms" } ?? "-"
     }
@@ -492,13 +433,6 @@ struct ControlPanelView: View {
         Binding(
             get: { model.useHandTracking },
             set: { model.setHandTrackingEnabled($0) })
-    }
-
-    private var performanceScenarioBinding: Binding<SpatialPerformanceScenario> {
-        Binding(
-            get: { model.performance.selectedScenario },
-            set: { model.performance.selectedScenario = $0 }
-        )
     }
 
     private var testFistDriveBinding: Binding<Bool> {

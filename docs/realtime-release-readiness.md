@@ -20,7 +20,6 @@ A/B 측정을 통과하기 전에는 Release 빌드의 기본 전송을 변경�
 | Worker 구성 | JSONC, Secret 요구, Rate Limit, observability | `0351734` |
 | Worker 배포 | 허용 엔드포인트 E2E와 구조화 로그 검증 | `dc2d11b` |
 | WebSocket 기준선 | 토큰·연결·턴·끼어들기·오류 계측 | `e1f0e64` |
-| 공간 성능 | ARKit·World Tracking·물리·메모리·thermal 시나리오 계측 | `19a21d9` |
 | 전송 추상화 | 대화 세션에서 네트워크 구현 분리 | `a99e87a` |
 | WebRTC | SDP 교환, 오디오 미디어 트랙, `oai-events` 데이터 채널 | `4c70831` |
 | A/B 도구 | Debug 전송 선택, 평균·p95·오류 누적 비교 | `0f631ab` |
@@ -40,6 +39,7 @@ WebRTC 미디어 트랙이 담당하고, 세션 설정·transcript·함수 호�
 - WebRTC 의존성 `144.7559.11` 및 revision 고정
 - XCFramework의 `xros-arm64`, `xros-arm64-simulator` 슬라이스 확인
 - API 키·단기 토큰·음성·transcript를 애플리케이션 로그에 기록하지 않음
+- 앱 내부 공간 성능 계측은 제거했으며, 공간 성능 판정은 Instruments trace로 수행
 
 ## 실기기에서 남은 필수 검증
 
