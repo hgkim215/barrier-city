@@ -72,16 +72,16 @@
 
 ## Cloudflare 배포 체크리스트
 
-- [ ] `npm test`
-- [ ] `npx wrangler deploy --dry-run`
-- [ ] `npx wrangler whoami`로 대상 계정 확인
-- [ ] `OPENAI_API_KEY`가 Worker Secret으로 존재하는지 확인
-- [ ] 배포 후 Worker version ID와 Git commit 기록
-- [ ] `/chat`, `/tts`, `/embeddings`, `/realtime-token` 정상 응답 확인
-- [ ] 미허용 경로, 메서드, 모델, 형식, 과대 요청 거절 확인
-- [ ] 429 응답과 `Retry-After` 확인
-- [ ] 응답 본문·헤더·Workers Logs에 API 키와 단기 토큰이 남지 않는지 확인
-- [ ] `npx wrangler tail`에서 요청 ID, 경로, 상태 코드 확인
+- [x] `npm test`
+- [x] `npx wrangler deploy --dry-run`
+- [x] `npx wrangler whoami`로 대상 계정 확인
+- [x] `OPENAI_API_KEY`가 Worker Secret으로 존재하는지 확인
+- [x] 배포 후 Worker version ID와 Git commit 기록
+- [x] `/chat`, `/tts`, `/embeddings`, `/realtime-token` 정상 응답 확인
+- [x] 미허용 경로, 메서드, 모델, 형식, 과대 요청 거절 확인
+- [x] 429 응답과 `Retry-After` 확인(로컬 회귀 테스트)
+- [x] 장기 API 키가 응답·로그에 없고 단기 토큰이 Workers Logs에 남지 않는지 확인
+- [x] `npx wrangler tail`에서 요청 ID, 경로, 상태 코드 확인
 
 ## 실기기 기능 체크리스트
 
@@ -127,3 +127,17 @@ WebRTC를 실험 기능으로 남긴다.
 - Rate Limit: 로컬 회귀 테스트에서 429와 `Retry-After: 60`, upstream 미호출 확인
 - 로그: 배포 버전 ID, 요청 ID, 경로, 상태와 거절 코드가 구조화 로그에 남고
   Worker 애플리케이션 로그에는 요청 본문, API 키, 단기 토큰을 기록하지 않음
+
+## 앱 내 측정 절차
+
+1. Debug 빌드의 제어 패널에서 `Realtime 전송`을 WebSocket 또는 WebRTC로 선택한다.
+2. `공간 성능 측정`에서 S1~S7 중 수행할 시나리오를 선택하고 측정을 시작한다.
+3. NPC 대화를 수행한다. 현재 세션 지표와 전송별 누적 평균/p95가 자동 갱신된다.
+4. 측정을 종료하고 Xcode Console의 `RealtimeMetrics`, `SpatialPerformance` 로그를 보관한다.
+5. 같은 장소·기기·네트워크·thermal state에서 반대 전송 방식으로 반복한다.
+6. Instruments의 RealityKit Trace와 Time Profiler 결과를 실행 결과 표에 연결한다.
+
+WebRTC의 끼어들기 시간은 `input_audio_buffer.speech_started`부터 WebRTC 전용
+`output_audio_buffer.cleared`까지 측정한다. WebSocket은 로컬 마이크 임계값 감지부터
+AVAudioPlayerNode 중단까지 측정하므로 두 값의 측정 경계가 완전히 같지는 않다. 최종 판정에서는
+수치와 함께 사용자가 실제로 들은 잔여 음성 여부를 반드시 기록한다.

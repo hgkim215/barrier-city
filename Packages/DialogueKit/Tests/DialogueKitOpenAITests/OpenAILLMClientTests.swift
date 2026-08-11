@@ -132,6 +132,22 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(updated, .sessionReady)
     }
 
+    func test_realtimeProtocol_parsesWebRTCAudioBufferLifecycle() throws {
+        let started = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.started","response_id":"resp-1"}"#.utf8)
+        )
+        let cleared = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.cleared","response_id":"resp-1"}"#.utf8)
+        )
+        let stopped = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.stopped","response_id":"resp-1"}"#.utf8)
+        )
+
+        XCTAssertEqual(started, .outputAudioBufferStarted)
+        XCTAssertEqual(cleared, .outputAudioBufferCleared)
+        XCTAssertEqual(stopped, .outputAudioBufferStopped)
+    }
+
     func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
         let data = try RealtimeClientEvent.sessionUpdate(
             instructions: "자연스럽게 대화해.",

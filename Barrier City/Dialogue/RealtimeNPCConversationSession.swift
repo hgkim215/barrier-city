@@ -220,9 +220,13 @@ final class RealtimeNPCConversationSession {
         case .speechStarted:
             let usesEventAudio = transport?.audioDelivery == .events
             let playedMilliseconds = usesEventAudio ? audio.interruptOutput() : nil
-            isOutputActive = false
-            if diagnostics.recordInterruptionCompleted() {
-                publishDiagnostics()
+            if usesEventAudio {
+                isOutputActive = false
+                if diagnostics.recordInterruptionCompleted() {
+                    publishDiagnostics()
+                }
+            } else if isOutputActive {
+                diagnostics.recordLocalInterruptionStart()
             }
             interruptedOutputItemID = currentOutputItem?.id
             if usesEventAudio,
@@ -254,6 +258,16 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.inputTranscriptDelta(text))
         case .inputTranscriptDone(let text):
             eventHandler?(.inputTranscriptDone(text))
+        case .outputAudioBufferStarted:
+            isOutputActive = true
+            recordFirstOutputIfNeeded()
+        case .outputAudioBufferCleared:
+            isOutputActive = false
+            if diagnostics.recordInterruptionCompleted() {
+                publishDiagnostics()
+            }
+        case .outputAudioBufferStopped:
+            isOutputActive = false
         case .outputAudio(let itemID, let contentIndex, let data):
             guard transport?.audioDelivery == .events else { return }
             guard itemID != interruptedOutputItemID else { return }

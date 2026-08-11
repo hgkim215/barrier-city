@@ -27,7 +27,12 @@ enum DevelopmentOptions {
     }
 
     static var realtimeTransport: RealtimeTransportOption {
+#if DEBUG
         let value = UserDefaults.standard.string(forKey: realtimeTransportKey)
         return RealtimeTransportOption(rawValue: value ?? "") ?? .webSocket
+#else
+        // 실기기 A/B 릴리스 게이트를 통과하기 전까지 운영 기본값은 고정한다.
+        return .webSocket
+#endif
     }
 }
