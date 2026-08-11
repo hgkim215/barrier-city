@@ -228,4 +228,35 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(recorder.snapshot.interruptionCount, 1)
         XCTAssertEqual(recorder.snapshot.errorCount, 1)
     }
+
+    func test_realtimeABMetrics_deduplicatesSnapshotsAndSeparatesTransports() {
+        var comparison = RealtimeABMetrics()
+        var webSocket = RealtimeMetricsSnapshot(transport: .webSocket)
+        webSocket.tokenMilliseconds = 40
+        webSocket.connectMilliseconds = 120
+        webSocket.readyMilliseconds = 180
+        webSocket.lastTurnMilliseconds = 320
+        webSocket.completedTurns = 1
+        webSocket.errorCount = 1
+
+        comparison.beginSession(transport: .webSocket)
+        comparison.ingest(webSocket)
+        comparison.ingest(webSocket)
+
+        var webRTC = RealtimeMetricsSnapshot(transport: .webRTC)
+        webRTC.connectMilliseconds = 90
+        webRTC.readyMilliseconds = 130
+        webRTC.lastTurnMilliseconds = 240
+        webRTC.completedTurns = 1
+
+        comparison.beginSession(transport: .webRTC)
+        comparison.ingest(webRTC)
+
+        XCTAssertEqual(comparison.webSocket.sessionCount, 1)
+        XCTAssertEqual(comparison.webSocket.turnSamples, [320])
+        XCTAssertEqual(comparison.webSocket.errorCount, 1)
+        XCTAssertEqual(comparison.webRTC.sessionCount, 1)
+        XCTAssertEqual(comparison.webRTC.averageConnectMilliseconds, 90)
+        XCTAssertEqual(comparison.webRTC.p95TurnMilliseconds, 240)
+    }
 }

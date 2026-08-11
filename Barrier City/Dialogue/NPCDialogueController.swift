@@ -49,6 +49,7 @@ final class NPCDialogueController {
     private(set) var lastMissionEvent: MissionEvent?
     private(set) var missionEventSequence = 0
     private(set) var realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
+    private(set) var realtimeABMetrics = RealtimeABMetrics()
 
     var liveText: String {
         realtimeSession == nil ? speech.partialText : realtimeLiveText
@@ -460,7 +461,17 @@ final class NPCDialogueController {
             requestAnimation(.greet)
         }
 
-        let session = RealtimeNPCConversationSession()
+        let transportOption = DevelopmentOptions.realtimeTransport
+        realtimeMetrics = RealtimeMetricsSnapshot(transport: transportOption.kind)
+        realtimeABMetrics.beginSession(transport: transportOption.kind)
+        let session = RealtimeNPCConversationSession {
+            switch transportOption {
+            case .webSocket:
+                RealtimeWebSocketClient(config: AppConfig.proxy)
+            case .webRTC:
+                RealtimeWebRTCClient(config: AppConfig.proxy)
+            }
+        }
         realtimeSession = session
         do {
             try await session.start(
@@ -555,6 +566,7 @@ final class NPCDialogueController {
 
         case .diagnostics(let snapshot):
             realtimeMetrics = snapshot
+            realtimeABMetrics.ingest(snapshot)
 
         case .failure(let message):
             cancelEncounter()
@@ -569,6 +581,11 @@ final class NPCDialogueController {
         guard let task = cleanupTask else { return }
         await task.value
         if cleanupGeneration == generation { cleanupTask = nil }
+    }
+
+    func resetRealtimeABMetrics() {
+        guard !isEncounterActive else { return }
+        realtimeABMetrics.reset()
     }
 
     /// Realtime API의 서버 VAD에는 "아예 말하지 않음" 이벤트가 없으므로 NPC 응답이

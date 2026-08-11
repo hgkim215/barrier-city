@@ -13,6 +13,8 @@ struct ControlPanelView: View {
     @State private var immersiveError: String?
     @AppStorage(DevelopmentOptions.simulatorMicrophoneKey)
     private var simulatorMicrophoneEnabled = false
+    @AppStorage(DevelopmentOptions.realtimeTransportKey)
+    private var realtimeTransport = RealtimeTransportOption.webSocket.rawValue
 
     var body: some View {
         ScrollView {
@@ -128,6 +130,22 @@ struct ControlPanelView: View {
             .tint(.purple)
 
 #if DEBUG
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Realtime 전송", selection: $realtimeTransport) {
+                    ForEach(RealtimeTransportOption.allCases) { option in
+                        Text(option.title).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.npcDialogue.isEncounterActive)
+
+                Text("다음 NPC 대화부터 적용됩니다. 동일 조건에서 각 전송을 번갈아 측정하세요.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+
             Button {
                 Task { @MainActor in
                     guard !isImmersiveTransitioning else { return }
@@ -163,6 +181,10 @@ struct ControlPanelView: View {
 
             if model.npcDialogue.realtimeMetrics.hasMeasurements {
                 realtimeMetricsSection
+            }
+
+            if model.npcDialogue.realtimeABMetrics.hasMeasurements {
+                realtimeABMetricsSection
             }
 
             spatialPerformanceSection
@@ -292,6 +314,55 @@ struct ControlPanelView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private var realtimeABMetricsSection: some View {
+        let comparison = model.npcDialogue.realtimeABMetrics
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Realtime A/B 누적", systemImage: "chart.bar.xaxis")
+                    .font(.headline)
+                Spacer()
+                Button("초기화") {
+                    model.npcDialogue.resetRealtimeABMetrics()
+                }
+                .font(.caption)
+                .disabled(model.npcDialogue.isEncounterActive)
+            }
+
+            transportAggregateRow("WebSocket", comparison.webSocket)
+            Divider()
+            transportAggregateRow("WebRTC", comparison.webRTC)
+        }
+        .font(.callout)
+        .padding(12)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func transportAggregateRow(
+        _ name: String,
+        _ aggregate: RealtimeTransportAggregate
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(name) · \(aggregate.sessionCount) 세션")
+                .font(.caption.bold())
+            HStack(spacing: 14) {
+                stat("연결 평균", metricText(aggregate.averageConnectMilliseconds))
+                stat("준비 평균", metricText(aggregate.averageReadyMilliseconds))
+                stat("턴 평균/p95", metricPair(
+                    aggregate.averageTurnMilliseconds,
+                    aggregate.p95TurnMilliseconds
+                ))
+            }
+            HStack(spacing: 14) {
+                stat("끼어들기 평균/p95", metricPair(
+                    aggregate.averageInterruptionMilliseconds,
+                    aggregate.p95InterruptionMilliseconds
+                ))
+                stat("턴 표본", "\(aggregate.turnSamples.count)")
+                stat("오류", "\(aggregate.errorCount)")
+            }
+        }
+    }
+
     private var spatialPerformanceSection: some View {
         let performance = model.performance
         let snapshot = performance.snapshot
@@ -351,6 +422,11 @@ struct ControlPanelView: View {
 
     private func metricText(_ milliseconds: Int?) -> String {
         milliseconds.map { "\($0) ms" } ?? "-"
+    }
+
+    private func metricPair(_ average: Int?, _ p95: Int?) -> String {
+        guard let average, let p95 else { return "-" }
+        return "\(average)/\(p95) ms"
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {
