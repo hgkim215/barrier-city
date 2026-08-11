@@ -71,18 +71,40 @@ struct NPCDialoguePanelView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if controller.status == .listening,
-               !controller.liveText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("나: \(controller.liveText)")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
+            userTranscript
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 16)
         .glassBackgroundEffect()
+    }
+
+    @ViewBuilder
+    private var userTranscript: some View {
+        let transcript = controller.visibleUserTranscript
+        if !transcript.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: controller.userTranscriptIsFinal
+                      ? "checkmark.circle.fill"
+                      : "waveform")
+                    .foregroundStyle(controller.userTranscriptIsFinal ? .green : .orange)
+
+                Text(controller.userTranscriptIsFinal
+                     ? "나: \(transcript)"
+                     : "인식 중: \(transcript)")
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(3)
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(controller.userTranscriptIsFinal
+                                ? "내 확정 발화"
+                                : "내 음성 인식 중")
+            .accessibilityValue(transcript)
+        }
     }
 
     private var showsTalkButton: Bool {

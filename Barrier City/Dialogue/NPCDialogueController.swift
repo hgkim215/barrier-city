@@ -55,6 +55,16 @@ final class NPCDialogueController {
     var liveText: String {
         realtimeSession == nil ? speech.partialText : realtimeLiveText
     }
+    /// 부분 transcript는 실시간으로, 확정 transcript는 다음 발화 전까지 유지한다.
+    /// UI가 listening 상태에만 의존하면 speechStopped 직후 도착하는 확정문을 놓칠 수 있다.
+    var visibleUserTranscript: String {
+        let finalized = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !finalized.isEmpty { return finalized }
+        return liveText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    var userTranscriptIsFinal: Bool {
+        !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     var microphoneLevel: Float {
         realtimeSession == nil ? speech.inputLevel : realtimeInputLevel
     }
