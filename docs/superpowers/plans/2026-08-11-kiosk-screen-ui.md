@@ -31,7 +31,6 @@
 - Create `Tests/KioskReachAttemptDetectorTests.swift`: detector thresholds, stale reset, and cooldown coverage.
 - Create `Tests/KioskInteractionStateTests.swift`: visibility, gating, dedupe, help, and reset coverage.
 - Create `Tests/KioskScreenLayoutTests.swift`: pure aspect-fit scale validation and invalid-bounds fallback coverage.
-- Create `Tests/KioskOrderViewContractTests.swift`: required copy and action-wiring source contract.
 - Modify `Barrier City/Interaction/InteractionModel.swift`: own kiosk state/detectors, expose view properties, convert world hand points into Screen-local samples.
 - Modify `Barrier City/Interaction/InteractionSetup.swift`: keep Screen-attached menu always visible, retain billboard fallback, update kiosk context, and fail-open missing attachment.
 - Modify `Barrier City/Interaction/SceneSwitcher.swift`: install the attachment on Indoor `Screen/Plane` and reset kiosk session state.
@@ -329,25 +328,20 @@ git commit -m "feat: 키오스크 UI를 Screen 평면에 배치"
 
 **Files:**
 - Modify: `Barrier City/Interaction/KioskOrderView.swift`
-- Create: `Tests/KioskOrderViewContractTests.swift`
 
 **Interfaces:**
 - Consumes: `InteractionModel.kioskMenuVisible`, `.kioskInputEnabled`, `.kioskBarrierVisible`, `.attemptKioskUse(.gazePinch)`, and `.requestKioskStaffHelp()`.
 - Produces: a fixed 540×960 9:16 SwiftUI canvas with `BARRIER CAFE`, four category tabs, a 3-column static menu, decorative order strip, and bottom feedback card.
 
-- [ ] **Step 1: Add a source contract test for required copy and action wiring**
+- [ ] **Step 1: Confirm the tested view-state boundary is RED**
 
-Create `Tests/KioskOrderViewContractTests.swift` to require these source fragments: `BARRIER CAFE`, all three approved Korean strings, `attemptKioskUse(.gazePinch)`, and `requestKioskStaffHelp()`.
+Before changing the view, run `KioskInteractionStateTests` from Task 2 while its menu attempt, barrier visibility, and one-shot help assertions are still failing. These are the consumer-visible behaviors the SwiftUI controls must drive; exact display copy is an approved product decision and is verified through rendered acceptance rather than a brittle source grep.
 
-- [ ] **Step 2: Run the contract test to verify RED**
-
-Compile the test with `-parse-as-library` and pass `Barrier City/Interaction/KioskOrderView.swift`. Expected: FAIL on the first missing required fragment.
-
-- [ ] **Step 3: Implement the menu canvas**
+- [ ] **Step 2: Implement the menu canvas**
 
 Define a local `CafeMenuItem` array (아메리카노, 카페라떼, 카페모카, 에스프레소, 아이스티, 핫초코, 자몽티, 말차라떼, 복숭아티), warm brown/orange colors, and reusable `menuCard`. Each enabled card invokes `_ = im.attemptKioskUse(.gazePinch)`; `.disabled(!im.kioskInputEnabled)` preserves the always-on display. Use only `cup.and.saucer.fill`, `mug.fill`, or SwiftUI shapes—no attached screenshot or third-party logo.
 
-- [ ] **Step 4: Implement the bottom barrier overlay**
+- [ ] **Step 3: Implement the bottom barrier overlay**
 
 When `im.kioskBarrierVisible`, overlay a high-contrast bottom card with the exact title, description, and button. The button calls `requestKioskStaffHelp()` and emits `.kioskFailed` only when it returns `true`.
 
@@ -359,14 +353,14 @@ Button("직원에게 도움 받기") {
 }
 ```
 
-- [ ] **Step 5: Run the copy/action contract and build**
+- [ ] **Step 4: Run state tests and build**
 
-Expected: contract test passes, and the visionOS compile in Task 6 reports no SwiftUI API/type errors.
+Expected: `KioskInteractionStateTests: PASS`, and the visionOS compile in Task 6 reports no SwiftUI API/type errors. Simulator acceptance checks compare the rendered title, description, and action labels to the approved copy.
 
-- [ ] **Step 6: Commit the UI slice**
+- [ ] **Step 5: Commit the UI slice**
 
 ```bash
-git add "Barrier City/Interaction/KioskOrderView.swift" Tests/KioskOrderViewContractTests.swift
+git add "Barrier City/Interaction/KioskOrderView.swift"
 git commit -m "feat: 카페 키오스크 메뉴와 장벽 카드 구현"
 ```
 
@@ -380,9 +374,9 @@ git commit -m "feat: 카페 키오스크 메뉴와 장벽 카드 구현"
 - Consumes: existing `gripWorldPosition(_:)`, `HandAnchor.Chirality`, `anchor.isTracked`, and `InteractionModel.processKioskHandSample`.
 - Produces: one kiosk sample per existing anchor update without a second `ARKitSession` or `HandTrackingProvider`.
 
-- [ ] **Step 1: Extend the contract test to require one provider and sample forwarding**
+- [ ] **Step 1: Confirm detector integration behavior is RED**
 
-Require `processKioskHandSample(` in `HandTrackingManager.swift`, exactly one textual `HandTrackingProvider()`, and keep all existing stop/generation ordering assertions.
+Run the detector and state tests before the hand integration exists: detector attempts are produced and accepted in isolation, but no live hand anchor path feeds them yet. The integration's observable proof is the app compiling with the real ARKit types and the Vision Pro acceptance check; do not add a source-string change detector.
 
 - [ ] **Step 2: Run the contract test to verify RED**
 
@@ -391,7 +385,7 @@ xcrun swiftc -parse-as-library Tests/HandTrackingLifecycleContractTests.swift -o
 /tmp/hand-lifecycle-contract-tests "Barrier City/ImmersiveView.swift" "Barrier City/HandTrackingManager.swift"
 ```
 
-Expected: FAIL because sample forwarding is absent.
+Expected: the existing lifecycle contract remains `PASS`; the new end-to-end hand behavior remains unavailable until Step 3.
 
 - [ ] **Step 3: Forward the existing hand sample**
 
@@ -430,7 +424,7 @@ git commit -m "feat: 손 뻗기를 키오스크 시도로 연결"
 
 - [ ] **Step 1: Run every standalone regression executable**
 
-Run the established commands from the prior plans plus the three new pure tests and kiosk view contract. Required success lines include all existing test names and the three new `Kiosk...Tests: PASS` lines.
+Run the established commands from the prior plans plus the three new pure tests. Required success lines include all existing test names and the three new `Kiosk...Tests: PASS` lines.
 
 - [ ] **Step 2: Run DialogueKit tests**
 
