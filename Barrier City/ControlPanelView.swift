@@ -1,4 +1,5 @@
 import SwiftUI
+import DialogueKitOpenAI
 
 /// 시작/종료 + 시뮬레이터용 디버그 입력 패널.
 /// 시뮬레이터에는 손 추적이 없으므로 여기 슬라이더로 좌/우 바퀴를 민다.
@@ -160,6 +161,10 @@ struct ControlPanelView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 #endif
 
+            if model.npcDialogue.realtimeMetrics.hasMeasurements {
+                realtimeMetricsSection
+            }
+
             if model.isImmersive {
                 VStack(spacing: 8) {
                     Text("NPC: \(model.npcClerk.phase.rawValue)"
@@ -253,6 +258,34 @@ struct ControlPanelView: View {
         }
         .frame(width: 460, height: 720)
         .disabled(isImmersiveTransitioning)
+    }
+
+    private var realtimeMetricsSection: some View {
+        let metrics = model.npcDialogue.realtimeMetrics
+        return VStack(alignment: .leading, spacing: 8) {
+            Label("Realtime 기준선", systemImage: "waveform.path.ecg")
+                .font(.headline)
+
+            HStack(spacing: 20) {
+                stat("전송", metrics.transport.rawValue)
+                stat("토큰", metricText(metrics.tokenMilliseconds))
+                stat("연결", metricText(metrics.connectMilliseconds))
+                stat("준비", metricText(metrics.readyMilliseconds))
+            }
+            HStack(spacing: 20) {
+                stat("턴", metricText(metrics.lastTurnMilliseconds))
+                stat("끼어들기", metricText(metrics.lastInterruptMilliseconds))
+                stat("완료", "\(metrics.completedTurns)")
+                stat("오류", "\(metrics.errorCount)")
+            }
+        }
+        .font(.callout)
+        .padding(12)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func metricText(_ milliseconds: Int?) -> String {
+        milliseconds.map { "\($0) ms" } ?? "-"
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {

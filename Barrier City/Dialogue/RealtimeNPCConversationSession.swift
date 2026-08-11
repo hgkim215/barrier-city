@@ -7,6 +7,7 @@
 
 import Foundation
 import DialogueKitOpenAI
+import OSLog
 
 @MainActor
 final class RealtimeNPCConversationSession {
@@ -21,10 +22,17 @@ final class RealtimeNPCConversationSession {
         case outputTranscriptDone(String)
         case functionCall(name: String, callID: String, arguments: String)
         case responseDone
+        case diagnostics(RealtimeMetricsSnapshot)
         case failure(String)
     }
 
+    private static let diagnosticsLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "RealtimeMetrics"
+    )
+
     private let audio = RealtimeAudioIO()
+    private var diagnostics = RealtimeMetricsRecorder(transport: .webSocket)
     private var client: RealtimeWebSocketClient?
     private var receiveTask: Task<Void, Never>?
     private var audioSendTask: Task<Void, Never>?
@@ -37,6 +45,7 @@ final class RealtimeNPCConversationSession {
     private var sessionConfigurationContinuation: CheckedContinuation<Void, Error>?
     private var currentOutputItem: (id: String, contentIndex: Int)?
     private var interruptedOutputItemID: String?
+    private var isOutputActive = false
 
     func start(
         instructions: String,
@@ -45,6 +54,7 @@ final class RealtimeNPCConversationSession {
     ) async throws {
         guard client == nil else { throw RealtimeClientError.alreadyConnected }
         try Task.checkCancellation()
+        diagnostics.beginSession()
         let client = RealtimeWebSocketClient(config: AppConfig.proxy)
         self.client = client
         eventHandler = onEvent
@@ -62,6 +72,10 @@ final class RealtimeNPCConversationSession {
 
         do {
             try await client.connect()
+            if let tokenMilliseconds = await client.lastTokenRequestMilliseconds {
+                diagnostics.recordToken(milliseconds: tokenMilliseconds)
+                publishDiagnostics()
+            }
 
             receiveTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -73,7 +87,7 @@ final class RealtimeNPCConversationSession {
                     self.resumeSessionConfiguration(throwing: CancellationError())
                 } catch {
                     self.resumeSessionConfiguration(throwing: error)
-                    self.eventHandler?(.failure(error.localizedDescription))
+                    self.reportFailure(error.localizedDescription)
                 }
             }
 
@@ -86,14 +100,14 @@ final class RealtimeNPCConversationSession {
                 } catch is CancellationError {
                     // 정상 종료
                 } catch {
-                    self?.eventHandler?(.failure(error.localizedDescription))
+                    self?.reportFailure(error.localizedDescription)
                 }
             }
 
             inputLevelTask = Task { @MainActor [weak self] in
                 for await level in inputLevelStream.stream {
                     guard !Task.isCancelled else { return }
-                    self?.eventHandler?(.inputLevel(level))
+                    self?.handleInputLevel(level)
                 }
             }
 
@@ -117,6 +131,9 @@ final class RealtimeNPCConversationSession {
                 )
             )
         } catch {
+            if diagnostics.snapshot.errorCount == 0 {
+                reportFailure(error.localizedDescription)
+            }
             await stop()
             throw error
         }
@@ -162,17 +179,26 @@ final class RealtimeNPCConversationSession {
         await levelTask?.value
         currentOutputItem = nil
         interruptedOutputItemID = nil
+        isOutputActive = false
+        diagnostics.cancelPendingInterruption()
     }
 
     private func handle(_ event: RealtimeServerEvent) {
         switch event {
         case .sessionCreated:
-            break
+            diagnostics.recordSessionCreated()
+            publishDiagnostics()
         case .sessionReady:
+            diagnostics.recordSessionReady()
+            publishDiagnostics()
             resumeSessionConfiguration()
             eventHandler?(.sessionReady)
         case .speechStarted:
             let playedMilliseconds = audio.interruptOutput()
+            isOutputActive = false
+            if diagnostics.recordInterruptionCompleted() {
+                publishDiagnostics()
+            }
             interruptedOutputItemID = currentOutputItem?.id
             if let currentOutputItem, let playedMilliseconds, let client {
                 truncateTask?.cancel()
@@ -187,13 +213,14 @@ final class RealtimeNPCConversationSession {
                         )
                     } catch {
                         guard !Task.isCancelled else { return }
-                        self?.eventHandler?(.failure(error.localizedDescription))
+                        self?.reportFailure(error.localizedDescription)
                     }
                 }
             }
             currentOutputItem = nil
             eventHandler?(.speechStarted)
         case .speechStopped:
+            diagnostics.recordSpeechStopped()
             eventHandler?(.speechStopped)
         case .inputTranscriptDelta(let text):
             eventHandler?(.inputTranscriptDelta(text))
@@ -202,11 +229,14 @@ final class RealtimeNPCConversationSession {
         case .outputAudio(let itemID, let contentIndex, let data):
             guard itemID != interruptedOutputItemID else { return }
             interruptedOutputItemID = nil
+            isOutputActive = true
+            recordFirstOutputIfNeeded()
             let beginsResponse = currentOutputItem?.id != itemID
                 || currentOutputItem?.contentIndex != contentIndex
             currentOutputItem = (itemID, contentIndex)
             audio.enqueueOutput(data, beginsResponse: beginsResponse)
         case .outputTranscriptDelta(let text):
+            recordFirstOutputIfNeeded()
             eventHandler?(.outputTranscriptDelta(text))
         case .outputTranscriptDone(let text):
             eventHandler?(.outputTranscriptDone(text))
@@ -222,10 +252,37 @@ final class RealtimeNPCConversationSession {
                     userInfo: [NSLocalizedDescriptionKey: message]
                 )
             )
-            eventHandler?(.failure(message))
+            reportFailure(message)
         case .ignored:
             break
         }
+    }
+
+    private func handleInputLevel(_ level: Float) {
+        if isOutputActive, level >= 0.28 {
+            diagnostics.recordLocalInterruptionStart()
+        }
+        eventHandler?(.inputLevel(level))
+    }
+
+    private func recordFirstOutputIfNeeded() {
+        if diagnostics.recordFirstOutput() {
+            publishDiagnostics()
+        }
+    }
+
+    private func reportFailure(_ message: String) {
+        diagnostics.recordError()
+        publishDiagnostics()
+        eventHandler?(.failure(message))
+    }
+
+    private func publishDiagnostics() {
+        let snapshot = diagnostics.snapshot
+        Self.diagnosticsLogger.info(
+            "transport=\(snapshot.transport.rawValue, privacy: .public) token_ms=\(snapshot.tokenMilliseconds ?? -1, privacy: .public) connect_ms=\(snapshot.connectMilliseconds ?? -1, privacy: .public) ready_ms=\(snapshot.readyMilliseconds ?? -1, privacy: .public) turn_ms=\(snapshot.lastTurnMilliseconds ?? -1, privacy: .public) interrupt_ms=\(snapshot.lastInterruptMilliseconds ?? -1, privacy: .public) errors=\(snapshot.errorCount, privacy: .public)"
+        )
+        eventHandler?(.diagnostics(snapshot))
     }
 
     private func configureSession(

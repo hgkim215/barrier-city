@@ -48,6 +48,7 @@ final class NPCDialogueController {
     private(set) var animationRequest: NPCAnimationRequest?
     private(set) var lastMissionEvent: MissionEvent?
     private(set) var missionEventSequence = 0
+    private(set) var realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
 
     var liveText: String {
         realtimeSession == nil ? speech.partialText : realtimeLiveText
@@ -128,6 +129,7 @@ final class NPCDialogueController {
         history = []
         realtimeLiveText = ""
         realtimeInputLevel = 0
+        realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
         realtimeMission.reset()
         automaticTurnCount = 0
         animationSequence = 0
@@ -550,6 +552,9 @@ final class NPCDialogueController {
             }
             status = .listening
             armRealtimeResponseTimeout()
+
+        case .diagnostics(let snapshot):
+            realtimeMetrics = snapshot
 
         case .failure(let message):
             cancelEncounter()

@@ -180,4 +180,33 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(object["content_index"] as? Int, 0)
         XCTAssertEqual(object["audio_end_ms"] as? Int, 1_250)
     }
+
+    func test_realtimeMetrics_recordsConnectionTurnAndInterruptionWithoutContent() {
+        let startedAt = ContinuousClock.now
+        var recorder = RealtimeMetricsRecorder(transport: .webSocket)
+
+        recorder.beginSession(at: startedAt)
+        recorder.recordToken(milliseconds: 42)
+        recorder.recordSessionCreated(at: startedAt.advanced(by: .milliseconds(120)))
+        recorder.recordSessionReady(at: startedAt.advanced(by: .milliseconds(180)))
+        recorder.recordSpeechStopped(at: startedAt.advanced(by: .seconds(1)))
+        XCTAssertTrue(
+            recorder.recordFirstOutput(at: startedAt.advanced(by: .milliseconds(1_350)))
+        )
+        recorder.recordLocalInterruptionStart(at: startedAt.advanced(by: .seconds(2)))
+        XCTAssertTrue(
+            recorder.recordInterruptionCompleted(at: startedAt.advanced(by: .milliseconds(2_075)))
+        )
+        recorder.recordError()
+
+        XCTAssertEqual(recorder.snapshot.transport, .webSocket)
+        XCTAssertEqual(recorder.snapshot.tokenMilliseconds, 42)
+        XCTAssertEqual(recorder.snapshot.connectMilliseconds, 120)
+        XCTAssertEqual(recorder.snapshot.readyMilliseconds, 180)
+        XCTAssertEqual(recorder.snapshot.lastTurnMilliseconds, 350)
+        XCTAssertEqual(recorder.snapshot.lastInterruptMilliseconds, 75)
+        XCTAssertEqual(recorder.snapshot.completedTurns, 1)
+        XCTAssertEqual(recorder.snapshot.interruptionCount, 1)
+        XCTAssertEqual(recorder.snapshot.errorCount, 1)
+    }
 }

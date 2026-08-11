@@ -30,6 +30,7 @@ public struct RealtimeClientSecretProvider: Sendable {
 
 public actor RealtimeWebSocketClient {
     public nonisolated let events: AsyncThrowingStream<RealtimeServerEvent, Error>
+    public private(set) var lastTokenRequestMilliseconds: Int?
 
     private let secretProvider: RealtimeClientSecretProvider
     private let session: URLSession
@@ -60,7 +61,11 @@ public actor RealtimeWebSocketClient {
 
     public func connect() async throws {
         guard socket == nil else { throw RealtimeClientError.alreadyConnected }
+        let tokenStartedAt = ContinuousClock.now
         let secret = try await secretProvider.fetch()
+        lastTokenRequestMilliseconds = Self.milliseconds(
+            tokenStartedAt.duration(to: .now)
+        )
         try Task.checkCancellation()
         let task = session.webSocketTask(
             with: endpoint,
@@ -116,5 +121,12 @@ public actor RealtimeWebSocketClient {
             continuation.finish(throwing: error)
             socket = nil
         }
+    }
+
+    private static func milliseconds(_ duration: Duration) -> Int {
+        let components = duration.components
+        let seconds = Double(components.seconds)
+        let fractionalSeconds = Double(components.attoseconds) / 1_000_000_000_000_000_000
+        return max(0, Int(((seconds + fractionalSeconds) * 1_000).rounded()))
     }
 }
