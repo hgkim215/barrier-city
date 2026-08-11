@@ -127,9 +127,6 @@ final class InteractionModel {
     @ObservationIgnored var kioskScreenHalfSize = SIMD2<Float>.zero
     /// true면 Screen 배치 실패로 기존 월드 빌보드 배치를 사용한다.
     @ObservationIgnored var kioskUsesBillboardFallback = true
-    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
-    /// 트리거 이탈/재진입 시 리셋.
-    var kioskTooHighShown = false
     /// 키오스크 메뉴 표시·입력·장벽·도움 요청 상태.
     private var kioskState = KioskInteractionState()
     /// 왼손과 오른손의 이동 이력을 섞지 않도록 손별 detector를 유지한다.
@@ -149,13 +146,6 @@ final class InteractionModel {
     func dismissActive() {
         dismissedTriggerID = activeTrigger?.id
         activeTrigger = nil
-    }
-
-    /// 키오스크 장벽 확인과 근접 트리거 억제를 한 상태 변경으로 처리한다.
-    func acknowledgeKioskBarrier() {
-        dismissActive()
-        kioskTooHighShown = false
-        kioskPanelEntity?.isEnabled = false
     }
 
     // MARK: - 키오스크 상태
@@ -189,7 +179,6 @@ final class InteractionModel {
     func requestKioskStaffHelp() -> Bool {
         guard kioskState.requestStaffHelp() else { return false }
         dismissActive()
-        kioskTooHighShown = false
         resetKioskReachDetectors()
         return true
     }
@@ -253,7 +242,6 @@ final class InteractionModel {
 
     func resetKioskSession() {
         kioskState.reset()
-        kioskTooHighShown = false
         kioskFailOpenSent = false
         kioskScreenPlane = nil
         kioskScreenHalfSize = .zero

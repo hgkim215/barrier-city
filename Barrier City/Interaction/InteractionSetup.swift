@@ -34,7 +34,6 @@ enum InteractionSetup {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.kioskTooHighShown = false
         appModel.npcClerk.resetForOutdoor()
 
         // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
@@ -127,7 +126,6 @@ enum InteractionSetup {
         if im.activeTrigger?.id != verdict.showID {
             im.activeTrigger = verdict.showID.flatMap { id in im.triggers.first { $0.id == id } }
             if im.activeTrigger == nil { im.transitionError = nil }   // 닫힐 때 안내 문구도 정리
-            im.kioskTooHighShown = false   // 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋
         }
         let isNearKiosk = im.activeTrigger?.kind == .kioskScreen
         im.updateKioskContext(
