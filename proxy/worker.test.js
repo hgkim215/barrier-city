@@ -179,6 +179,8 @@ test("realtime token request fixes the model, modality, and voice", async () => 
     assert.equal(response.status, 200);
     assert.equal(capturedBody.session.model, "gpt-realtime-2.1");
     assert.deepEqual(capturedBody.session.output_modalities, ["audio"]);
+    assert.equal(capturedBody.session.audio.input.turn_detection.type, "semantic_vad");
+    assert.equal(capturedBody.session.audio.input.turn_detection.eagerness, "auto");
     assert.equal(capturedBody.session.audio.output.voice, "marin");
   } finally {
     globalThis.fetch = originalFetch;

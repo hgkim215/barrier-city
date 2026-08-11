@@ -196,7 +196,7 @@ async function createRealtimeClientSecret(env, requestId) {
         input: {
           turn_detection: {
             type: "semantic_vad",
-            eagerness: "low",
+            eagerness: "auto",
             create_response: true,
             interrupt_response: true,
           },

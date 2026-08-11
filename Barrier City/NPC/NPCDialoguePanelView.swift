@@ -50,7 +50,20 @@ struct NPCDialoguePanelView: View {
                 .foregroundStyle(.secondary)
 
             if controller.status == .listening {
-                MicrophoneInputGauge(level: controller.microphoneLevel)
+                if controller.hasRealtimeMicrophoneLevel {
+                    MicrophoneInputGauge(level: controller.microphoneLevel)
+                } else {
+                    Label(
+                        controller.realtimeSpeechDetected
+                            ? "WebRTC 음성 감지됨"
+                            : "WebRTC 음성 입력 대기",
+                        systemImage: controller.realtimeSpeechDetected
+                            ? "waveform"
+                            : "mic.fill"
+                    )
+                        .font(.caption)
+                        .foregroundStyle(controller.realtimeSpeechDetected ? .green : .secondary)
+                }
             }
 
             Text(displayedSubtitle)

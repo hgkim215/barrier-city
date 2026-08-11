@@ -158,11 +158,17 @@ final class OpenAILLMClientTests: XCTestCase {
         let audio = try XCTUnwrap(session["audio"] as? [String: Any])
         let input = try XCTUnwrap(audio["input"] as? [String: Any])
         let transcription = try XCTUnwrap(input["transcription"] as? [String: Any])
+        let turnDetection = try XCTUnwrap(input["turn_detection"] as? [String: Any])
         let tools = try XCTUnwrap(session["tools"] as? [[String: Any]])
 
         XCTAssertEqual(object["type"] as? String, "session.update")
         XCTAssertEqual(session["instructions"] as? String, "자연스럽게 대화해.")
-        XCTAssertEqual(transcription["model"] as? String, "gpt-live-transcribe")
+        XCTAssertEqual(transcription["model"] as? String, "gpt-4o-transcribe")
+        XCTAssertEqual(transcription["language"] as? String, "ko")
+        XCTAssertEqual(turnDetection["type"] as? String, "semantic_vad")
+        XCTAssertEqual(turnDetection["eagerness"] as? String, "auto")
+        XCTAssertEqual(turnDetection["create_response"] as? Bool, true)
+        XCTAssertEqual(turnDetection["interrupt_response"] as? Bool, true)
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
 

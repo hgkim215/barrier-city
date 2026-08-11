@@ -50,12 +50,16 @@ final class NPCDialogueController {
     private(set) var missionEventSequence = 0
     private(set) var realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
     private(set) var realtimeABMetrics = RealtimeABMetrics()
+    private(set) var realtimeSpeechDetected = false
 
     var liveText: String {
         realtimeSession == nil ? speech.partialText : realtimeLiveText
     }
     var microphoneLevel: Float {
         realtimeSession == nil ? speech.inputLevel : realtimeInputLevel
+    }
+    var hasRealtimeMicrophoneLevel: Bool {
+        realtimeSession == nil || realtimeMetrics.transport == .webSocket
     }
     var isBusy: Bool { status == .thinking || status == .speaking }
 
@@ -130,6 +134,7 @@ final class NPCDialogueController {
         history = []
         realtimeLiveText = ""
         realtimeInputLevel = 0
+        realtimeSpeechDetected = false
         realtimeMetrics = RealtimeMetricsSnapshot(transport: .webSocket)
         realtimeMission.reset()
         automaticTurnCount = 0
@@ -211,6 +216,7 @@ final class NPCDialogueController {
         realtimeSession = nil
         realtimeLiveText = ""
         realtimeInputLevel = 0
+        realtimeSpeechDetected = false
         realtimeMission.reset()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
@@ -446,6 +452,7 @@ final class NPCDialogueController {
         lastMissionEvent = nil
         realtimeLiveText = ""
         realtimeInputLevel = 0
+        realtimeSpeechDetected = false
         realtimeMission.reset()
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
@@ -507,9 +514,11 @@ final class NPCDialogueController {
             realtimeResponseTimeoutTask = nil
             realtimeLiveText = ""
             userText = ""
+            realtimeSpeechDetected = true
             status = .listening
 
         case .speechStopped:
+            realtimeSpeechDetected = false
             status = .thinking
 
         case .inputTranscriptDelta(let text):
@@ -535,6 +544,7 @@ final class NPCDialogueController {
             }
 
         case .responseDone:
+            realtimeSpeechDetected = false
             requestAnimation(.idle)
             if let functionCall = realtimeMission.takeFunctionCall() {
                 status = .thinking

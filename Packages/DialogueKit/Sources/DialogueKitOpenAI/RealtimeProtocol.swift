@@ -120,7 +120,8 @@ public enum RealtimeClientEvent {
     public static func sessionUpdate(
         instructions: String,
         tools: [RealtimeFunctionTool],
-        transcriptionModel: String = "gpt-live-transcribe"
+        transcriptionModel: String = "gpt-4o-transcribe",
+        transcriptionLanguage: String = "ko"
     ) throws -> Data {
         let toolObjects: [[String: Any]] = tools.map {
             [
@@ -143,7 +144,16 @@ public enum RealtimeClientEvent {
                 "tools": toolObjects,
                 "audio": [
                     "input": [
-                        "transcription": ["model": transcriptionModel],
+                        "transcription": [
+                            "model": transcriptionModel,
+                            "language": transcriptionLanguage,
+                        ],
+                        "turn_detection": [
+                            "type": "semantic_vad",
+                            "eagerness": "auto",
+                            "create_response": true,
+                            "interrupt_response": true,
+                        ] as [String: Any],
                     ],
                 ],
             ] as [String: Any],
