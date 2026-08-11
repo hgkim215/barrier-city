@@ -211,6 +211,7 @@ struct ImmersiveView: View {
             AppModel.current = model
         }
         .onDisappear {
+            model.performance.stop(model: model)
             model.isImmersive = false
             model.npcClerk.resetForOutdoor()
             ImpactAudio.shared.stop()

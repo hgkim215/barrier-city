@@ -20,36 +20,54 @@ final class QuestHUDFollower {
     private var running = false
     private var placed = false   // 최초 1회는 스무딩 없이 즉시 배치
     private var runGeneration = 0
+    private var wasUsingFallback = false
 
     /// world tracking 시작. 실패하면 running=false로 남아 update가 폴백 배치를 쓴다.
-    func start() async {
+    func start(model: AppModel) async {
         runGeneration &+= 1
         let generation = runGeneration
         running = false
+        model.worldTrackingStatus = "연결 중"
         guard WorldTrackingProvider.isSupported else {
             print("WorldTracking 미지원 — 퀘스트 HUD 고정 배치 폴백")
+            model.worldTrackingStatus = "미지원 · 고정 배치"
+            model.worldTrackingFallbacks += 1
+            wasUsingFallback = true
             return
         }
         do {
             try await session.run([provider])
             guard generation == runGeneration, !Task.isCancelled else { return }
             running = true
+            model.worldTrackingStatus = "연결됨"
         } catch {
             guard generation == runGeneration, !Task.isCancelled else { return }
             print("WorldTracking 시작 실패: \(error) — 퀘스트 HUD 고정 배치 폴백")
+            model.worldTrackingStatus = "시작 실패 · 고정 배치"
+            model.worldTrackingFallbacks += 1
+            wasUsingFallback = true
         }
     }
 
     /// 매 프레임 호출. panel을 head 옆 타깃으로 스무딩 이동 + head를 향해 yaw 빌보드.
     /// - panel: 씬 루트에 붙은 HUD 엔티티(월드 좌표계에서 움직인다).
     /// - dt: 이전 프레임과의 시간 간격(초, SceneEvents.Update.deltaTime).
-    func update(panel: Entity, dt: Float) {
+    func update(panel: Entity, dt: Float, model: AppModel) {
         let targetPos: SIMD3<Float>
         let headPos: SIMD3<Float>
         if let pose = targetPose() {
+            if wasUsingFallback {
+                wasUsingFallback = false
+                model.worldTrackingStatus = "추적 복구"
+            }
             targetPos = pose.position
             headPos = pose.head
         } else {
+            if !wasUsingFallback {
+                wasUsingFallback = true
+                model.worldTrackingFallbacks += 1
+                model.worldTrackingStatus = "추적 유실 · 고정 배치"
+            }
             targetPos = QuestTuning.fallbackPosition
             headPos = SIMD3(0, QuestTuning.fallbackPosition.y, 0)   // 원점을 향함
         }
@@ -86,6 +104,7 @@ final class QuestHUDFollower {
         runGeneration &+= 1
         running = false
         placed = false
+        wasUsingFallback = false
         session.stop()
     }
 

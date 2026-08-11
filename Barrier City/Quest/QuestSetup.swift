@@ -33,11 +33,11 @@ enum QuestSetup {
 
         let f = QuestHUDFollower()
         follower = f
-        startTask = Task { await f.start() }
+        startTask = Task { await f.start(model: appModel) }
 
         subscription = content.subscribe(to: SceneEvents.Update.self) { event in
             guard let panel = hudPanel, let f = follower else { return }
-            f.update(panel: panel, dt: Float(event.deltaTime))
+            f.update(panel: panel, dt: Float(event.deltaTime), model: appModel)
         }
     }
 

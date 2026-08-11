@@ -28,6 +28,8 @@ final class AppModel {
     let npcClerk: NPCClerkController
     /// 주행 물리 상태는 입력·앱 수명 상태와 분리해 MovementSystem의 변경 범위를 제한한다.
     let motion = WheelchairMotionState()
+    /// 실기기 반복 시나리오의 앱 내부 성능 기준선을 누적한다.
+    let performance = SpatialPerformanceRecorder()
 
     /// 캐릭터 캡슐 전체 높이(m). 바닥 접지 = 중심.y - charHeight/2.
     static let charHeight: Float = 1.0
@@ -83,6 +85,8 @@ final class AppModel {
     private var fistDriveHardStopRequested = false
     /// 권한/연결/보정 상태를 테스트 창에서 바로 확인하기 위한 문구.
     var handTrackingStatus = "꺼짐"
+    var worldTrackingStatus = "대기"
+    var worldTrackingFallbacks = 0
 
     // MARK: - 누적 충격량(매 프레임 System이 소비 후 0으로 리셋)
     var pendingImpulseLeft: Float = 0
