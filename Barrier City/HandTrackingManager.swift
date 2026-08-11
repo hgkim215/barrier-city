@@ -170,6 +170,12 @@ final class HandTrackingManager {
         // 잡기 기준점: 손목이 아니라 '손바닥(중지 밑마디)' 월드 위치.
         // 손목은 실제 쥐는 지점보다 아래에 있어 잡기 영역이 처지므로 보정.
         let gripPos = gripWorldPosition(anchor)
+        let kioskHandSide: KioskHandSide = chirality == .left ? .left : .right
+        InteractionModel.shared.processKioskHandSample(
+            side: kioskHandSide,
+            worldPosition: gripPos,
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            isTracked: anchor.isTracked)
 
         // 해당 쪽 바퀴까지 거리.
         let wheelPos = (chirality == .left) ? AppModel.leftWheelPos : AppModel.rightWheelPos
