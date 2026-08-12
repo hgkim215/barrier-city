@@ -74,6 +74,7 @@ final class NPCDialogueController {
     private let speech = SpeechInput()
     private let voice: VoiceOutput
     private let accessibilityAttitude: AccessibilityAttitude
+    private let clerkPersonality: ClerkPersonality
     private var orchestrator: DialogueOrchestrator
     private var history: [Message] = []
     private var animationSequence = 0
@@ -88,8 +89,12 @@ final class NPCDialogueController {
     private var realtimeLiveText = ""
     private var realtimeMission = RealtimeMissionCoordinator()
 
-    init(accessibilityAttitude: AccessibilityAttitude = .ableist) {
+    init(
+        accessibilityAttitude: AccessibilityAttitude = .ableist,
+        clerkPersonality: ClerkPersonality? = nil
+    ) {
         self.accessibilityAttitude = accessibilityAttitude
+        self.clerkPersonality = clerkPersonality ?? .random()
         rapport = accessibilityAttitude.initialRapport
         tone = SocialClimate(rapport: accessibilityAttitude.initialRapport).tone
 #if targetEnvironment(simulator)
@@ -99,13 +104,20 @@ final class NPCDialogueController {
 #else
         voice = VoiceOutput(config: AppConfig.proxy, mode: .lowLatency)
 #endif
-        orchestrator = Self.makeOrchestrator(accessibilityAttitude: accessibilityAttitude)
+        orchestrator = Self.makeOrchestrator(
+            accessibilityAttitude: accessibilityAttitude,
+            clerkPersonality: self.clerkPersonality
+        )
     }
 
     private static func makeOrchestrator(
-        accessibilityAttitude: AccessibilityAttitude
+        accessibilityAttitude: AccessibilityAttitude,
+        clerkPersonality: ClerkPersonality
     ) -> DialogueOrchestrator {
-        let persona = makePersona(accessibilityAttitude: accessibilityAttitude)
+        let persona = makePersona(
+            accessibilityAttitude: accessibilityAttitude,
+            clerkPersonality: clerkPersonality
+        )
         return DialogueOrchestrator(
             persona: persona,
             llm: OpenAILLMClient(config: AppConfig.proxy),
@@ -120,13 +132,15 @@ final class NPCDialogueController {
     }
 
     private static func makePersona(
-        accessibilityAttitude: AccessibilityAttitude
+        accessibilityAttitude: AccessibilityAttitude,
+        clerkPersonality: ClerkPersonality
     ) -> NPCPersona {
         NPCPersona(
             id: "staff",
             role: "cafe staff",
             englishSystemBase: "You are a busy cafe employee standing near an ordering kiosk whose touchscreen is too high for wheelchair users.",
-            accessibilityAttitude: accessibilityAttitude)
+            accessibilityAttitude: accessibilityAttitude,
+            clerkPersonality: clerkPersonality)
     }
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
@@ -148,7 +162,10 @@ final class NPCDialogueController {
         animationRequest = nil
         lastMissionEvent = nil
         missionEventSequence = 0
-        orchestrator = Self.makeOrchestrator(accessibilityAttitude: accessibilityAttitude)
+        orchestrator = Self.makeOrchestrator(
+            accessibilityAttitude: accessibilityAttitude,
+            clerkPersonality: clerkPersonality
+        )
     }
 
     /// 점원이 계산대에 도착했을 때 먼저 인사한 뒤 자동 음성 대화를 시작한다.
@@ -476,7 +493,10 @@ final class NPCDialogueController {
         do {
             try await session.start(
                 instructions: RealtimeConversationGuide().instructions(
-                    persona: Self.makePersona(accessibilityAttitude: accessibilityAttitude),
+                    persona: Self.makePersona(
+                        accessibilityAttitude: accessibilityAttitude,
+                        clerkPersonality: clerkPersonality
+                    ),
                     climate: SocialClimate(rapport: rapport)
                 ),
                 tools: Self.realtimeTools

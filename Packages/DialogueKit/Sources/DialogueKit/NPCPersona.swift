@@ -22,17 +22,45 @@ public enum AccessibilityAttitude: String, Sendable {
     }
 }
 
+/// 접근성 태도와 별개로 점원의 말투와 반응 리듬을 결정하는 성격.
+public enum ClerkPersonality: String, CaseIterable, Sendable {
+    case hurried
+    case chatty
+    case cautious
+    case blunt
+
+    public static func random() -> Self {
+        allCases.randomElement() ?? .hurried
+    }
+
+    var promptRule: String {
+        switch self {
+        case .hurried:
+            "You are visibly busy and speak quickly in clipped, practical sentences. You want to resolve the situation fast, but you still react to what the visitor actually says."
+        case .chatty:
+            "You are sociable and expressive. Add brief personal reactions and casual warmth, but stay focused and never turn the exchange into a monologue."
+        case .cautious:
+            "You are rule-conscious and hesitant. You pause before making exceptions, confirm uncertain details carefully, and sound uneasy rather than robotic."
+        case .blunt:
+            "You are direct and emotionally dry. Use plain, concise wording and let impatience show through sentence endings, without insults or needless cruelty."
+        }
+    }
+}
+
 public struct NPCPersona: Sendable {
     public let id: String
     public let role: String
     public let englishSystemBase: String   // 영어 시스템 프롬프트(토큰 절감)
     public let accessibilityAttitude: AccessibilityAttitude
+    public let clerkPersonality: ClerkPersonality
 
     public init(id: String, role: String, englishSystemBase: String,
-                accessibilityAttitude: AccessibilityAttitude = .inclusive) {
+                accessibilityAttitude: AccessibilityAttitude = .inclusive,
+                clerkPersonality: ClerkPersonality = .hurried) {
         self.id = id
         self.role = role
         self.englishSystemBase = englishSystemBase
         self.accessibilityAttitude = accessibilityAttitude
+        self.clerkPersonality = clerkPersonality
     }
 }

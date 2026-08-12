@@ -111,4 +111,50 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(guide.contains("never call it for silence"))
         XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
     }
+
+    func test_prompts_defineRainbowSmoothieAsMissionOrder() {
+        let messages = PromptBuilder().build(
+            persona: persona,
+            climate: SocialClimate(),
+            history: [],
+            userUtterance: "주문할게요",
+            turnLimit: 8
+        )
+        let realtime = RealtimeConversationGuide().instructions(
+            persona: persona,
+            climate: SocialClimate()
+        )
+
+        XCTAssertTrue(messages.first!.content.contains("Rainbow Smoothie"))
+        XCTAssertTrue(messages.first!.content.contains("레인보우 스무디"))
+        XCTAssertTrue(messages.first!.content.contains("Do not mark a different menu item"))
+        XCTAssertTrue(realtime.contains("Rainbow Smoothie"))
+        XCTAssertTrue(realtime.contains("Never call it for a different menu item"))
+    }
+
+    func test_clerkPersonality_isExplicitInLegacyAndRealtimePrompts() {
+        let chatty = NPCPersona(
+            id: "staff",
+            role: "cafe staff",
+            englishSystemBase: "You are staff.",
+            accessibilityAttitude: .ableist,
+            clerkPersonality: .chatty
+        )
+        let messages = PromptBuilder().build(
+            persona: chatty,
+            climate: SocialClimate(),
+            history: [],
+            userUtterance: "안녕하세요",
+            turnLimit: 8
+        )
+        let realtime = RealtimeConversationGuide().instructions(
+            persona: chatty,
+            climate: SocialClimate()
+        )
+
+        XCTAssertTrue(messages.first!.content.contains("Clerk personality: chatty"))
+        XCTAssertTrue(messages.first!.content.contains("sociable and expressive"))
+        XCTAssertTrue(realtime.contains("Clerk personality: chatty"))
+        XCTAssertTrue(realtime.contains("clearly audible in word choice"))
+    }
 }
