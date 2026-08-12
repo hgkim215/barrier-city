@@ -1,4 +1,5 @@
 import Foundation
+import DialogueKit
 import DialogueKitOpenAI
 
 private func realtimeConversationLog(_ message: @autoclosure () -> String) {
@@ -81,10 +82,7 @@ final class RealtimeNPCConversationSession {
             realtimeConversationLog("Realtime session configured")
             try Task.checkCancellation()
             try await requestResponse(
-                instructions: """
-                Respond ONLY in Korean. Briefly greet the visitor in natural spoken Korean,
-                then stop and wait for their reply. Do not use any English words.
-                """
+                instructions: RealtimeConversationGuide.mandatoryOpeningInstructions
             )
             realtimeConversationLog("initial NPC greeting requested")
         } catch {

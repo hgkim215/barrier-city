@@ -18,6 +18,19 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(router.infer(from: "키오스크가 너무 높아서 손이 안 닿아요").kind, .orderRequest)
     }
 
+    func test_rainbowSmoothie_withBarrier_isConcreteOrderAndPreservesBarrierSignal() {
+        let utterance = "키오스크 화면에 손이 안 닿아서 레인보우 스무디 주세요"
+
+        XCTAssertEqual(router.infer(from: utterance).kind, .orderComplete)
+        XCTAssertTrue(router.describesKioskAccessBarrier(in: utterance))
+    }
+
+    func test_shortBarrierInsistence_isRecognizedForStatefulFollowUp() {
+        XCTAssertTrue(router.continuesAccessRequest(in: "진짜 안 닿아요"))
+        XCTAssertTrue(router.continuesAccessRequest(in: "그래도 직접 받아주세요"))
+        XCTAssertFalse(router.continuesAccessRequest(in: "오늘 날씨 좋네요"))
+    }
+
     func test_genericOrderRequest_waitsForConcreteMenuItem() {
         XCTAssertEqual(router.infer(from: "주문하고 싶어요").kind, .orderRequest)
         XCTAssertEqual(router.infer(from: "메뉴가 뭐예요?").kind, .orderRequest)

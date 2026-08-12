@@ -51,7 +51,10 @@ final class DialogueOrchestratorTests: XCTestCase {
             .done,
         ])
         let sut = makeSUT(llm)
-        let r = await sut.handle(utterance: "아메리카노 주세요", history: [])
+        let r = await sut.handle(
+            utterance: "키오스크 화면에 손이 안 닿아서 아메리카노 주세요",
+            history: []
+        )
         XCTAssertEqual(r.event, .orderPlaced)
         XCTAssertFalse(r.usedFallback)
     }
@@ -59,7 +62,8 @@ final class DialogueOrchestratorTests: XCTestCase {
     func test_ableistStaff_refusesTwice_thenReluctantlyAcceptsThirdOrderRequest() async {
         let sut = DialogueOrchestrator(
             persona: NPCPersona(id: "staff", role: "cafe staff", englishSystemBase: "You are staff.",
-                                accessibilityAttitude: .ableist),
+                                accessibilityAttitude: .ableist,
+                                clerkPersonality: .blunt),
             llm: MockLLM([.token("응답."), .done]),
             guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
             cache: DialogueCache(lines: [.timeout: CannedLine(text: "잠시만요…", audioKey: "t")]),
@@ -79,25 +83,32 @@ final class DialogueOrchestratorTests: XCTestCase {
     func test_genericAcceptedOrder_asksForItemBeforeCompleting() async {
         let sut = makeSUT(MockLLM([.token("네."), .done]))
 
-        let request = await sut.handle(utterance: "주문하고 싶어요", history: [])
+        let request = await sut.handle(
+            utterance: "키오스크가 너무 높아서 손이 안 닿아 주문하고 싶어요",
+            history: []
+        )
         let item = await sut.handle(utterance: "아메리카노 주세요", history: [])
 
         XCTAssertNil(request.event)
         XCTAssertEqual(item.event, .orderPlaced)
     }
 
-    func test_ableistStaff_withWarmRapport_acceptsFirstOrderRequest() async {
+    func test_warmRapport_doesNotSkipBluntPersonalityResistance() async {
         let sut = DialogueOrchestrator(
             persona: NPCPersona(id: "staff", role: "cafe staff", englishSystemBase: "You are staff.",
-                                accessibilityAttitude: .ableist),
+                                accessibilityAttitude: .ableist,
+                                clerkPersonality: .blunt),
             climate: SocialClimate(rapport: 0.25),
             llm: MockLLM([.token("주문 도와드릴게요."), .done]),
             guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
             cache: DialogueCache(lines: [:]),
             turnLimit: 8)
 
-        let result = await sut.handle(utterance: "아메리카노 한 잔 주세요", history: [])
-        XCTAssertEqual(result.event, .orderPlaced)
+        let result = await sut.handle(
+            utterance: "키오스크 화면에 손이 안 닿아서 아메리카노 한 잔 주세요",
+            history: []
+        )
+        XCTAssertNil(result.event)
     }
 
     func test_streamError_fallsBackToCannedTimeout_doesNotThrow() async {
@@ -174,7 +185,8 @@ final class DialogueOrchestratorTests: XCTestCase {
     func test_beginEncounter_resetsTurnLimit_butKeepsOrderAttempts() async {
         let sut = DialogueOrchestrator(
             persona: NPCPersona(id: "staff", role: "cafe staff", englishSystemBase: "You are staff.",
-                                accessibilityAttitude: .ableist),
+                                accessibilityAttitude: .ableist,
+                                clerkPersonality: .blunt),
             llm: MockLLM([.token("응답."), .done]),
             guardian: SafetyGuard(bannedKeywords: [], maxTurns: 1),
             cache: DialogueCache(lines: [
@@ -182,16 +194,89 @@ final class DialogueOrchestratorTests: XCTestCase {
             ]),
             turnLimit: 1)
 
-        let first = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
+        let first = await sut.handle(
+            utterance: "키오스크가 높아서 손이 안 닿으니 아메리카노 주문 받아주세요",
+            history: []
+        )
         let blocked = await sut.handle(utterance: "다시 부탁드려요", history: [])
         await sut.beginEncounter()
-        let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
+        let second = await sut.handle(
+            utterance: "키오스크가 높아서 손이 안 닿으니 아메리카노 주문 받아주세요",
+            history: []
+        )
         await sut.beginEncounter()
-        let third = await sut.handle(utterance: "라떼 주문 받아주세요", history: [])
+        let third = await sut.handle(
+            utterance: "키오스크가 높아서 손이 안 닿으니 라떼 주문 받아주세요",
+            history: []
+        )
 
         XCTAssertNil(first.event)
         XCTAssertTrue(blocked.usedFallback)
         XCTAssertNil(second.event)
         XCTAssertEqual(third.event, .orderPlaced)
+    }
+
+    func test_personalityControlsHowManyRelevantAttemptsPrecedeAcceptance() async {
+        let expectedAttempts: [(ClerkPersonality, Int)] = [
+            (.hurried, 1),
+            (.chatty, 1),
+            (.cautious, 2),
+            (.blunt, 3),
+        ]
+
+        for (personality, acceptanceAttempt) in expectedAttempts {
+            let sut = DialogueOrchestrator(
+                persona: NPCPersona(
+                    id: "staff",
+                    role: "cafe staff",
+                    englishSystemBase: "You are staff.",
+                    accessibilityAttitude: .ableist,
+                    clerkPersonality: personality
+                ),
+                llm: MockLLM([.token("응답."), .done]),
+                guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
+                cache: DialogueCache(lines: [:]),
+                turnLimit: 8
+            )
+
+            for attempt in 1...acceptanceAttempt {
+                let result = await sut.handle(
+                    utterance: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요",
+                    history: []
+                )
+                if attempt < acceptanceAttempt {
+                    XCTAssertNil(result.event, "\(personality) accepted on attempt \(attempt)")
+                } else {
+                    XCTAssertEqual(result.event, .orderPlaced, "\(personality) did not accept on attempt \(attempt)")
+                }
+            }
+        }
+    }
+
+    func test_cautiousClerk_acceptsShortInsistenceWithoutRepeatedKioskWord() async {
+        let sut = DialogueOrchestrator(
+            persona: NPCPersona(
+                id: "staff",
+                role: "cafe staff",
+                englishSystemBase: "You are staff.",
+                accessibilityAttitude: .ableist,
+                clerkPersonality: .cautious
+            ),
+            llm: MockLLM([.token("응답."), .done]),
+            guardian: SafetyGuard(bannedKeywords: [], maxTurns: 8),
+            cache: DialogueCache(lines: [:]),
+            turnLimit: 8
+        )
+
+        let explanation = await sut.handle(
+            utterance: "키오스크 화면이 높아서 손이 안 닿아요",
+            history: []
+        )
+        let insistence = await sut.handle(utterance: "진짜 안 닿아요", history: [])
+        let order = await sut.handle(utterance: "레인보우 스무디 주세요", history: [])
+
+        XCTAssertNil(explanation.event)
+        XCTAssertNil(insistence.event)
+        XCTAssertEqual(order.event, .orderPlaced)
     }
 }

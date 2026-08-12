@@ -215,7 +215,7 @@ final class NPCDialogueController {
             hasRequestedGreetingAnimation = true
             requestAnimation(.greet)
         }
-        await voice.speak("안녕하세요. 필요하신 거 있으세요?") { [weak self] line in
+        await voice.speak(RealtimeConversationGuide.mandatoryOpeningLine) { [weak self] line in
             self?.npcSubtitle = line
         }
         guard isEncounterActive, !Task.isCancelled else {
@@ -741,7 +741,7 @@ final class NPCDialogueController {
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
         .init(name: "complete_order",
-              description: "Call after the visitor and employee have confirmed a concrete cafe order."),
+              description: "Call only after the employee has agreed to bypass the kiosk and both sides have confirmed one Rainbow Smoothie."),
         .init(name: "request_help",
               description: "Call only when the visitor explicitly asks for another employee or assistance."),
         .init(name: "end_conversation",

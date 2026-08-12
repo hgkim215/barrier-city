@@ -20,15 +20,19 @@ public actor DialogueOrchestrator {
     private var turnCount = 0
     private var orderRequestCount = 0
     private var isTakingOrder = false
+    private var hasExplainedAccessBarrier = false
 
     public init(persona: NPCPersona, climate: SocialClimate? = nil, llm: LLMClient,
                 guardian: SafetyGuard, cache: DialogueCache, turnLimit: Int,
-                forcedOrderAcceptanceAttempt: Int = 3) {
+                forcedOrderAcceptanceAttempt: Int? = nil) {
         self.persona = persona
         self.climate = climate ?? SocialClimate(rapport: persona.accessibilityAttitude.initialRapport)
         self.llm = llm
         self.guardian = guardian; self.cache = cache; self.turnLimit = turnLimit
-        self.forcedOrderAcceptanceAttempt = max(1, forcedOrderAcceptanceAttempt)
+        self.forcedOrderAcceptanceAttempt = max(
+            1,
+            forcedOrderAcceptanceAttempt ?? persona.clerkPersonality.verbalOrderAcceptanceAttempt
+        )
     }
 
     /// 거리 이탈 후 다시 만난 새 대화의 턴 제한만 초기화한다.
@@ -36,6 +40,7 @@ public actor DialogueOrchestrator {
     public func beginEncounter() {
         turnCount = 0
         isTakingOrder = false
+        hasExplainedAccessBarrier = false
     }
 
     /// 응답 없는 만남도 다음 대화의 태도에 반영되도록 관계 상태에 감점을 누적한다.
@@ -58,7 +63,15 @@ public actor DialogueOrchestrator {
         climate.apply(turn)
         turnCount += 1
         let intent = router.infer(from: utterance)
-        let orderDecision = decideOrderService(for: intent)
+        let continuesExplainedAccessRequest = hasExplainedAccessBarrier
+            && router.continuesAccessRequest(in: utterance)
+        if router.describesKioskAccessBarrier(in: utterance) {
+            hasExplainedAccessBarrier = true
+        }
+        let orderDecision = decideOrderService(
+            for: intent,
+            continuesExplainedAccessRequest: continuesExplainedAccessRequest
+        )
 
         // 3) 프롬프트 조립(③)
         let messages = promptBuilder.build(persona: persona, climate: climate,
@@ -99,16 +112,22 @@ public actor DialogueOrchestrator {
         return TurnResult(spokenSentences: sentences, event: event, usedFallback: false)
     }
 
-    private func decideOrderService(for intent: DialogueIntent) -> OrderServiceDecision {
-        guard intent.kind == .orderRequest || intent.kind == .orderComplete else {
+    private func decideOrderService(
+        for intent: DialogueIntent,
+        continuesExplainedAccessRequest: Bool
+    ) -> OrderServiceDecision {
+        let isOrderIntent = intent.kind == .orderRequest || intent.kind == .orderComplete
+        guard isOrderIntent || continuesExplainedAccessRequest else {
             return .notApplicable
         }
+        // 첫 안내 후 장벽을 직접 설명하기 전까지는 성격과 관계 점수에 상관없이
+        // 카운터 주문 단계로 넘어가지 않는다.
+        guard hasExplainedAccessBarrier else { return .refuseKioskOnly }
         // 앞 턴에서 구두 주문을 받기로 했다면 메뉴를 말하는 다음 턴에는 다시 거절하지 않는다.
         if isTakingOrder { return .acceptDirectly }
         orderRequestCount += 1
         let decision: OrderServiceDecision
-        if persona.accessibilityAttitude == .inclusive
-            || climate.tone == .warm || climate.tone == .supportive {
+        if persona.accessibilityAttitude == .inclusive {
             decision = .acceptDirectly
         } else if orderRequestCount >= forcedOrderAcceptanceAttempt {
             // 비친화 점원도 설정된 최대 시도에는 주문을 받아 미션이 막히지 않게 한다.

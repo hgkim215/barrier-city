@@ -88,7 +88,8 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(guide.contains("including the first greeting"))
         XCTAssertTrue(guide.contains("Listen for meaning"))
         XCTAssertTrue(guide.contains("not trigger words"))
-        XCTAssertTrue(guide.contains("Do not follow a fixed script"))
+        XCTAssertTrue(guide.contains("do not recite a"))
+        XCTAssertTrue(guide.contains("fixed script"))
         XCTAssertTrue(guide.contains("Accept interruptions, corrections, topic changes"))
         XCTAssertTrue(guide.contains("After each answer, stop and wait"))
     }
@@ -105,8 +106,8 @@ final class PromptBuilderTests: XCTestCase {
             climate: SocialClimate(rapport: ableist.accessibilityAttitude.initialRapport)
         )
 
-        XCTAssertTrue(guide.contains("Begin with an ableist assumption"))
-        XCTAssertTrue(guide.contains("instead of repeating a stock refusal"))
+        XCTAssertTrue(guide.contains("Assume the standard kiosk process"))
+        XCTAssertTrue(guide.contains("personality-specific acceptance timing"))
         XCTAssertTrue(guide.contains("Call complete_order exactly once"))
         XCTAssertTrue(guide.contains("never call it for silence"))
         XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
@@ -129,7 +130,7 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(messages.first!.content.contains("레인보우 스무디"))
         XCTAssertTrue(messages.first!.content.contains("Do not mark a different menu item"))
         XCTAssertTrue(realtime.contains("Rainbow Smoothie"))
-        XCTAssertTrue(realtime.contains("Never call it for a different menu item"))
+        XCTAssertTrue(realtime.contains("or for a different menu item"))
     }
 
     func test_clerkPersonality_isExplicitInLegacyAndRealtimePrompts() {
@@ -156,5 +157,72 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(messages.first!.content.contains("sociable and expressive"))
         XCTAssertTrue(realtime.contains("Clerk personality: chatty"))
         XCTAssertTrue(realtime.contains("clearly audible in word choice"))
+    }
+
+    func test_realtimeGuide_requiresKioskOpeningBeforeBarrierIsExplained() {
+        let guide = RealtimeConversationGuide().instructions(
+            persona: persona,
+            climate: SocialClimate()
+        )
+
+        XCTAssertEqual(
+            RealtimeConversationGuide.mandatoryOpeningLine,
+            "키오스크로 주문해주세요~"
+        )
+        XCTAssertTrue(
+            RealtimeConversationGuide.mandatoryOpeningInstructions.contains(
+                "Speak ONLY this exact Korean sentence and nothing else"
+            )
+        )
+        XCTAssertTrue(guide.contains("# Required conversation flow"))
+        XCTAssertTrue(guide.contains("private scene context"))
+        XCTAssertTrue(guide.contains("explaining an access barrier"))
+        XCTAssertTrue(guide.contains("Do not ask for an item"))
+    }
+
+    func test_realtimeGuide_definesDistinctPersonalityAcceptanceTiming() {
+        let expectedRules: [(ClerkPersonality, String)] = [
+            (.hurried, "accept the verbal order immediately because arguing would waste time"),
+            (.chatty, "accept the verbal order immediately"),
+            (.cautious, "ask one skeptical verification question"),
+            (.blunt, "On the first two relevant requests or explanations"),
+        ]
+
+        for (personality, expected) in expectedRules {
+            let personalityPersona = NPCPersona(
+                id: "staff",
+                role: "cafe staff",
+                englishSystemBase: "You are staff.",
+                accessibilityAttitude: .ableist,
+                clerkPersonality: personality
+            )
+            let guide = RealtimeConversationGuide().instructions(
+                persona: personalityPersona,
+                climate: SocialClimate()
+            )
+
+            XCTAssertTrue(guide.contains(expected), "Missing rule for \(personality)")
+        }
+    }
+
+    func test_legacyPrompt_keepsPersonalityTimingAboveWarmRapport() {
+        let blunt = NPCPersona(
+            id: "staff",
+            role: "cafe staff",
+            englishSystemBase: "You are staff.",
+            accessibilityAttitude: .ableist,
+            clerkPersonality: .blunt
+        )
+        let messages = PromptBuilder().build(
+            persona: blunt,
+            climate: SocialClimate(rapport: 0.8),
+            history: [],
+            userUtterance: "키오스크에 손이 안 닿아요",
+            turnLimit: 8,
+            orderDecision: .refuseKioskOnly
+        )
+
+        XCTAssertTrue(messages.first!.content.contains("Follow the personality rule's acceptance timing"))
+        XCTAssertTrue(messages.first!.content.contains("Once verbal service is accepted"))
     }
 }
