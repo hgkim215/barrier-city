@@ -38,7 +38,12 @@ enum NPCClerkTuning {
     static let moveSpeed: Float = 0.8
     static let turnResponse: Float = 7
     static let arrivalDistance: Float = 0.04
-    static let workPauseSeconds: Float = 1.8
+    /// 한 지점에 도착한 뒤 다음 행동을 시작하기까지 매번 달라지는 대기 시간.
+    static let workPauseRange: ClosedRange<Float> = 1.2...4.0
+    /// 너무 짧은 이동을 반복하지 않도록 새 목적지와 현재 위치 사이에 두는 최소 거리.
+    static let minimumRoamDistance: Float = 0.75
+    /// AreaK 경계나 가구에 캐릭터가 겹치지 않도록 안쪽으로 줄이는 여백.
+    static let workAreaMargin: Float = 0.45
     /// BarTable의 고객 쪽 경계에서 직원 구역 안/고객 쪽으로 떨어지는 거리.
     static let staffCounterInset: Float = 1.05
     static let customerStandOff: Float = 0.65
@@ -83,8 +88,9 @@ final class NPCClerkController {
     private var staffHome = NPCClerkTuning.fallbackStaffHome
     private var servicePoint = NPCClerkTuning.fallbackServicePoint
     private var customerPoint = NPCClerkTuning.fallbackCustomerPoint
-    private var workWaypoints: [SIMD2<Float>] = []
-    private var workWaypointIndex = 0
+    private var workAreaMin = NPCClerkTuning.fallbackAreaMin
+    private var workAreaMax = NPCClerkTuning.fallbackAreaMax
+    private var workTarget: SIMD2<Float>?
     private var workPauseRemaining: Float = 0
     /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
     private var conversationAnchor: SIMD2<Float>?
@@ -123,6 +129,7 @@ final class NPCClerkController {
         lastPlayedAnimation = ""
         placementSummary = ""
         conversationAnchor = nil
+        workTarget = nil
         handledAnimationSequence = 0
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
@@ -152,12 +159,15 @@ final class NPCClerkController {
         staffHome = placement.staffHome
         servicePoint = placement.servicePoint
         customerPoint = placement.customerPoint
-        workWaypoints = placement.workWaypoints
-        workWaypointIndex = 0
-        workPauseRemaining = NPCClerkTuning.workPauseSeconds
+        workAreaMin = placement.workAreaMin
+        workAreaMax = placement.workAreaMax
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
         placementSummary = String(
-            format: "대기(%.2f, %.2f) → 계산대(%.2f, %.2f), 고객(%.2f, %.2f)",
+            format: "대기(%.2f, %.2f), 배회영역[(%.2f, %.2f)~(%.2f, %.2f)], 계산대(%.2f, %.2f), 고객(%.2f, %.2f)",
             staffHome.x, staffHome.y,
+            workAreaMin.x, workAreaMin.y,
+            workAreaMax.x, workAreaMax.y,
             servicePoint.x, servicePoint.y,
             customerPoint.x, customerPoint.y)
 
@@ -250,7 +260,7 @@ final class NPCClerkController {
             }
 
         case .completed:
-            face(point: player, deltaTime: dt)
+            updateWorkLoop(deltaTime: dt)
         }
 
     }
@@ -273,7 +283,8 @@ final class NPCClerkController {
         let staffHome: SIMD2<Float>
         let servicePoint: SIMD2<Float>
         let customerPoint: SIMD2<Float>
-        let workWaypoints: [SIMD2<Float>]
+        let workAreaMin: SIMD2<Float>
+        let workAreaMax: SIMD2<Float>
     }
 
     private func makePlacement(in indoorMap: Entity,
@@ -326,22 +337,21 @@ final class NPCClerkController {
             customer = edge + towardCustomer * NPCClerkTuning.customerStandOff
         }
 
-        let margin: Float = 0.45
-        home = clamp(home, minimum: areaMin + margin, maximum: areaMax - margin)
-        service = clamp(service, minimum: areaMin + margin, maximum: areaMax - margin)
+        let insetMin = areaMin + NPCClerkTuning.workAreaMargin
+        let insetMax = areaMax - NPCClerkTuning.workAreaMargin
+        // 마커가 여백보다 좁은 축에서도 닫힌 난수 범위를 만들 수 있도록 정규화한다.
+        let roamMin = SIMD2<Float>(Swift.min(insetMin.x, insetMax.x),
+                                   Swift.min(insetMin.y, insetMax.y))
+        let roamMax = SIMD2<Float>(Swift.max(insetMin.x, insetMax.x),
+                                   Swift.max(insetMin.y, insetMax.y))
+        home = clamp(home, minimum: roamMin, maximum: roamMax)
+        service = clamp(service, minimum: roamMin, maximum: roamMax)
 
-        let candidates = [
-            home + SIMD2<Float>(-1.35, 0),
-            home + SIMD2<Float>(0.95, -0.30),
-            home,
-        ]
-        let waypoints = candidates.map {
-            clamp($0, minimum: areaMin + margin, maximum: areaMax - margin)
-        }
         return Placement(staffHome: home,
                          servicePoint: service,
                          customerPoint: customer,
-                         workWaypoints: waypoints)
+                         workAreaMin: roamMin,
+                         workAreaMax: roamMax)
     }
 
     private func clamp(_ value: Float, _ minimum: Float, _ maximum: Float) -> Float {
@@ -364,18 +374,47 @@ final class NPCClerkController {
     }
 
     private func updateWorkLoop(deltaTime: Float) {
-        guard !workWaypoints.isEmpty else { return }
         if workPauseRemaining > 0 {
             workPauseRemaining = max(0, workPauseRemaining - deltaTime)
             playAnimation(.idle)
             return
         }
+        if workTarget == nil {
+            workTarget = randomWorkTarget(awayFrom: currentClerkPosition)
+        }
+        guard let workTarget else {
+            playAnimation(.idle)
+            return
+        }
         playAnimation(.walk)
-        if move(toward: workWaypoints[workWaypointIndex], deltaTime: deltaTime) {
-            workWaypointIndex = (workWaypointIndex + 1) % workWaypoints.count
-            workPauseRemaining = NPCClerkTuning.workPauseSeconds
+        if move(toward: workTarget, deltaTime: deltaTime) {
+            self.workTarget = nil
+            workPauseRemaining = randomWorkPause()
             playAnimation(.idle)
         }
+    }
+
+    private func randomWorkTarget(awayFrom current: SIMD2<Float>) -> SIMD2<Float>? {
+        guard workAreaMin.x <= workAreaMax.x,
+              workAreaMin.y <= workAreaMax.y else { return nil }
+
+        var fallback = current
+        // 좁거나 긴 AreaK에서도 무한 반복하지 않도록 유한 횟수 뒤 마지막 후보를 사용한다.
+        for _ in 0..<8 {
+            let candidate = SIMD2<Float>(
+                Float.random(in: workAreaMin.x...workAreaMax.x),
+                Float.random(in: workAreaMin.y...workAreaMax.y)
+            )
+            fallback = candidate
+            if simd_distance(candidate, current) >= NPCClerkTuning.minimumRoamDistance {
+                return candidate
+            }
+        }
+        return fallback
+    }
+
+    private func randomWorkPause() -> Float {
+        Float.random(in: NPCClerkTuning.workPauseRange)
     }
 
     @discardableResult
@@ -462,6 +501,8 @@ final class NPCClerkController {
             conversationAnchor = nil
             QuestModel.shared.advance(on: .npcHelpDone)
             phase = .completed
+            workTarget = nil
+            workPauseRemaining = randomWorkPause()
             playAnimation(.idle)
         case .exited:
             conversationAnchor = nil
@@ -470,7 +511,8 @@ final class NPCClerkController {
             dialogue.cancelEncounter()
             setInteractionBubbleVisible(true)
             phase = .working
-            workPauseRemaining = NPCClerkTuning.workPauseSeconds
+            workTarget = nil
+            workPauseRemaining = randomWorkPause()
         case .helpRequested, .none:
             break
         }
@@ -484,7 +526,8 @@ final class NPCClerkController {
         dialogue.cancelEncounter()
         setInteractionBubbleVisible(true)
         phase = .working
-        workPauseRemaining = NPCClerkTuning.workPauseSeconds
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
     }
 
     // MARK: - Animation
