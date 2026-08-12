@@ -194,11 +194,14 @@ async function createRealtimeClientSecret(env, requestId) {
       output_modalities: ["audio"],
       audio: {
         input: {
+          // 기본 0.5보다 높은 임계값으로 작은 주변 소리와 스피커 에코를 거른다.
           turn_detection: {
-            type: "semantic_vad",
-            eagerness: "auto",
+            type: "server_vad",
+            threshold: 0.7,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 700,
             create_response: true,
-            interrupt_response: true,
+            interrupt_response: false,
           },
         },
         output: { voice: "marin" },

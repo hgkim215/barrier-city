@@ -141,10 +141,12 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(session["instructions"] as? String, "자연스럽게 대화해.")
         XCTAssertEqual(transcription["model"] as? String, "gpt-4o-transcribe")
         XCTAssertEqual(transcription["language"] as? String, "ko")
-        XCTAssertEqual(turnDetection["type"] as? String, "semantic_vad")
-        XCTAssertEqual(turnDetection["eagerness"] as? String, "auto")
+        XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
+        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.7)
+        XCTAssertEqual(turnDetection["prefix_padding_ms"] as? Int, 300)
+        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 700)
         XCTAssertEqual(turnDetection["create_response"] as? Bool, true)
-        XCTAssertEqual(turnDetection["interrupt_response"] as? Bool, true)
+        XCTAssertEqual(turnDetection["interrupt_response"] as? Bool, false)
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
 
