@@ -88,6 +88,12 @@ final class NPCDialogueController {
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
     private var realtimeMission = RealtimeMissionCoordinator()
+    private var realtimeOutputIsPlaying = false
+    private var realtimeResponseDonePending = false
+    private var realtimeMicrophoneIsReady = false
+    private var realtimeCanAcceptInput = false
+    private var realtimeInputTurnIsActive = false
+    private var realtimeSuppressesCurrentInputTurn = false
 
     init(
         accessibilityAttitude: AccessibilityAttitude = .ableist,
@@ -156,6 +162,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        resetRealtimeTurnState()
         automaticTurnCount = 0
         animationSequence = 0
         hasRequestedGreetingAnimation = false
@@ -239,6 +246,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        resetRealtimeTurnState()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
         let previousCleanup = cleanupTask
@@ -474,6 +482,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        resetRealtimeTurnState()
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
         userText = ""
@@ -524,24 +533,61 @@ final class NPCDialogueController {
             break
 
         case .speechStarted:
+            if realtimeInputTurnIsActive { return }
+            guard realtimeCanAcceptInput else {
+                realtimeSuppressesCurrentInputTurn = true
+#if DEBUG
+                print("[Realtime][Controller] ignored speech detected outside listening window")
+#endif
+                return
+            }
             realtimeResponseTimeoutTask?.cancel()
             realtimeResponseTimeoutTask = nil
             realtimeLiveText = ""
             userText = ""
+            realtimeCanAcceptInput = false
+            realtimeInputTurnIsActive = true
+            realtimeSuppressesCurrentInputTurn = false
             realtimeSpeechDetected = true
             status = .listening
 
         case .speechStopped:
+            guard realtimeInputTurnIsActive, !realtimeSuppressesCurrentInputTurn else { return }
             realtimeSpeechDetected = false
             status = .thinking
 
         case .inputTranscriptDelta(let text):
+            guard realtimeInputTurnIsActive, !realtimeSuppressesCurrentInputTurn else { return }
             realtimeLiveText += text
 
         case .inputTranscriptDone(let text):
+            if realtimeSuppressesCurrentInputTurn {
+                realtimeSuppressesCurrentInputTurn = false
+                return
+            }
+            guard realtimeInputTurnIsActive else { return }
+            realtimeInputTurnIsActive = false
             let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
             userText = transcript
             realtimeLiveText = transcript
+            guard !transcript.isEmpty else {
+                status = .listening
+                realtimeCanAcceptInput = realtimeMicrophoneIsReady
+                if realtimeCanAcceptInput { armRealtimeResponseTimeout() }
+                return
+            }
+            realtimeMicrophoneIsReady = false
+            status = .thinking
+            guard let realtimeSession else { return }
+            realtimeCommandTask?.cancel()
+            realtimeCommandTask = Task { @MainActor [weak self] in
+                do {
+                    try await realtimeSession.requestResponse()
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.handleRealtimeEvent(.failure(error.localizedDescription))
+                }
+            }
 
         case .outputTranscriptDelta(let text):
             if status != .speaking { npcSubtitle = "" }
@@ -552,41 +598,34 @@ final class NPCDialogueController {
             let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !transcript.isEmpty { npcSubtitle = transcript }
 
+        case .outputAudioStarted:
+            realtimeOutputIsPlaying = true
+            realtimeMicrophoneIsReady = false
+            realtimeCanAcceptInput = false
+            status = .speaking
+
+        case .outputAudioStopped:
+            realtimeOutputIsPlaying = false
+            if realtimeResponseDonePending {
+                realtimeResponseDonePending = false
+                finishRealtimeResponse()
+            }
+
+        case .microphoneReady:
+            realtimeMicrophoneIsReady = true
+            beginRealtimeListeningIfReady()
+
         case .functionCall(let name, let callID, _):
             if let event = realtimeMission.register(name: name, callID: callID) {
                 publishMissionEvent(event)
             }
 
         case .responseDone:
-            realtimeSpeechDetected = false
-            requestAnimation(.idle)
-            if let functionCall = realtimeMission.takeFunctionCall() {
-                status = .thinking
-                guard let realtimeSession else { return }
-                realtimeCommandTask?.cancel()
-                realtimeCommandTask = Task { @MainActor [weak self] in
-                    do {
-                        try await realtimeSession.completeFunctionCall(
-                            callID: functionCall.callID,
-                            output: functionCall.output
-                        )
-                    } catch {
-                        guard !Task.isCancelled else { return }
-                        self?.handleRealtimeEvent(.failure(error.localizedDescription))
-                    }
-                }
+            if realtimeOutputIsPlaying {
+                realtimeResponseDonePending = true
                 return
             }
-            if let event = realtimeMission.takeCompletedEvent() {
-                publishMissionEvent(event)
-                if event == .orderPlaced || event == .exited {
-                    cancelEncounter()
-                    status = .idle
-                    return
-                }
-            }
-            status = .listening
-            armRealtimeResponseTimeout()
+            finishRealtimeResponse()
 
         case .failure(let message):
             cancelEncounter()
@@ -594,6 +633,65 @@ final class NPCDialogueController {
             status = .idle
             publishMissionEvent(.exited)
         }
+    }
+
+    /// `response.done`은 생성 완료일 뿐 실제 WebRTC 재생 완료가 아니다. 오디오가 재생
+    /// 중이면 `output_audio_buffer.stopped` 뒤에만 이 메서드가 호출된다.
+    private func finishRealtimeResponse() {
+        realtimeSpeechDetected = false
+        realtimeInputTurnIsActive = false
+        realtimeSuppressesCurrentInputTurn = false
+        requestAnimation(.idle)
+        if let functionCall = realtimeMission.takeFunctionCall() {
+            realtimeCanAcceptInput = false
+            realtimeMicrophoneIsReady = false
+            status = .thinking
+            guard let realtimeSession else { return }
+            realtimeCommandTask?.cancel()
+            realtimeCommandTask = Task { @MainActor [weak self] in
+                do {
+                    try await realtimeSession.completeFunctionCall(
+                        callID: functionCall.callID,
+                        output: functionCall.output
+                    )
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.handleRealtimeEvent(.failure(error.localizedDescription))
+                }
+            }
+            return
+        }
+        if let event = realtimeMission.takeCompletedEvent() {
+            publishMissionEvent(event)
+            if event == .orderPlaced || event == .exited {
+                cancelEncounter()
+                status = .idle
+                return
+            }
+        }
+        status = .listening
+        beginRealtimeListeningIfReady()
+    }
+
+    private func beginRealtimeListeningIfReady() {
+        guard isEncounterActive,
+              realtimeSession != nil,
+              status == .listening,
+              realtimeMicrophoneIsReady,
+              !realtimeOutputIsPlaying,
+              !realtimeResponseDonePending,
+              !realtimeInputTurnIsActive else { return }
+        realtimeCanAcceptInput = true
+        armRealtimeResponseTimeout()
+    }
+
+    private func resetRealtimeTurnState() {
+        realtimeOutputIsPlaying = false
+        realtimeResponseDonePending = false
+        realtimeMicrophoneIsReady = false
+        realtimeCanAcceptInput = false
+        realtimeInputTurnIsActive = false
+        realtimeSuppressesCurrentInputTurn = false
     }
 
     private func finishPendingCleanup() async {
