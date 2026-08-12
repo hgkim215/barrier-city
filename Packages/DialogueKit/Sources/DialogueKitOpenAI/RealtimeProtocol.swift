@@ -42,12 +42,16 @@ public struct RealtimeFunctionTool: Sendable, Equatable {
 
 public enum RealtimeServerEvent: Sendable, Equatable {
     case sessionReady
+    case responseCreated
     case speechStarted
     case speechStopped
     case inputTranscriptDelta(String)
     case inputTranscriptDone(String)
     case outputTranscriptDelta(String)
     case outputTranscriptDone(String)
+    case outputAudioStarted
+    case outputAudioStopped
+    case outputAudioCleared
     case functionCall(name: String, callID: String, arguments: String)
     case responseDone
     case error(String)
@@ -62,6 +66,8 @@ public enum RealtimeServerEvent: Sendable, Equatable {
         switch type {
         case "session.updated":
             return .sessionReady
+        case "response.created":
+            return .responseCreated
         case "input_audio_buffer.speech_started":
             return .speechStarted
         case "input_audio_buffer.speech_stopped":
@@ -74,6 +80,12 @@ public enum RealtimeServerEvent: Sendable, Equatable {
             return .outputTranscriptDelta(object["delta"] as? String ?? "")
         case "response.output_audio_transcript.done":
             return .outputTranscriptDone(object["transcript"] as? String ?? "")
+        case "output_audio_buffer.started":
+            return .outputAudioStarted
+        case "output_audio_buffer.stopped":
+            return .outputAudioStopped
+        case "output_audio_buffer.cleared":
+            return .outputAudioCleared
         case "response.function_call_arguments.done":
             guard let name = object["name"] as? String,
                   let callID = object["call_id"] as? String else {
@@ -127,13 +139,14 @@ public enum RealtimeClientEvent {
                             "model": transcriptionModel,
                             "language": transcriptionLanguage,
                         ],
-                        // 기본 0.5보다 높은 임계값으로 작은 주변 소리와 스피커 에코를 거른다.
+                        // VAD는 발화 구간만 나누고, transcript 확인 뒤 앱이 응답을 요청한다.
+                        // 이 방식이면 NPC 출력 중 감지된 에코가 새 응답을 자동 생성하지 않는다.
                         "turn_detection": [
                             "type": "server_vad",
-                            "threshold": 0.7,
+                            "threshold": NSDecimalNumber(string: "0.65"),
                             "prefix_padding_ms": 300,
                             "silence_duration_ms": 700,
-                            "create_response": true,
+                            "create_response": false,
                             "interrupt_response": false,
                         ] as [String: Any],
                     ],

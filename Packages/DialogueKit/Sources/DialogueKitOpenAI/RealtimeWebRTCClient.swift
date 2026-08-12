@@ -169,6 +169,13 @@ public actor RealtimeWebRTCClient {
         realtimeWebRTCLog("client event sent: \(Self.eventType(in: data))")
     }
 
+    /// NPC 출력이 재생되는 동안 로컬 마이크 트랙을 닫아 스피커 에코가
+    /// 새 사용자 턴으로 서버에 전달되지 않게 한다.
+    public func setMicrophoneEnabled(_ enabled: Bool) {
+        audioTrack?.isEnabled = enabled
+        realtimeWebRTCLog("microphone track enabled=\(enabled)")
+    }
+
     public func disconnect() async {
         realtimeWebRTCLog("disconnect started")
         delegateBridge.clearCallbacks()
@@ -264,12 +271,16 @@ public actor RealtimeWebRTCClient {
     private static func eventSummary(_ event: RealtimeServerEvent) -> String {
         switch event {
         case .sessionReady: "session.updated"
+        case .responseCreated: "response.created"
         case .speechStarted: "input_audio_buffer.speech_started"
         case .speechStopped: "input_audio_buffer.speech_stopped"
         case .inputTranscriptDelta(let text): "input transcript delta=\(text.debugDescription)"
         case .inputTranscriptDone(let text): "input transcript completed=\(text.debugDescription)"
         case .outputTranscriptDelta: "output transcript delta"
         case .outputTranscriptDone: "output transcript completed"
+        case .outputAudioStarted: "output_audio_buffer.started"
+        case .outputAudioStopped: "output_audio_buffer.stopped"
+        case .outputAudioCleared: "output_audio_buffer.cleared"
         case .functionCall(let name, _, _): "function call name=\(name)"
         case .responseDone: "response.done"
         case .error(let message): "error=\(message)"

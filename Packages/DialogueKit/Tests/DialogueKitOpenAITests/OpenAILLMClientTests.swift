@@ -124,6 +124,26 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(updated, .sessionReady)
     }
 
+    func test_realtimeProtocol_parsesResponseAndOutputPlaybackLifecycle() throws {
+        let created = try RealtimeServerEvent.parse(
+            Data(#"{"type":"response.created"}"#.utf8)
+        )
+        let started = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.started"}"#.utf8)
+        )
+        let stopped = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.stopped"}"#.utf8)
+        )
+        let cleared = try RealtimeServerEvent.parse(
+            Data(#"{"type":"output_audio_buffer.cleared"}"#.utf8)
+        )
+
+        XCTAssertEqual(created, .responseCreated)
+        XCTAssertEqual(started, .outputAudioStarted)
+        XCTAssertEqual(stopped, .outputAudioStopped)
+        XCTAssertEqual(cleared, .outputAudioCleared)
+    }
+
     func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
         let data = try RealtimeClientEvent.sessionUpdate(
             instructions: "자연스럽게 대화해.",
@@ -142,10 +162,10 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(transcription["model"] as? String, "gpt-4o-transcribe")
         XCTAssertEqual(transcription["language"] as? String, "ko")
         XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
-        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.7)
+        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.65)
         XCTAssertEqual(turnDetection["prefix_padding_ms"] as? Int, 300)
         XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 700)
-        XCTAssertEqual(turnDetection["create_response"] as? Bool, true)
+        XCTAssertEqual(turnDetection["create_response"] as? Bool, false)
         XCTAssertEqual(turnDetection["interrupt_response"] as? Bool, false)
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
     }
