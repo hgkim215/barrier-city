@@ -484,6 +484,10 @@ final class NPCDialogueController {
                 self?.handleRealtimeEvent(event)
             }
         } catch {
+            print(
+                "[Realtime][Controller] start failed; switching to legacy mode: "
+                    + error.localizedDescription
+            )
             await session.stop()
             realtimeSession = nil
             isEncounterActive = false

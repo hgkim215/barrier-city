@@ -4,6 +4,12 @@ import FoundationNetworking
 #endif
 @preconcurrency import LiveKitWebRTC
 
+private func realtimeWebRTCLog(_ message: @autoclosure () -> String) {
+#if DEBUG
+    print("[Realtime][WebRTC] \(message())")
+#endif
+}
+
 public struct RealtimeClientSecretProvider: Sendable {
     private let config: ProxyConfig
     private let session: URLSession
@@ -14,18 +20,23 @@ public struct RealtimeClientSecretProvider: Sendable {
     }
 
     public func fetch() async throws -> RealtimeClientSecret {
+        realtimeWebRTCLog("ephemeral token request started")
         var request = URLRequest(url: config.realtimeTokenURL)
         request.httpMethod = "POST"
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
+            realtimeWebRTCLog("ephemeral token request failed: non-HTTP response")
             throw RealtimeClientError.invalidResponse
         }
+        realtimeWebRTCLog("ephemeral token response status=\(http.statusCode)")
         guard (200..<300).contains(http.statusCode) else {
             throw RealtimeClientError.httpStatus(http.statusCode)
         }
-        return try JSONDecoder().decode(RealtimeClientSecret.self, from: data)
+        let secret = try JSONDecoder().decode(RealtimeClientSecret.self, from: data)
+        realtimeWebRTCLog("ephemeral token decoded; expiresAt=\(secret.expiresAt.map(String.init) ?? "unknown")")
+        return secret
     }
 }
 
@@ -69,6 +80,7 @@ public actor RealtimeWebRTCClient {
     public func connect() async throws {
         guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }
 
+        realtimeWebRTCLog("connect started")
         let secret = try await secretProvider.fetch()
         try Task.checkCancellation()
 
@@ -85,15 +97,19 @@ public actor RealtimeWebRTCClient {
             constraints: constraints,
             delegate: delegateBridge
         ) else {
+            realtimeWebRTCLog("peer connection creation failed")
             throw RealtimeClientError.invalidResponse
         }
+        realtimeWebRTCLog("peer connection created")
 
         let audioSource = factory.audioSource(with: constraints)
         let audioTrack = factory.audioTrack(with: audioSource, trackId: "barrier-city-microphone")
         guard peerConnection.add(audioTrack, streamIds: ["barrier-city-audio"]) != nil else {
+            realtimeWebRTCLog("local microphone track add failed")
             peerConnection.close()
             throw RealtimeClientError.invalidResponse
         }
+        realtimeWebRTCLog("local microphone track created and added")
 
         let channelConfiguration = LKRTCDataChannelConfiguration()
         channelConfiguration.isOrdered = true
@@ -101,9 +117,11 @@ public actor RealtimeWebRTCClient {
             forLabel: "oai-events",
             configuration: channelConfiguration
         ) else {
+            realtimeWebRTCLog("oai-events data channel creation failed")
             peerConnection.close()
             throw RealtimeClientError.channelUnavailable
         }
+        realtimeWebRTCLog("oai-events data channel created; state=\(String(describing: dataChannel.readyState))")
         dataChannel.delegate = delegateBridge
 
         delegateBridge.onMessage = { [weak self] data in
@@ -123,13 +141,18 @@ public actor RealtimeWebRTCClient {
         self.audioTrack = audioTrack
 
         do {
+            realtimeWebRTCLog("creating SDP offer")
             let offer = try await Self.createOffer(peerConnection, constraints: constraints)
             try await Self.setLocalDescription(offer, on: peerConnection)
+            realtimeWebRTCLog("local SDP set; exchanging with OpenAI")
             let answerSDP = try await exchangeSDP(offer.sdp, bearerToken: secret.value)
             let answer = LKRTCSessionDescription(type: .answer, sdp: answerSDP)
             try await Self.setRemoteDescription(answer, on: peerConnection)
+            realtimeWebRTCLog("remote SDP set; waiting for data channel")
             try await waitForDataChannelOpen()
+            realtimeWebRTCLog("connect completed; oai-events data channel is open")
         } catch {
+            realtimeWebRTCLog("connect failed: \(error.localizedDescription)")
             await disconnect()
             throw error
         }
@@ -143,9 +166,11 @@ public actor RealtimeWebRTCClient {
         guard dataChannel.sendData(buffer) else {
             throw RealtimeClientError.channelUnavailable
         }
+        realtimeWebRTCLog("client event sent: \(Self.eventType(in: data))")
     }
 
     public func disconnect() async {
+        realtimeWebRTCLog("disconnect started")
         delegateBridge.clearCallbacks()
         dataChannel?.delegate = nil
         dataChannel?.close()
@@ -157,6 +182,7 @@ public actor RealtimeWebRTCClient {
         audioSource = nil
         factory = nil
         continuation.finish()
+        realtimeWebRTCLog("disconnect completed")
     }
 
     private func exchangeSDP(_ offer: String, bearerToken: String) async throws -> String {
@@ -168,8 +194,10 @@ public actor RealtimeWebRTCClient {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
+            realtimeWebRTCLog("SDP exchange failed: non-HTTP response")
             throw RealtimeClientError.invalidResponse
         }
+        realtimeWebRTCLog("SDP exchange response status=\(http.statusCode)")
         guard (200..<300).contains(http.statusCode) else {
             throw RealtimeClientError.httpStatus(http.statusCode)
         }
@@ -205,19 +233,48 @@ public actor RealtimeWebRTCClient {
 
     private func receive(_ data: Data) {
         do {
-            continuation.yield(try RealtimeServerEvent.parse(data))
+            let event = try RealtimeServerEvent.parse(data)
+            realtimeWebRTCLog("server event received: \(Self.eventSummary(event))")
+            continuation.yield(event)
         } catch {
+            realtimeWebRTCLog("server event parse failed: \(error.localizedDescription)")
             continuation.finish(throwing: error)
         }
     }
 
     private func handleChannelStateChange() {
         guard let dataChannel, dataChannel.readyState == .closed else { return }
+        realtimeWebRTCLog("oai-events data channel closed")
         continuation.finish()
     }
 
     private func finishWithConnectionFailure() {
+        realtimeWebRTCLog("peer connection failed or closed")
         continuation.finish(throwing: RealtimeClientError.notConnected)
+    }
+
+    private static func eventType(in data: Data) -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = object["type"] as? String else {
+            return "unknown"
+        }
+        return type
+    }
+
+    private static func eventSummary(_ event: RealtimeServerEvent) -> String {
+        switch event {
+        case .sessionReady: "session.updated"
+        case .speechStarted: "input_audio_buffer.speech_started"
+        case .speechStopped: "input_audio_buffer.speech_stopped"
+        case .inputTranscriptDelta(let text): "input transcript delta=\(text.debugDescription)"
+        case .inputTranscriptDone(let text): "input transcript completed=\(text.debugDescription)"
+        case .outputTranscriptDelta: "output transcript delta"
+        case .outputTranscriptDone: "output transcript completed"
+        case .functionCall(let name, _, _): "function call name=\(name)"
+        case .responseDone: "response.done"
+        case .error(let message): "error=\(message)"
+        case .ignored(let type): "ignored type=\(type)"
+        }
     }
 
     private static func createOffer(
@@ -306,6 +363,7 @@ private final class RealtimeWebRTCDelegateBridge: NSObject,
     }
 
     func dataChannelDidChangeState(_ dataChannel: LKRTCDataChannel) {
+        realtimeWebRTCLog("data channel state=\(String(describing: dataChannel.readyState))")
         onChannelStateChange?()
     }
 
@@ -319,7 +377,9 @@ private final class RealtimeWebRTCDelegateBridge: NSObject,
     func peerConnection(
         _ peerConnection: LKRTCPeerConnection,
         didChange stateChanged: LKRTCSignalingState
-    ) {}
+    ) {
+        realtimeWebRTCLog("signaling state=\(String(describing: stateChanged))")
+    }
 
     func peerConnection(_ peerConnection: LKRTCPeerConnection, didAdd stream: LKRTCMediaStream) {}
     func peerConnection(_ peerConnection: LKRTCPeerConnection, didRemove stream: LKRTCMediaStream) {}
@@ -329,6 +389,7 @@ private final class RealtimeWebRTCDelegateBridge: NSObject,
         _ peerConnection: LKRTCPeerConnection,
         didChange newState: LKRTCIceConnectionState
     ) {
+        realtimeWebRTCLog("ICE connection state=\(String(describing: newState))")
         if newState == .failed || newState == .closed {
             onConnectionFailure?()
         }
@@ -337,7 +398,9 @@ private final class RealtimeWebRTCDelegateBridge: NSObject,
     func peerConnection(
         _ peerConnection: LKRTCPeerConnection,
         didChange newState: LKRTCIceGatheringState
-    ) {}
+    ) {
+        realtimeWebRTCLog("ICE gathering state=\(String(describing: newState))")
+    }
 
     func peerConnection(
         _ peerConnection: LKRTCPeerConnection,
@@ -352,5 +415,7 @@ private final class RealtimeWebRTCDelegateBridge: NSObject,
     func peerConnection(
         _ peerConnection: LKRTCPeerConnection,
         didOpen dataChannel: LKRTCDataChannel
-    ) {}
+    ) {
+        realtimeWebRTCLog("remote data channel opened: \(dataChannel.label)")
+    }
 }
