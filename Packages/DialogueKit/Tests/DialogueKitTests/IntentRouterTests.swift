@@ -10,7 +10,7 @@ final class IntentRouterTests: XCTestCase {
     }
 
     func test_orderAndLeave_areClassifiedLocally() {
-        XCTAssertEqual(router.infer(from: "아메리카노 한 잔 주세요").kind, .orderComplete)
+        XCTAssertEqual(router.infer(from: "아메리카노 한 잔 주세요").kind, .orderRequest)
         XCTAssertEqual(router.infer(from: "그냥 나갈게요").kind, .leave)
     }
 
@@ -23,6 +23,58 @@ final class IntentRouterTests: XCTestCase {
 
         XCTAssertEqual(router.infer(from: utterance).kind, .orderComplete)
         XCTAssertTrue(router.describesKioskAccessBarrier(in: utterance))
+    }
+
+    func test_onlyRainbowSmoothie_isMissionOrder() {
+        XCTAssertEqual(router.infer(from: "레인보우스무디 하나 주세요").kind, .orderComplete)
+        XCTAssertEqual(router.infer(from: "아메리카노 주세요").kind, .orderRequest)
+        XCTAssertEqual(router.infer(from: "딸기 스무디 주세요").kind, .orderRequest)
+        XCTAssertEqual(router.infer(from: "레인보우 스무디 두 잔 주세요").kind, .orderRequest)
+        XCTAssertEqual(router.infer(from: "레인보우 스무디 12잔 주세요").kind, .orderRequest)
+        XCTAssertEqual(router.infer(from: "레인보우 스무디 말고 라떼 주세요").kind, .orderRequest)
+    }
+
+    func test_realtimeMissionOrderArguments_requireCanonicalItemAndSingleQuantity() {
+        XCTAssertTrue(
+            RainbowSmoothieMissionOrder.validates(
+                toolArgumentsJSON: #"{"item":"rainbow_smoothie","quantity":1}"#
+            )
+        )
+        XCTAssertFalse(
+            RainbowSmoothieMissionOrder.validates(
+                toolArgumentsJSON: #"{"item":"americano","quantity":1}"#
+            )
+        )
+        XCTAssertFalse(
+            RainbowSmoothieMissionOrder.validates(
+                toolArgumentsJSON: #"{"item":"rainbow_smoothie","quantity":2}"#
+            )
+        )
+        XCTAssertFalse(
+            RainbowSmoothieMissionOrder.validates(toolArgumentsJSON: "not-json")
+        )
+    }
+
+    func test_realtimeMissionProgress_requiresTranscriptEvidenceAndPersonalityAttempts() {
+        var cautious = RainbowSmoothieMissionProgress(personality: .cautious)
+
+        cautious.observe(userTranscript: "레인보우 스무디 주세요")
+        XCTAssertFalse(cautious.canComplete)
+        cautious.observe(userTranscript: "키오스크가 높아서 손이 안 닿아요")
+        XCTAssertFalse(cautious.canComplete)
+        cautious.observe(userTranscript: "진짜 안 닿아요. 직접 받아주세요")
+        XCTAssertTrue(cautious.canComplete)
+
+        cautious.reset()
+        cautious.observe(userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 두 잔 주세요")
+        cautious.observe(userTranscript: "그래도 직접 받아주세요")
+        XCTAssertFalse(cautious.canComplete)
+
+        var hurried = RainbowSmoothieMissionProgress(personality: .hurried)
+        hurried.observe(userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요")
+        XCTAssertTrue(hurried.canComplete)
+        hurried.observe(userTranscript: "아니요, 아메리카노로 바꿀게요")
+        XCTAssertFalse(hurried.canComplete)
     }
 
     func test_shortBarrierInsistence_isRecognizedForStatefulFollowUp() {

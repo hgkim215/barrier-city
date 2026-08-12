@@ -45,14 +45,14 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertFalse(r.usedFallback)
     }
 
-    func test_orderComplete_yieldsOrderPlacedEvent() async {
+    func test_rainbowSmoothieOrder_yieldsOrderPlacedEvent() async {
         let llm = MockLLM([
-            .token("네, 아메리카노요."),
+            .token("네, 레인보우 스무디요."),
             .done,
         ])
         let sut = makeSUT(llm)
         let r = await sut.handle(
-            utterance: "키오스크 화면에 손이 안 닿아서 아메리카노 주세요",
+            utterance: "키오스크 화면에 손이 안 닿아서 레인보우 스무디 주세요",
             history: []
         )
         XCTAssertEqual(r.event, .orderPlaced)
@@ -72,7 +72,7 @@ final class DialogueOrchestratorTests: XCTestCase {
         let first = await sut.handle(utterance: "키오스크가 너무 높아서 주문하기 어려워요", history: [])
         let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
         let third = await sut.handle(utterance: "직접 주문 좀 받아주세요", history: [])
-        let fourth = await sut.handle(utterance: "그럼 라떼 주세요", history: [])
+        let fourth = await sut.handle(utterance: "그럼 레인보우 스무디 주세요", history: [])
 
         XCTAssertNil(first.event)
         XCTAssertNil(second.event)
@@ -87,10 +87,12 @@ final class DialogueOrchestratorTests: XCTestCase {
             utterance: "키오스크가 너무 높아서 손이 안 닿아 주문하고 싶어요",
             history: []
         )
-        let item = await sut.handle(utterance: "아메리카노 주세요", history: [])
+        let otherItem = await sut.handle(utterance: "아메리카노 주세요", history: [])
+        let missionItem = await sut.handle(utterance: "레인보우 스무디 주세요", history: [])
 
         XCTAssertNil(request.event)
-        XCTAssertEqual(item.event, .orderPlaced)
+        XCTAssertNil(otherItem.event)
+        XCTAssertEqual(missionItem.event, .orderPlaced)
     }
 
     func test_warmRapport_doesNotSkipBluntPersonalityResistance() async {
@@ -206,7 +208,7 @@ final class DialogueOrchestratorTests: XCTestCase {
         )
         await sut.beginEncounter()
         let third = await sut.handle(
-            utterance: "키오스크가 높아서 손이 안 닿으니 라떼 주문 받아주세요",
+            utterance: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주문 받아주세요",
             history: []
         )
 

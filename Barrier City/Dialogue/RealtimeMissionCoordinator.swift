@@ -10,22 +10,36 @@ struct RealtimeMissionCoordinator {
 
     private var pendingEvent: MissionEvent?
     private var pendingFunctionCall: FunctionCall?
+    private var orderProgress: RainbowSmoothieMissionProgress
+
+    init(personality: ClerkPersonality = .hurried) {
+        orderProgress = RainbowSmoothieMissionProgress(personality: personality)
+    }
 
     mutating func reset() {
         pendingEvent = nil
         pendingFunctionCall = nil
+        orderProgress.reset()
+    }
+
+    mutating func observe(userTranscript: String) {
+        orderProgress.observe(userTranscript: userTranscript)
     }
 
     /// 즉시 게시할 이벤트를 반환한다. 주문 완료·대화 종료는 tool 결과를 모델에 보낸 뒤
     /// response.done에서 세션을 닫아야 하므로 pendingEvent로 보관한다.
-    mutating func register(name: String, callID: String) -> MissionEvent? {
+    mutating func register(name: String, callID: String, arguments: String) -> MissionEvent? {
         let output: String
         let immediateEvent: MissionEvent?
         switch name {
         case "complete_order":
-            pendingEvent = .orderPlaced
+            let isValidOrder = orderProgress.canComplete
+                && RainbowSmoothieMissionOrder.validates(toolArgumentsJSON: arguments)
+            pendingEvent = isValidOrder ? .orderPlaced : nil
             immediateEvent = nil
-            output = #"{"success":true,"message":"order recorded"}"#
+            output = isValidOrder
+                ? #"{"success":true,"message":"order recorded"}"#
+                : #"{"success":false,"message":"order item or quantity did not match the confirmed mission order"}"#
         case "request_help":
             immediateEvent = .helpRequested
             output = #"{"success":true,"message":"help requested"}"#

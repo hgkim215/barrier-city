@@ -167,7 +167,7 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             RealtimeConversationGuide.mandatoryOpeningLine,
-            "키오스크로 주문해주세요~"
+            "안녕하세요~ 주문은 키오스크로 부탁드릴게요."
         )
         XCTAssertTrue(
             RealtimeConversationGuide.mandatoryOpeningInstructions.contains(
@@ -178,6 +178,8 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(guide.contains("private scene context"))
         XCTAssertTrue(guide.contains("explaining an access barrier"))
         XCTAssertTrue(guide.contains("Do not ask for an item"))
+        XCTAssertTrue(guide.contains("item=\"rainbow_smoothie\" and quantity=1"))
+        XCTAssertTrue(guide.contains("success=false"))
     }
 
     func test_realtimeGuide_definesDistinctPersonalityAcceptanceTiming() {

@@ -147,7 +147,27 @@ final class OpenAILLMClientTests: XCTestCase {
     func test_realtimeSessionUpdate_containsGuideTranscriptionAndTools() throws {
         let data = try RealtimeClientEvent.sessionUpdate(
             instructions: "자연스럽게 대화해.",
-            tools: [.init(name: "complete_order", description: "주문 완료")]
+            tools: [
+                .init(
+                    name: "complete_order",
+                    description: "주문 완료",
+                    parameters: [
+                        .init(
+                            name: "item",
+                            type: .string,
+                            description: "메뉴 식별자",
+                            allowedStringValues: ["rainbow_smoothie"]
+                        ),
+                        .init(
+                            name: "quantity",
+                            type: .integer,
+                            description: "수량",
+                            minimumIntegerValue: 1,
+                            maximumIntegerValue: 1
+                        ),
+                    ]
+                ),
+            ]
         )
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let session = try XCTUnwrap(object["session"] as? [String: Any])
@@ -156,6 +176,10 @@ final class OpenAILLMClientTests: XCTestCase {
         let transcription = try XCTUnwrap(input["transcription"] as? [String: Any])
         let turnDetection = try XCTUnwrap(input["turn_detection"] as? [String: Any])
         let tools = try XCTUnwrap(session["tools"] as? [[String: Any]])
+        let parameters = try XCTUnwrap(tools.first?["parameters"] as? [String: Any])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        let item = try XCTUnwrap(properties["item"] as? [String: Any])
+        let quantity = try XCTUnwrap(properties["quantity"] as? [String: Any])
 
         XCTAssertEqual(object["type"] as? String, "session.update")
         XCTAssertEqual(session["instructions"] as? String, "자연스럽게 대화해.")
@@ -168,6 +192,11 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(turnDetection["create_response"] as? Bool, false)
         XCTAssertEqual(turnDetection["interrupt_response"] as? Bool, false)
         XCTAssertEqual(tools.first?["name"] as? String, "complete_order")
+        XCTAssertEqual(parameters["required"] as? [String], ["item", "quantity"])
+        XCTAssertEqual(parameters["additionalProperties"] as? Bool, false)
+        XCTAssertEqual(item["enum"] as? [String], ["rainbow_smoothie"])
+        XCTAssertEqual(quantity["minimum"] as? Int, 1)
+        XCTAssertEqual(quantity["maximum"] as? Int, 1)
     }
 
     func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {

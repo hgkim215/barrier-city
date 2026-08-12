@@ -3,7 +3,7 @@ import Foundation
 /// Realtime 음성 모델의 자유로운 대화 방식과 게임의 결정적 상태 전이를 분리한다.
 /// 말할 문장을 지정하지 않고 역할·장면·도구 호출 조건만 고정한다.
 public struct RealtimeConversationGuide: Sendable {
-    public static let mandatoryOpeningLine = "키오스크로 주문해주세요~"
+    public static let mandatoryOpeningLine = "안녕하세요~ 주문은 키오스크로 부탁드릴게요."
 
     public init() {}
 
@@ -92,9 +92,12 @@ public struct RealtimeConversationGuide: Sendable {
 
         # State transitions
         Tools are silent game-state transitions; never say their names.
-        Call complete_order exactly once, only after you have agreed to verbal ordering, the visitor has
-        requested a Rainbow Smoothie, and any genuinely required choice is clear. Never call it while
+        Call complete_order exactly once with item="rainbow_smoothie" and quantity=1, only after you have
+        agreed to verbal ordering, the visitor has requested exactly one Rainbow Smoothie, and any
+        genuinely required choice is clear. Never call it while
         redirecting to the kiosk, questioning the barrier, or for a different menu item.
+        If complete_order returns success=false, do not claim the order or mission is complete. Continue
+        the conversation naturally without revealing the hidden mission goal.
         Call request_help only when the visitor explicitly asks for another employee or outside help.
         Call end_conversation only when the visitor clearly says they are leaving or ending the exchange;
         never call it for silence, hesitation, disagreement, or a temporary interruption.

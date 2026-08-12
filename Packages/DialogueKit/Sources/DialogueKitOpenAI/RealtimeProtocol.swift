@@ -33,10 +33,49 @@ public enum RealtimeClientError: LocalizedError, Sendable {
 public struct RealtimeFunctionTool: Sendable, Equatable {
     public let name: String
     public let description: String
+    public let parameters: [RealtimeFunctionParameter]
 
-    public init(name: String, description: String) {
+    public init(
+        name: String,
+        description: String,
+        parameters: [RealtimeFunctionParameter] = []
+    ) {
         self.name = name
         self.description = description
+        self.parameters = parameters
+    }
+}
+
+public struct RealtimeFunctionParameter: Sendable, Equatable {
+    public enum ValueType: String, Sendable {
+        case string
+        case integer
+    }
+
+    public let name: String
+    public let type: ValueType
+    public let description: String
+    public let isRequired: Bool
+    public let allowedStringValues: [String]?
+    public let minimumIntegerValue: Int?
+    public let maximumIntegerValue: Int?
+
+    public init(
+        name: String,
+        type: ValueType,
+        description: String,
+        isRequired: Bool = true,
+        allowedStringValues: [String]? = nil,
+        minimumIntegerValue: Int? = nil,
+        maximumIntegerValue: Int? = nil
+    ) {
+        self.name = name
+        self.type = type
+        self.description = description
+        self.isRequired = isRequired
+        self.allowedStringValues = allowedStringValues
+        self.minimumIntegerValue = minimumIntegerValue
+        self.maximumIntegerValue = maximumIntegerValue
     }
 }
 
@@ -114,14 +153,32 @@ public enum RealtimeClientEvent {
         transcriptionModel: String = "gpt-4o-transcribe",
         transcriptionLanguage: String = "ko"
     ) throws -> Data {
-        let toolObjects: [[String: Any]] = tools.map {
-            [
+        let toolObjects: [[String: Any]] = tools.map { tool in
+            let properties = Dictionary(uniqueKeysWithValues: tool.parameters.map { parameter in
+                var schema: [String: Any] = [
+                    "type": parameter.type.rawValue,
+                    "description": parameter.description,
+                ]
+                if let allowedValues = parameter.allowedStringValues {
+                    schema["enum"] = allowedValues
+                }
+                if let minimum = parameter.minimumIntegerValue {
+                    schema["minimum"] = minimum
+                }
+                if let maximum = parameter.maximumIntegerValue {
+                    schema["maximum"] = maximum
+                }
+                return (parameter.name, schema)
+            })
+            let required = tool.parameters.filter(\.isRequired).map(\.name)
+            return [
                 "type": "function",
-                "name": $0.name,
-                "description": $0.description,
+                "name": tool.name,
+                "description": tool.description,
                 "parameters": [
                     "type": "object",
-                    "properties": [:],
+                    "properties": properties,
+                    "required": required,
                     "additionalProperties": false,
                 ] as [String: Any],
             ]

@@ -13,14 +13,17 @@ public struct IntentRouter: Sendable {
         if ["나갈게", "갈게", "가볼게", "그만", "주문 안", "안 살", "됐어요"].contains(where: value.contains) {
             return DialogueIntent(kind: .leave)
         }
-        // 메뉴가 구체적으로 정해진 발화만 주문 완료 후보로 본다. 기존에는 "메뉴가 뭐예요?"나
-        // "주문하고 싶어요"도 즉시 미션 완료로 처리되어 한두 마디 만에 대화가 끊겼다.
+        // 레인보우 스무디만 미션 완료 후보로 본다. 다른 메뉴는 실제 주문 발화여도
+        // 미션 완료 이벤트를 만들지 않고 대화를 계속한다.
+        if RainbowSmoothieMissionOrder.matches(userText: value) {
+            return DialogueIntent(kind: .orderComplete)
+        }
         let mentionsConcreteItem = [
             "아메리카노", "라떼", "에스프레소", "카푸치노", "모카",
-            "콜드브루", "주스", "에이드", "차", "티", "스무디", "레인보우",
+            "콜드브루", "주스", "에이드", "차", "티", "스무디",
         ].contains(where: value.contains)
         if mentionsConcreteItem {
-            return DialogueIntent(kind: .orderComplete)
+            return DialogueIntent(kind: .orderRequest)
         }
         if describesKioskAccessBarrier(in: value) {
             return DialogueIntent(kind: .orderRequest)

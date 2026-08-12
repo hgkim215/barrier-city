@@ -101,6 +101,7 @@ final class NPCDialogueController {
     ) {
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = clerkPersonality ?? .random()
+        realtimeMission = RealtimeMissionCoordinator(personality: self.clerkPersonality)
         rapport = accessibilityAttitude.initialRapport
         tone = SocialClimate(rapport: accessibilityAttitude.initialRapport).tone
 #if targetEnvironment(simulator)
@@ -576,6 +577,7 @@ final class NPCDialogueController {
                 if realtimeCanAcceptInput { armRealtimeResponseTimeout() }
                 return
             }
+            realtimeMission.observe(userTranscript: transcript)
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
@@ -615,8 +617,12 @@ final class NPCDialogueController {
             realtimeMicrophoneIsReady = true
             beginRealtimeListeningIfReady()
 
-        case .functionCall(let name, let callID, _):
-            if let event = realtimeMission.register(name: name, callID: callID) {
+        case .functionCall(let name, let callID, let arguments):
+            if let event = realtimeMission.register(
+                name: name,
+                callID: callID,
+                arguments: arguments
+            ) {
                 publishMissionEvent(event)
             }
 
@@ -741,7 +747,22 @@ final class NPCDialogueController {
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
         .init(name: "complete_order",
-              description: "Call only after the employee has agreed to bypass the kiosk and both sides have confirmed one Rainbow Smoothie."),
+              description: "Record the mission order only after the employee has agreed to verbal ordering and both sides have confirmed exactly one Rainbow Smoothie.",
+              parameters: [
+                .init(
+                    name: "item",
+                    type: .string,
+                    description: "Canonical confirmed menu item. Must be rainbow_smoothie.",
+                    allowedStringValues: [RainbowSmoothieMissionOrder.canonicalItem]
+                ),
+                .init(
+                    name: "quantity",
+                    type: .integer,
+                    description: "Confirmed quantity. Must be exactly 1.",
+                    minimumIntegerValue: RainbowSmoothieMissionOrder.quantity,
+                    maximumIntegerValue: RainbowSmoothieMissionOrder.quantity
+                ),
+              ]),
         .init(name: "request_help",
               description: "Call only when the visitor explicitly asks for another employee or assistance."),
         .init(name: "end_conversation",
