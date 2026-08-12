@@ -34,6 +34,7 @@ final class RealtimeNPCConversationSession {
     private var configurationContinuation: CheckedContinuation<Void, Error>?
     private var eventHandler: (@MainActor (Event) -> Void)?
     private var isStarted = false
+    private var responseIsInFlight = false
     private var outputAudioIsPlaying = false
 
     /// 실제 출력 종료 직후 남는 방 안의 잔향까지 서버 VAD에 들어가지 않도록 둔다.
@@ -107,6 +108,7 @@ final class RealtimeNPCConversationSession {
     func requestResponse(instructions: String? = nil) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
         await suspendMicrophoneForResponse()
+        responseIsInFlight = true
         try await client.send(RealtimeClientEvent.createResponse(instructions: instructions))
     }
 
@@ -128,6 +130,7 @@ final class RealtimeNPCConversationSession {
         microphoneResumeTask = nil
         pendingConfiguration?.cancel()
         pendingReceive?.cancel()
+        responseIsInFlight = false
         outputAudioIsPlaying = false
 
         audioSession.stop()
@@ -144,6 +147,7 @@ final class RealtimeNPCConversationSession {
             resumeConfiguration()
             eventHandler?(.sessionReady)
         case .responseCreated:
+            responseIsInFlight = true
             await suspendMicrophoneForResponse()
         case .speechStarted:
             realtimeConversationLog("event: user speech started")
@@ -170,15 +174,16 @@ final class RealtimeNPCConversationSession {
             outputAudioIsPlaying = false
             realtimeConversationLog("event: output audio stopped")
             eventHandler?(.outputAudioStopped)
-            scheduleMicrophoneResume()
+            if !responseIsInFlight { scheduleMicrophoneResume() }
         case .outputAudioCleared:
             outputAudioIsPlaying = false
             realtimeConversationLog("event: output audio cleared")
             eventHandler?(.outputAudioStopped)
-            scheduleMicrophoneResume()
+            if !responseIsInFlight { scheduleMicrophoneResume() }
         case .functionCall(let name, let callID, let arguments):
             eventHandler?(.functionCall(name: name, callID: callID, arguments: arguments))
         case .responseDone:
+            responseIsInFlight = false
             realtimeConversationLog("event: response done")
             if !outputAudioIsPlaying { scheduleMicrophoneResume() }
             eventHandler?(.responseDone)
@@ -210,7 +215,10 @@ final class RealtimeNPCConversationSession {
             } catch {
                 return
             }
-            guard let self, self.isStarted, !self.outputAudioIsPlaying else { return }
+            guard let self,
+                  self.isStarted,
+                  !self.responseIsInFlight,
+                  !self.outputAudioIsPlaying else { return }
             await client.setMicrophoneEnabled(true)
             self.microphoneResumeTask = nil
             realtimeConversationLog("microphone resumed after output echo tail")
