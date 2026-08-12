@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Barista", "Kiosk", "Screen", "Indoor", "Door", "collision", "wall", "kiosk"]
+    reorder nameChildren = ["Barista", "Kiosk", "Indoor", "Door", "collision", "wall", "kiosk", "CaffeFloor"]
     def Material "wall"
     {
         token outputs:mtlx:surface
@@ -40,24 +40,6 @@ def Xform "Root"
         }
     }
 
-    def "Indoor" (
-        active = true
-        prepend apiSchemas = ["MaterialBindingAPI"]
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @Indoor.usdz@
-    )
-    {
-        rel material:binding = </Root/wall> (
-            bindMaterialAs = "weakerThanDescendants"
-        )
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1, 1, 1)
-        float3 xformOp:translate = (0, 0.003, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
     def "Door" (
         active = true
         prepend apiSchemas = ["MaterialBindingAPI"]
@@ -81,138 +63,8 @@ def Xform "Root"
     )
     {
         reorder nameChildren = ["_4T", "_4T_2", "_2T_1", "_2T_2", "_2T_3", "_2T_4", "_2T_5", "_2T", "BT", "Wall", "BT_1", "_4T_5", "_2T_6", "_4T_4"]
-        def Cube "_4T" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_4T/DefaultMaterial>
-            double size = 0.2
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (11.5, 3, 6)
-            float3 xformOp:translate = (-3.5449097, 0.35768867, -4.607517)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_4T_2" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_4T_2/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (20, 20)
-            int ui:nodegraph:node:stackingOrder = 1
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (11.5, 3, 6)
-            float3 xformOp:translate = (-3.5449097, 0.35768867, -2.3114257)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_1" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T_1/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (40, 40)
-            int ui:nodegraph:node:stackingOrder = 2
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-5.780175, 0.41373026, -2.3018415)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_2" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T_2/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (40, 40)
-            int ui:nodegraph:node:stackingOrder = 2
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-5.780175, 0.41373026, -0.012383699)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_3" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T_3/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (40, 40)
-            int ui:nodegraph:node:stackingOrder = 2
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-5.780175, 0.41373026, -4.616665)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_4" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T_4/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-7.6474924, 0.41373026, -4.616665)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_5" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T_5/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-7.6653447, 0.41373026, -2.3018415)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/_2T/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.5, 4, 9)
-            float3 xformOp:translate = (-7.6273713, 0.41373026, -0.012383699)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "BT" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            rel material:binding = </Root/collision/BT/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (40, 40)
-            int ui:nodegraph:node:stackingOrder = 2
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (30, 4, 27)
-            float3 xformOp:translate = (4.9125957, 0.35768524, -2.678761)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
+        float3 xformOp:translate = (-17.756235, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def Cube "_4T_4" (
             active = true
@@ -248,6 +100,15 @@ def Xform "Root"
             float3 xformOp:scale = (1, 1, 1)
             float3 xformOp:translate = (0, 0.003, 0)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            over "_floor" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = None (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+            }
         }
 
         def Cube "BT_1" (
@@ -310,25 +171,25 @@ def Xform "Root"
         references = @self-service+kiosk+3d+model.usdz@
     )
     {
-        reorder nameChildren = ["tripo_node_23c6fa13_c055_4c70_b27d_10baaa65baec", "_materials"]
+        reorder nameChildren = ["Screen", "tripo_node_23c6fa13_c055_4c70_b27d_10baaa65baec", "_materials"]
         quatf xformOp:orient = (-3.0908637e-8, 3.0908637e-8, 0.70710677, 0.7071068)
         float3 xformOp:scale = (1.8, 1.8, 1.8)
         float3 xformOp:translate = (0.39362323, 1.2665987e-7, 1.6512184)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
 
-    def "Screen" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.2258023, 3.3225518e-7, -4.3474127e-8)
+        def "Screen" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (-1.2258023, 3.3225518e-7, -4.3474127e-8)
+            }
+            references = @Screen.usdz@
+        )
+        {
+            quatf xformOp:orient = (-1.16868435e-7, -4.2426315e-8, 0.17164294, 0.9851592)
+            float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+            float3 xformOp:translate = (-0.003599599, -0.101178825, 0.75564164)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
-        references = @Screen.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.8179826, -0.575243, 1.4839358e-7, 7.77832e-8)
-        float3 xformOp:scale = (1.8, 1.8, 1.8)
-        float3 xformOp:translate = (0.40010247, 1.3601549, 1.4690963)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def "Barista" (
@@ -358,6 +219,118 @@ def Xform "Root"
                 uniform asset file = @Barista/Greet.usdz@
                 uniform string name = "Greet"
             }
+        }
+    }
+
+    def "Indoor" (
+        active = true
+        prepend apiSchemas = ["MaterialBindingAPI"]
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @Indoor.usdz@
+    )
+    {
+        reorder nameChildren = ["KitchenTable", "Oven", "LowerRefrigerator", "wall3", "BarTable", "_floor", "CupBoard2", "ceiling", "CupBoard1", "wall2", "AreaK", "wall4", "wall1", "BathWall1", "_Shelf", "AreaB", "BathWall2", "Cube", "env_light"]
+        rel material:binding = </Root/wall> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (0.077858925, 0.0030006468, 0.05167961)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        over "_floor" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/CaffeFloor> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (-6.123234e-17, 0, 1, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            over "Plane" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = None (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+            }
+        }
+
+        over "wall2" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/CaffeFloor> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "AreaK" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/CaffeFloor> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        def "Oven" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (0, 0, 3.1415927)
+            }
+            references = @furniture/Oven.usdz@
+        )
+        {
+            quatf xformOp:orient = (-4.371139e-8, 0, 0, 1)
+            float3 xformOp:scale = (1, 1, 1)
+            float3 xformOp:translate = (-2.3501482, -5.458749, 0.8817376)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def Material "CaffeFloor"
+    {
+        token outputs:mtlx:surface.connect = </Root/CaffeFloor/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.5, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            float inputs:clearcoat
+            float inputs:clearcoatRoughness
+            color3f inputs:diffuseColor.connect = </Root/CaffeFloor/TiledImage.outputs:out>
+            color3f inputs:emissiveColor
+            float inputs:ior
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:occlusion
+            float inputs:opacity
+            float inputs:opacityThreshold
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["Advanced"]
+        }
+
+        def Shader "TiledImage"
+        {
+            uniform token info:id = "ND_tiledimage_color3"
+            asset inputs:file = @textures/New Folder/FT.png@
+            string inputs:filtertype
+            float2 inputs:realworldimagesize = (0.2, 0.25)
+            float2 inputs:realworldtilesize
+            float2 inputs:uvtiling = (1, 1)
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-213.65083, 148.03477)
+            int ui:nodegraph:node:stackingOrder = 32
         }
     }
 }
