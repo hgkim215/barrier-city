@@ -146,19 +146,13 @@ public enum RealtimeServerEvent: Sendable, Equatable {
     }
 }
 
-public enum RealtimeClientEvent {
-    /// 진행 중인 세션의 기본 지시만 갱신한다. `session.update`는 포함된 필드만
-    /// 변경하므로 기존 도구와 오디오/VAD 설정은 그대로 유지된다.
-    public static func sessionUpdate(instructions: String) throws -> Data {
-        try encode([
-            "type": "session.update",
-            "session": [
-                "type": "realtime",
-                "instructions": instructions,
-            ],
-        ])
-    }
+public enum RealtimeToolChoice: String, Sendable, Equatable {
+    case auto
+    case none
+    case required
+}
 
+public enum RealtimeClientEvent {
     public static func sessionUpdate(
         instructions: String,
         tools: [RealtimeFunctionTool],
@@ -224,8 +218,14 @@ public enum RealtimeClientEvent {
         ])
     }
 
-    public static func createResponse(instructions: String? = nil) throws -> Data {
-        var response: [String: Any] = ["output_modalities": ["audio"]]
+    public static func createResponse(
+        instructions: String? = nil,
+        toolChoice: RealtimeToolChoice = .auto
+    ) throws -> Data {
+        var response: [String: Any] = [
+            "output_modalities": ["audio"],
+            "tool_choice": toolChoice.rawValue,
+        ]
         if let instructions { response["instructions"] = instructions }
         return try encode(["type": "response.create", "response": response])
     }

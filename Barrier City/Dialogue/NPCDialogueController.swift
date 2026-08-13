@@ -20,6 +20,8 @@ final class NPCDialogueController {
     private enum AutomaticConversationTuning {
         /// NPC 발화가 끝난 뒤 사용자가 첫 말을 시작할 때까지 기다리는 시간.
         static let responseTimeout: TimeInterval = 30
+        /// 응답 생성이나 도구 후속 응답이 시작되지 않을 때 무한 대기를 끊는 시간.
+        static let generationTimeout: TimeInterval = 30
         /// 사용자가 말을 시작한 뒤 한 턴이 끝났다고 판단하는 무음 시간.
         static let endOfSpeechSilence: TimeInterval = 2.5
         static let maximumUtteranceDuration: TimeInterval = 30
@@ -84,6 +86,7 @@ final class NPCDialogueController {
     private var realtimeSession: RealtimeNPCConversationSession?
     private var realtimeCommandTask: Task<Void, Never>?
     private var realtimeResponseTimeoutTask: Task<Void, Never>?
+    private var realtimeGenerationTimeoutTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
@@ -242,6 +245,8 @@ final class NPCDialogueController {
         realtimeCommandTask = nil
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
+        realtimeGenerationTimeoutTask?.cancel()
+        realtimeGenerationTimeoutTask = nil
         let realtime = realtimeSession
         realtimeSession = nil
         realtimeLiveText = ""
@@ -570,6 +575,7 @@ final class NPCDialogueController {
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
+            armRealtimeGenerationTimeout()
             realtimeCommandTask?.cancel()
             realtimeCommandTask = Task { @MainActor [weak self, realtimeSession] in
                 do {
@@ -580,13 +586,9 @@ final class NPCDialogueController {
                           self.realtimeSession === realtimeSession else { return }
                     self.rapport = climate.rapport
                     self.tone = climate.tone
-                    try await realtimeSession.updateInstructions(
-                        self.realtimeInstructions(for: climate)
+                    try await realtimeSession.requestResponse(
+                        instructions: self.realtimeInstructions(for: climate)
                     )
-                    try Task.checkCancellation()
-                    guard self.isEncounterActive,
-                          self.realtimeSession === realtimeSession else { return }
-                    try await realtimeSession.requestResponse()
                 } catch {
                     guard !Task.isCancelled else { return }
                     self?.handleRealtimeEvent(.failure(error.localizedDescription))
@@ -594,15 +596,18 @@ final class NPCDialogueController {
             }
 
         case .outputTranscriptDelta(let text):
+            cancelRealtimeGenerationTimeout()
             if status != .speaking { npcSubtitle = "" }
             status = .speaking
             npcSubtitle += text
 
         case .outputTranscriptDone(let text):
+            cancelRealtimeGenerationTimeout()
             let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !transcript.isEmpty { npcSubtitle = transcript }
 
         case .outputAudioStarted:
+            cancelRealtimeGenerationTimeout()
             realtimeOutputIsPlaying = true
             realtimeMicrophoneIsReady = false
             realtimeCanAcceptInput = false
@@ -629,6 +634,7 @@ final class NPCDialogueController {
             }
 
         case .responseDone:
+            cancelRealtimeGenerationTimeout()
             if realtimeOutputIsPlaying {
                 realtimeResponseDonePending = true
                 return
@@ -653,6 +659,15 @@ final class NPCDialogueController {
         )
     }
 
+    private func realtimeFollowUpInstructions(_ immediateInstructions: String) -> String {
+        """
+        \(realtimeInstructions(for: SocialClimate(rapport: rapport)))
+
+        # Immediate tool result response
+        \(immediateInstructions)
+        """
+    }
+
     /// `response.done`은 생성 완료일 뿐 실제 WebRTC 재생 완료가 아니다. 오디오가 재생
     /// 중이면 `output_audio_buffer.stopped` 뒤에만 이 메서드가 호출된다.
     private func finishRealtimeResponse() {
@@ -665,12 +680,16 @@ final class NPCDialogueController {
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
+            armRealtimeGenerationTimeout()
             realtimeCommandTask?.cancel()
             realtimeCommandTask = Task { @MainActor [weak self] in
                 do {
                     try await realtimeSession.completeFunctionCall(
                         callID: functionCall.callID,
-                        output: functionCall.output
+                        output: functionCall.output,
+                        responseInstructions: self?.realtimeFollowUpInstructions(
+                            functionCall.followUpInstructions
+                        ) ?? functionCall.followUpInstructions
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -704,6 +723,7 @@ final class NPCDialogueController {
     }
 
     private func resetRealtimeTurnState() {
+        cancelRealtimeGenerationTimeout()
         realtimeOutputIsPlaying = false
         realtimeResponseDonePending = false
         realtimeMicrophoneIsReady = false
@@ -737,6 +757,38 @@ final class NPCDialogueController {
             self.realtimeResponseTimeoutTask = nil
             await self.finishRealtimeEncounterForInactivity()
         }
+    }
+
+    /// `response.create` 이후 아무 출력도 시작되지 않는 경우 대화를 종료해
+    /// 사용자가 영구적으로 "생각 중" 상태에 갇히지 않게 한다.
+    private func armRealtimeGenerationTimeout() {
+        realtimeGenerationTimeoutTask?.cancel()
+        realtimeGenerationTimeoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(
+                    for: .seconds(AutomaticConversationTuning.generationTimeout)
+                )
+            } catch {
+                return
+            }
+            guard let self,
+                  self.isEncounterActive,
+                  self.realtimeSession != nil,
+                  self.status == .thinking else { return }
+            self.realtimeGenerationTimeoutTask = nil
+            self.realtimeCommandTask?.cancel()
+            self.realtimeCommandTask = nil
+            self.npcSubtitle = "응답이 지연됐어요. 다시 말을 걸어 주세요."
+            self.requestAnimation(.idle)
+            self.cancelEncounter()
+            self.status = .idle
+            self.publishMissionEvent(.exited)
+        }
+    }
+
+    private func cancelRealtimeGenerationTimeout() {
+        realtimeGenerationTimeoutTask?.cancel()
+        realtimeGenerationTimeoutTask = nil
     }
 
     private func finishRealtimeEncounterForInactivity() async {

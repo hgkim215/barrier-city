@@ -70,7 +70,8 @@ final class RealtimeNPCConversationSession {
             try await configureSession(instructions: instructions, tools: tools)
             try Task.checkCancellation()
             try await requestResponse(
-                instructions: RealtimeConversationGuide.mandatoryOpeningInstructions
+                instructions: RealtimeConversationGuide.mandatoryOpeningInstructions,
+                toolChoice: .none
             )
         } catch {
             await stop()
@@ -78,28 +79,39 @@ final class RealtimeNPCConversationSession {
         }
     }
 
-    func completeFunctionCall(callID: String, output: String) async throws {
+    func completeFunctionCall(
+        callID: String,
+        output: String,
+        responseInstructions: String
+    ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
         await suspendMicrophoneForResponse()
         try await client.send(
             RealtimeClientEvent.functionOutput(callID: callID, output: output)
         )
-        try await requestResponse()
-    }
-
-    /// 다음 응답부터 적용할 관계 점수와 말투를 진행 중인 Realtime 세션에 반영한다.
-    func updateInstructions(_ instructions: String) async throws {
-        guard isStarted else { throw RealtimeClientError.notConnected }
-        try await client.send(RealtimeClientEvent.sessionUpdate(instructions: instructions))
+        // 도구 결과를 설명하는 후속 응답에서는 도구를 다시 호출하지 못하게 해
+        // 실패한 주문 검증이 자동 재시도 루프로 이어지는 것을 차단한다.
+        try await requestResponse(
+            instructions: responseInstructions,
+            toolChoice: .none
+        )
     }
 
     /// 서버 VAD는 발화 경계와 transcript만 만들고, 유효한 사용자 transcript를 받은 뒤
     /// 앱이 명시적으로 응답을 생성한다.
-    func requestResponse(instructions: String? = nil) async throws {
+    func requestResponse(
+        instructions: String? = nil,
+        toolChoice: RealtimeToolChoice = .auto
+    ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
         await suspendMicrophoneForResponse()
         responseIsInFlight = true
-        try await client.send(RealtimeClientEvent.createResponse(instructions: instructions))
+        try await client.send(
+            RealtimeClientEvent.createResponse(
+                instructions: instructions,
+                toolChoice: toolChoice
+            )
+        )
     }
 
     func stop() async {

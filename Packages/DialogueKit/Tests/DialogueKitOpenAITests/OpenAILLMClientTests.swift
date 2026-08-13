@@ -199,15 +199,18 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(quantity["maximum"] as? Int, 1)
     }
 
-    func test_realtimeInstructionsUpdate_onlyChangesInstructions() throws {
-        let data = try RealtimeClientEvent.sessionUpdate(instructions: "호감도 0.20")
+    func test_realtimeResponse_canOverrideInstructionsAndDisableTools() throws {
+        let data = try RealtimeClientEvent.createResponse(
+            instructions: "호감도 0.20",
+            toolChoice: .none
+        )
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let session = try XCTUnwrap(object["session"] as? [String: Any])
+        let response = try XCTUnwrap(object["response"] as? [String: Any])
 
-        XCTAssertEqual(object["type"] as? String, "session.update")
-        XCTAssertEqual(session["type"] as? String, "realtime")
-        XCTAssertEqual(session["instructions"] as? String, "호감도 0.20")
-        XCTAssertEqual(session.count, 2)
+        XCTAssertEqual(object["type"] as? String, "response.create")
+        XCTAssertEqual(response["instructions"] as? String, "호감도 0.20")
+        XCTAssertEqual(response["tool_choice"] as? String, "none")
+        XCTAssertEqual(response["output_modalities"] as? [String], ["audio"])
     }
 
     func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {

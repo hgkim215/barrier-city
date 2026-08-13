@@ -77,6 +77,43 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertFalse(hurried.canComplete)
     }
 
+    func test_realtimeMissionCoordinator_rejectedOrderReturnsOneNonTerminalFollowUp() throws {
+        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
+        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
+        coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요")
+
+        let immediateEvent = coordinator.register(
+            name: "complete_order",
+            callID: "call-rejected",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+        let functionCall = try XCTUnwrap(coordinator.takeFunctionCall())
+
+        XCTAssertNil(immediateEvent)
+        XCTAssertTrue(functionCall.output.contains(#""success":false"#))
+        XCTAssertTrue(functionCall.followUpInstructions.contains("retry any tool"))
+        XCTAssertNil(coordinator.takeFunctionCall())
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_realtimeMissionCoordinator_validOrderCompletesAfterFollowUp() throws {
+        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
+        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
+        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
+        coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요")
+
+        _ = coordinator.register(
+            name: "complete_order",
+            callID: "call-success",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+        let functionCall = try XCTUnwrap(coordinator.takeFunctionCall())
+
+        XCTAssertTrue(functionCall.output.contains(#""success":true"#))
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
     func test_shortBarrierInsistence_isRecognizedForStatefulFollowUp() {
         XCTAssertTrue(router.continuesAccessRequest(in: "진짜 안 닿아요"))
         XCTAssertTrue(router.continuesAccessRequest(in: "그래도 직접 받아주세요"))
