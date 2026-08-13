@@ -10,17 +10,43 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Barista", "Kiosk", "Indoor", "Door", "collision", "wall", "kiosk", "CaffeFloor"]
+    reorder nameChildren = ["Door", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "DoorWall", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
-        token outputs:mtlx:surface
+        token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
         token outputs:realitykit:vertex
         token outputs:surface.connect = </Root/wall/UsdPreviewSurface.outputs:surface>
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
 
-        def Shader "UsdPreviewSurface"
+        def Shader "UsdPreviewSurface" (
+            active = false
+        )
         {
             uniform token info:id = "UsdPreviewSurface"
             token outputs:surface
+        }
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/wall/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (-430.6289, 110.92578)
+            int ui:nodegraph:node:stackingOrder = 30
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @textures/New Folder/FT.png@
+            float2 inputs:texcoord
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-642.9464, 19.031008)
+            int ui:nodegraph:node:stackingOrder = 35
         }
     }
 
@@ -29,6 +55,7 @@ def Xform "Root"
         token outputs:mtlx:surface
         token outputs:realitykit:vertex
         token outputs:surface.connect = </Root/kiosk/UsdPreviewSurface.outputs:surface>
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
 
         def Shader "UsdPreviewSurface"
         {
@@ -40,24 +67,6 @@ def Xform "Root"
         }
     }
 
-    def "Door" (
-        active = true
-        prepend apiSchemas = ["MaterialBindingAPI"]
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @Door.usdz@
-    )
-    {
-        rel material:binding = </Root/kiosk> (
-            bindMaterialAs = "weakerThanDescendants"
-        )
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (0.9, 0.9, 0.9)
-        float3 xformOp:translate = (0, -0.19999999, -0.6852033)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
     def Xform "collision" (
         active = true
     )
@@ -65,24 +74,6 @@ def Xform "Root"
         reorder nameChildren = ["_4T", "_4T_2", "_2T_1", "_2T_2", "_2T_3", "_2T_4", "_2T_5", "_2T", "BT", "Wall", "BT_1", "_4T_5", "_2T_6", "_4T_4"]
         float3 xformOp:translate = (-17.756235, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def Cube "_4T_4" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-            customData = {
-                float3 rotationEulerHint = (0, 1.5707963, 0)
-            }
-        )
-        {
-            rel material:binding = </Root/collision/_4T_4/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (40, 40)
-            int ui:nodegraph:node:stackingOrder = 2
-            quatf xformOp:orient = (0.70710677, 0, 0.70710677, 0)
-            float3 xformOp:scale = (13, 3, 10)
-            float3 xformOp:translate = (5.9682603, 0.3576906, 2.899314)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
 
         def "Wall" (
             active = true
@@ -98,7 +89,7 @@ def Xform "Root"
             )
             quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
             float3 xformOp:scale = (1, 1, 1)
-            float3 xformOp:translate = (0, 0.003, 0)
+            float3 xformOp:translate = (17.843456, 0.0030017486, 0.05060613)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
             over "_floor" (
@@ -111,84 +102,8 @@ def Xform "Root"
             }
         }
 
-        def Cube "BT_1" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
+        def "_4T_4"
         {
-            rel material:binding = </Root/collision/BT_1/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (50, 4, 27)
-            float3 xformOp:translate = (-3.009296, 0.35768524, 4.6492496)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_4T_5" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-            customData = {
-                float3 rotationEulerHint = (1.5707964, 0, 0)
-            }
-        )
-        {
-            rel material:binding = </Root/collision/_4T_5/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
-            float3 xformOp:scale = (15, 2.9999995, 3)
-            float3 xformOp:translate = (5.110362, 0.3441931, 5.557474)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
-        def Cube "_2T_6" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-            customData = {
-                float3 rotationEulerHint = (0, 0, 0)
-            }
-        )
-        {
-            rel material:binding = </Root/collision/_2T_6/DefaultMaterial>
-            double size = 0.2
-            float2 ui:nodegraph:node:pos = (60, 60)
-            int ui:nodegraph:node:stackingOrder = 3
-            quatf xformOp:orient = (1, 0, 0, 0)
-            float3 xformOp:scale = (3.2, 4, 4)
-            float3 xformOp:translate = (0.39731336, 0.41373026, 1.7224634)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-    }
-
-    def "Kiosk" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.570796, 3.1415927, 0)
-        }
-        references = @self-service+kiosk+3d+model.usdz@
-    )
-    {
-        reorder nameChildren = ["Screen", "tripo_node_23c6fa13_c055_4c70_b27d_10baaa65baec", "_materials"]
-        quatf xformOp:orient = (-3.0908637e-8, 3.0908637e-8, 0.70710677, 0.7071068)
-        float3 xformOp:scale = (1.8, 1.8, 1.8)
-        float3 xformOp:translate = (0.39362323, 1.2665987e-7, 1.6512184)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def "Screen" (
-            active = true
-            customData = {
-                float3 rotationEulerHint = (-1.2258023, 3.3225518e-7, -4.3474127e-8)
-            }
-            references = @Screen.usdz@
-        )
-        {
-            quatf xformOp:orient = (-1.16868435e-7, -4.2426315e-8, 0.17164294, 0.9851592)
-            float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
-            float3 xformOp:translate = (-0.003599599, -0.101178825, 0.75564164)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
     }
 
@@ -231,7 +146,7 @@ def Xform "Root"
         references = @Indoor.usdz@
     )
     {
-        reorder nameChildren = ["KitchenTable", "Oven", "LowerRefrigerator", "wall3", "BarTable", "_floor", "CupBoard2", "ceiling", "CupBoard1", "wall2", "AreaK", "wall4", "wall1", "BathWall1", "_Shelf", "AreaB", "BathWall2", "Cube", "env_light"]
+        reorder nameChildren = ["Edge", "wall3", "BarTable", "_floor", "CupBoard2", "ceiling", "CupBoard1", "wall2", "AreaK", "wall4", "wall1", "BathWall1", "_Shelf", "AreaB", "BathWall2", "Cube", "env_light", "Furnitures"]
         rel material:binding = </Root/wall> (
             bindMaterialAs = "weakerThanDescendants"
         )
@@ -266,7 +181,7 @@ def Xform "Root"
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            rel material:binding = </Root/CaffeFloor> (
+            rel material:binding = </Root/wall> (
                 bindMaterialAs = "weakerThanDescendants"
             )
         }
@@ -278,19 +193,1941 @@ def Xform "Root"
             rel material:binding = </Root/CaffeFloor> (
                 bindMaterialAs = "weakerThanDescendants"
             )
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.5, -4, -0.019999999552965164)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
 
-        def "Oven" (
-            active = true
-            customData = {
-                float3 rotationEulerHint = (0, 0, 3.1415927)
-            }
-            references = @furniture/Oven.usdz@
+        over "BarTable" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
-            quatf xformOp:orient = (-4.371139e-8, 0, 0, 1)
+            rel material:binding = </Root/CaffeFloor> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        def Xform "Furnitures" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (-1.5707964, 0, 3.1415927)
+            }
+        )
+        {
+            reorder nameChildren = ["ToiletDoor", "Signboard", "Lamp", "planter_with_plants_3d_model", "planter_with_plants_3d_model_1", "planter_with_plants_3d_model_2", "Plant1", "Drawing1", "Drawing2", "Drawing3", "Payment", "Chair", "Table", "Showcase_1", "CoffeeBag", "CoffeeBag_1", "CoffeeBag_2", "CoffeeBag_3", "Percolator", "Percolator_1", "Grind", "Espressomachine_1", "Grindstone", "Refrigerator", "Espressomachine", "Oven", "LowerRefrigerator", "KitchenTable1_1", "KitchenTable", "Menu_1", "Menu_2", "Poster", "Poster_1", "Showcase", "Kiosk"]
+            quatf xformOp:orient = (3.090862e-8, -3.090862e-8, 0.70710677, -0.70710677)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            def "Kiosk" (
+                active = true
+                references = @Furnitures/Kiosk.usdz@
+            )
+            {
+                reorder nameChildren = ["Screen", "tripo_node_23c6fa13_c055_4c70_b27d_10baaa65baec", "_materials"]
+                quatf xformOp:orient = (0.70710677, 0.7071067, 0, 0)
+                float3 xformOp:scale = (1.7, 1.7, 1.7)
+                float3 xformOp:translate = (-1.1052945, -1.9744039e-7, 1.6597335)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def "Screen" (
+                    active = true
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                    customData = {
+                        float3 rotationEulerHint = (-2.793198, 3.1415923, 0)
+                    }
+                    references = @Screen.usdz@
+                )
+                {
+                    rel material:binding = </Root/kiosk> (
+                        bindMaterialAs = "weakerThanDescendants"
+                    )
+                    quatf xformOp:orient = (1.3189086e-8, -7.442263e-8, 0.17331767, 0.98486596)
+                    float3 xformOp:scale = (1, 1, 1)
+                    float3 xformOp:translate = (-0.00041610003, -0.102264225, 0.7495108)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+            }
+
+            def "Showcase" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                }
+                references = @Furnitures/Showcase.usdz@
+            )
+            {
+                quatf xformOp:orient = (2.2476458e-8, -8.4293696e-8, 0.70710677, -0.70710677)
+                float3 xformOp:scale = (1.8, 1.8, 1.8)
+                float3 xformOp:translate = (3.0738354, -0.79392457, 2.4150686)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Menu_1" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.7453293, 3.1415918, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Menuboard1> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (156.01404, 167.1542)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (0.76604444, -0.6427876, 2.1237685e-7, 2.352665e-7)
+                float3 xformOp:scale = (4.5333333, 4, 3.2000003)
+                float3 xformOp:translate = (-0.18078643, -2.9468734, 5.683957)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Menu_2" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.7453293, 3.1415918, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Menuboard2> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (176.01404, 187.1542)
+                int ui:nodegraph:node:stackingOrder = 2
+                quatf xformOp:orient = (0.76604444, -0.6427876, 2.1237685e-7, 2.352665e-7)
+                float3 xformOp:scale = (4.5333333, 4, 3.2000003)
+                float3 xformOp:translate = (1.2898082, -2.9468734, 5.6839595)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Poster" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.7838345, 3.1415918, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Poster_1> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (196.01404, 207.1542)
+                int ui:nodegraph:node:stackingOrder = 3
+                quatf xformOp:orient = (0.77827716, -0.6279209, 2.1756182e-7, 2.3147479e-7)
+                float3 xformOp:scale = (5, 5, 4.0000005)
+                float3 xformOp:translate = (2.891565, -2.7315702, 5.7219214)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Poster_1" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.7838345, 3.1415915, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Poster> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (216.01404, 227.1542)
+                int ui:nodegraph:node:stackingOrder = 4
+                quatf xformOp:orient = (0.77827704, -0.62792104, 3.0964452e-7, 3.0598835e-7)
+                float3 xformOp:scale = (1.4, 1.4, 1.1200001)
+                float3 xformOp:translate = (1.837144, -0.4521927, 1.9189551)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "KitchenTable" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/KitchenTable.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (3, 3, 3)
+                float3 xformOp:translate = (0.4899078, -6.072223e-7, 5.5666795)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "LowerRefrigerator" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/LowerRefrigerator.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (1.3, 1.3, 1.3)
+                float3 xformOp:translate = (3.3484051, 3.4924597e-7, 5.6826367)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "KitchenTable1_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/KitchenTable1.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (1.4, 1.4, 1.4)
+                float3 xformOp:translate = (-1.707519, -4.833564e-7, 5.652999)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Oven" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Oven.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710665, 0.7071069, 2.2476472e-8, 8.429369e-8)
+                float3 xformOp:scale = (0.85, 0.85, 0.85)
+                float3 xformOp:translate = (2.3249311, -0.01961323, 5.4801426)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Espressomachine" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Espressomachine.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (1, 1, 1)
+                float3 xformOp:translate = (3.5353842, -0.7900857, 5.612943)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Refrigerator" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Refrigerator.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (2.2, 2.2, 2.2)
+                float3 xformOp:translate = (-2.7879243, 0.028706226, 5.687219)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Grindstone" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Grindstone.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (0.7, 0.7, 0.7)
+                float3 xformOp:translate = (1.6960127, -0.81178004, 5.817823)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Grind" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Grind.usdz@
+            )
+            {
+                quatf xformOp:orient = (-3.366074e-15, 1, 7.54979e-8, 4.371139e-8)
+                float3 xformOp:scale = (0.0012, 0.0012, 0.0012)
+                float3 xformOp:translate = (-1.9707999, -1.217391, 5.800169)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Espressomachine_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Espressomachine.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (1, 1, 1)
+                float3 xformOp:translate = (2.4737966, -0.79008317, 5.61295)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Percolator" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 1.5707963, -3.1415925)
+                }
+                references = @Furnitures/Percolator.usdz@
+            )
+            {
+                quatf xformOp:orient = (5.3385076e-8, 0.70710677, 5.3385076e-8, -0.70710677)
+                float3 xformOp:scale = (0.001, 0.001, 0.001)
+                float3 xformOp:translate = (-1.5180858, -1.7007227, 5.5879655)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Percolator_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 1.5707963, -3.1415925)
+                }
+                references = @Furnitures/Percolator.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (5.3385076e-8, 0.70710677, 5.3385076e-8, -0.70710677)
+                float3 xformOp:scale = (0.001, 0.001, 0.001)
+                float3 xformOp:translate = (-1.2605209, -1.7007167, 5.5879655)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "CoffeeBag" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/CoffeeBag.usdz@
+            )
+            {
+                quatf xformOp:orient = (-3.366074e-15, 1, 7.54979e-8, 4.371139e-8)
+                float3 xformOp:scale = (0.004, 0.004, 0.004)
+                float3 xformOp:translate = (1.3189061, -1.0560143, 5.679466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "CoffeeBag_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/CoffeeBag.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (-3.366074e-15, 1, 7.54979e-8, 4.371139e-8)
+                float3 xformOp:scale = (0.004, 0.004, 0.004)
+                float3 xformOp:translate = (1.0399414, -1.0560143, 5.67947)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "CoffeeBag_2" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/CoffeeBag.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (-3.366074e-15, 1, 7.54979e-8, 4.371139e-8)
+                float3 xformOp:scale = (0.004, 0.004, 0.004)
+                float3 xformOp:translate = (-0.46629214, -1.8892517, 5.6794715)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "CoffeeBag_3" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (0, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/CoffeeBag.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (40, 40)
+                int ui:nodegraph:node:stackingOrder = 2
+                quatf xformOp:orient = (-3.366074e-15, 1, 7.54979e-8, 4.371139e-8)
+                float3 xformOp:scale = (0.004, 0.004, 0.004)
+                float3 xformOp:translate = (-0.7119938, -1.8892517, 5.6794715)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def Xform "Chair" (
+                active = true
+            )
+            {
+                reorder nameChildren = ["WoodChair_1", "WoodChair_2", "WoodChair_3", "WoodChair_4", "WoodChair_5", "WoodChair_6", "WoodChair_7", "WoodChair_8", "WoodChair_9", "WoodChair_10", "WoodChair_11", "WoodChair", "LongChair", "LongChair_1", "LongChair_2", "LongChair_3", "LongChair_4", "LongChair_5", "Chair_6", "Chair_7", "Chair_8", "Chair_9", "Chair_10", "Chair_11", "Chair_12", "Chair_13", "Chair_1", "Chair_2", "Chair_3", "Chair_4", "Chair_5", "Chair"]
+                def "Chair" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4440393, -0.0000011669472, -1.0679713)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (20, 20)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4440393, -0.0000010328367, 0.5687505)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_2" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (20, 20)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4440694, -0.0000013681129, 2.629872)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_3" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (40, 40)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.444069, -0.0000012340024, 4.266594)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_4" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (60, 60)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.44407, -0.0000018356368, -3.0678205)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_5" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (40, 40)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.44407, -0.0000019697472, -4.704542)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (7.1094728, 0.0000013699755, -3.6025138)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-324.67612, 121.16454)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (5.5274177, 0.0000011157244, -3.6025128)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair_2" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (3.9531972, 8.8103116e-7, -3.6025183)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair_3" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, -7.1054274e-15, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-284.67612, 161.16455)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-5.3385083e-8, 5.338507e-8, -0.70710665, 0.7071069)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (3.9532049, 0.00000126753, -2.2216692)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair_4" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, -7.1054274e-15, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-5.3385083e-8, 5.338507e-8, -0.70710665, 0.7071069)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (5.527426, 0.0000015022233, -2.2216637)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "LongChair_5" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, -7.1054274e-15, -3.1415925)
+                    }
+                    references = @Furnitures/LongChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-324.67612, 121.16454)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-5.3385083e-8, 5.338507e-8, -0.70710665, 0.7071069)
+                    float3 xformOp:scale = (1.7, 1.7, 1.7)
+                    float3 xformOp:translate = (7.109481, 0.0000017564744, -2.221665)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_6" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (60, 60)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (3.7287889, -3.6135316e-7, -5.12271)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_7" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (80, 80)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (4.9739985, -2.1606684e-7, -5.12271)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_8" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (100, 100)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (6.5184636, -8.940697e-8, -5.1227093)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_9" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (120, 120)
+                    int ui:nodegraph:node:stackingOrder = 6
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (7.228138, 2.6077032e-8, -5.1227098)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_10" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707963, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (140, 140)
+                    int ui:nodegraph:node:stackingOrder = 7
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.429369e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (7.228138, -3.75323e-7, -0.64153874)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_11" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707963, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (120, 120)
+                    int ui:nodegraph:node:stackingOrder = 6
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.429369e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (6.518464, -4.90807e-7, -0.6415387)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_12" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707963, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (100, 100)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.429369e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (4.9739985, -6.1746687e-7, -0.6415394)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_13" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707963, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (80, 80)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.429369e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (3.728789, -7.627532e-7, -0.6415394)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.5149655, -9.80217e-7, 0.14213006)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_2" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (51.901, 16.785145)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.5149918, -9.629875e-7, -0.8754455)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_3" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (71.901, 36.785145)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.5150123, -9.4249845e-7, -2.056515)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_4" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (91.901, 56.785145)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.5150456, -9.909272e-7, -3.1289394)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_5" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (91.901, 56.785145)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.515035, -9.1828406e-7, -4.2283835)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_6" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.3327837, -6.998889e-7, 1.174507)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_7" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (111.901, 76.78514)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.3328667, -7.0175156e-7, -4.2283854)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_8" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (111.901, 76.78514)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.332877, -7.743947e-7, -3.128941)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_9" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (91.901, 56.785145)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.332844, -7.2596595e-7, -2.0565166)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_10" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (71.901, 36.785145)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.3328233, -7.4645504e-7, -0.8754473)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair_11" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (51.901, 16.785145)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-2.332797, -7.636845e-7, 0.14212833)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodChair" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WoodChair.usdz@
+                )
+                {
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-4.514952, -9.164214e-7, 1.1745088)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_14" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (40, 40)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.661912, -0.0000012181699, 0.568757)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_15" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.661912, -0.0000013522804, -1.0679648)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_16" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (51.901, 16.785145)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.6619115, -0.0000016782433, 2.5871224)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_17" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (60, 60)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.661911, -0.0000015441328, 4.223844)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_18" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (80, 80)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (0.7071067, 0.70710677, 2.2476472e-8, 8.4293674e-8)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.661912, -0.0000020638108, -3.0645936)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "Chair_19" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/Chair.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (71.901, 36.785145)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.661912, -0.0000021979213, -4.7013154)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+            }
+
+            def Xform "Table" (
+                active = true
+            )
+            {
+                reorder nameChildren = ["WoodTable", "WoodTable_1", "TableR", "TableR_1"]
+                def "TableR" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4788837, -0.0000013383105, -0.21635982)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (20, 20)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4788833, -0.0000011101365, 3.3775976)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodTable" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, 1.5707963, -3.1415925)
+                    }
+                    references = @Furnitures/WoodTable.usdz@
+                )
+                {
+                    quatf xformOp:orient = (0.50000006, 0.49999994, 0.50000006, -0.49999994)
+                    float3 xformOp:scale = (3.8, 3.8, 3.8)
+                    float3 xformOp:translate = (-3.5331333, -0.0000010039657, 0.6233161)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "WoodTable_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -1.5707963, 0)
+                    }
+                    references = @Furnitures/WoodTable.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-81.445786, 50.563255)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (0.5, 0.49999997, -0.49999997, 0.50000006)
+                    float3 xformOp:scale = (3.8, 3.8, 3.8)
+                    float3 xformOp:translate = (-3.3132825, -0.0000010728836, -2.9613557)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_2" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (40, 40)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-7.4788837, -0.0000017629936, -3.8834662)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_3" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-324.67612, 121.16454)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (7.249457, 6.482005e-7, -4.435622)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_4" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (6.4357743, 5.5879354e-7, -4.435622)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_5" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-284.67612, 161.16455)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (4.9967027, 3.1478703e-7, -4.435622)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_6" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-264.67612, 181.16455)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (3.7539237, -8.195639e-8, -4.435622)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_7" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-244.67612, 201.16455)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (3.7539241, 1.2665987e-7, -1.3898008)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_8" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-264.67612, 181.16455)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (4.996703, 5.234033e-7, -1.3898009)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_9" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-284.67612, 161.16455)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (6.435775, 7.674098e-7, -1.389801)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_10" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (7.2494574, 8.5681677e-7, -1.3898011)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_11" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (40, 40)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.6793966, -0.0000012256205, 3.3775811)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_12" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.6780725, -0.0000014081597, -0.21635994)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def "TableR_13" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                    }
+                    references = @Furnitures/TableR.usdz@
+                )
+                {
+                    float2 ui:nodegraph:node:pos = (60, 60)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (-2.2476462e-8, 8.4293696e-8, -0.7071067, 0.70710677)
+                    float3 xformOp:scale = (0.7999999, 0.7999999, 0.7999999)
+                    float3 xformOp:translate = (-6.674513, -0.0000016391277, -3.8834467)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+            }
+
+            def "Showcase_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.5707964, -8.742278e-8, -3.1415925)
+                }
+                references = @Furnitures/Showcase.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (2.2476458e-8, -8.4293696e-8, 0.70710677, -0.70710677)
+                float3 xformOp:scale = (1.8, 1.8, 1.8)
+                float3 xformOp:translate = (1.3186513, -0.7939245, 2.415069)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Payment" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, -7.1054274e-15, -3.1415925)
+                }
+                references = @Furnitures/Payment.usdz@
+            )
+            {
+                quatf xformOp:orient = (-5.3385083e-8, 5.338507e-8, -0.70710665, 0.7071069)
+                float3 xformOp:scale = (0.5, 0.5, 0.5)
+                float3 xformOp:translate = (-0.9373851, -0.79995304, 2.3169038)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "planter_with_plants_3d_model" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-4.7123885, 3.1415927, 0)
+                }
+                references = @Furnitures/planter+with+plants+3d+model.usdz@
+            )
+            {
+                quatf xformOp:orient = (3.090861e-8, 3.0908627e-8, -0.7071066, 0.70710695)
+                float3 xformOp:scale = (2.3, 2.3, 2.3)
+                float3 xformOp:translate = (6.825976, 0.0000018184073, -3.1104658)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "planter_with_plants_3d_model_1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-4.7123885, 3.1415927, 0)
+                }
+                references = @Furnitures/planter+with+plants+3d+model.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (-324.67612, 121.16454)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (3.090861e-8, 3.0908627e-8, -0.7071066, 0.70710695)
+                float3 xformOp:scale = (2.3, 2.3, 2.3)
+                float3 xformOp:translate = (5.258034, 0.0000018179417, -3.1104608)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "planter_with_plants_3d_model_2" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-4.7123885, 3.1415927, 0)
+                }
+                references = @Furnitures/planter+with+plants+3d+model.usdz@
+            )
+            {
+                float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                int ui:nodegraph:node:stackingOrder = 2
+                quatf xformOp:orient = (3.090861e-8, 3.0908627e-8, -0.7071066, 0.70710695)
+                float3 xformOp:scale = (2.3, 2.3, 2.3)
+                float3 xformOp:translate = (4.033197, 0.0000018179417, -3.1104653)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Plant1" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                }
+                references = @Furnitures/Plant1.usdz@
+            )
+            {
+                quatf xformOp:orient = (2.2476456e-8, -8.4293696e-8, 0.70710677, -0.70710677)
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                float3 xformOp:translate = (-1.6408219, -0.7672145, 2.420935)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Drawing1" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (4.537856, -1.5707959, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Drawing1> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (176.01404, 187.1542)
+                int ui:nodegraph:node:stackingOrder = 2
+                quatf xformOp:orient = (0.54167527, -0.45451948, -0.5416752, -0.45451945)
+                float3 xformOp:scale = (4.5333333, 4, 3.2)
+                float3 xformOp:translate = (-7.745172, -2.2515638, -2.2678156)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Drawing2" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (4.537856, -1.5707959, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Drawing2> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (196.01404, 207.1542)
+                int ui:nodegraph:node:stackingOrder = 3
+                quatf xformOp:orient = (0.54167527, -0.45451948, -0.5416752, -0.45451945)
+                float3 xformOp:scale = (4.5333333, 4, 3.2)
+                float3 xformOp:translate = (-7.745172, -2.251563, 1.7362767)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Drawing3" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.354603, -1.5707959, 3.1415927)
+                }
+                references = @Screen.usdz@
+            )
+            {
+                rel material:binding = </Root/Drawing3> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                float2 ui:nodegraph:node:pos = (196.01404, 207.1542)
+                int ui:nodegraph:node:stackingOrder = 3
+                quatf xformOp:orient = (0.44313857, 0.5510248, -0.44313854, 0.5510248)
+                float3 xformOp:scale = (4.5333333, 4, 3.2)
+                float3 xformOp:translate = (7.7759814, -2.720602, -2.0089476)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def "Signboard" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                references = @Furnitures/Signboard.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (0.8, 0.8, 0.8)
+                float3 xformOp:translate = (1.0916834, -1.7881393e-7, 1.7455575)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+
+            def Xform "Lamp" (
+                active = true
+            )
+            {
+                reorder nameChildren = ["WallLamp", "WallLamp_5", "WallLamp_6", "WallLamp_7", "WallLamp_1", "WallLamp_2", "WallLamp_3", "WallLamp_4"]
+                def "WallLamp_2" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-7.8264437, -2.8244212, -4.028708)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_3" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-304.67612, 141.16455)
+                    int ui:nodegraph:node:stackingOrder = 2
+                    quatf xformOp:orient = (0.70710665, 0.7071068, 2.2476467e-8, 8.429368e-8)
+                    float3 xformOp:scale = (0.5, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (7.755389, -2.824418, -0.13675185)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_5" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 1.5707963, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-264.67612, 181.16455)
+                    int ui:nodegraph:node:stackingOrder = 4
+                    quatf xformOp:orient = (0.5, 0.49999997, 0.49999997, -0.50000006)
+                    float3 xformOp:scale = (0.5, 0.5, 0.5)
+                    float3 xformOp:translate = (5.8686943, -2.824395, -5.777642)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_6" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 1.5707963, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-244.67612, 201.16455)
+                    int ui:nodegraph:node:stackingOrder = 5
+                    quatf xformOp:orient = (0.5, 0.49999997, 0.49999997, -0.50000006)
+                    float3 xformOp:scale = (0.5, 0.5, 0.5)
+                    float3 xformOp:translate = (0.3077259, -2.8243914, -5.7776327)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_7" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.570796, 1.5707963, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-224.67612, 221.16455)
+                    int ui:nodegraph:node:stackingOrder = 6
+                    quatf xformOp:orient = (0.5, 0.49999997, 0.49999997, -0.50000006)
+                    float3 xformOp:scale = (0.5, 0.5, 0.5)
+                    float3 xformOp:translate = (-5.7082424, -2.8243778, -5.7776384)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-7.8264437, -2.8244212, -0.26364446)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_4" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (1.5707958, -1.5707959, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-284.67612, 161.16455)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (0.49999988, 0.5000001, -0.49999988, 0.5000001)
+                    float3 xformOp:scale = (0.5, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (6.132641, -2.8244169, 1.7524166)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_1" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707964, -8.7422784e-8, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+                    int ui:nodegraph:node:stackingOrder = 1
+                    quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
+                    float3 xformOp:scale = (0.49999997, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (-7.826443, -2.824441, 3.7633839)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+
+                def "WallLamp_8" (
+                    active = true
+                    customData = {
+                        float3 rotationEulerHint = (-1.5707955, 3.1415927, -3.1415925)
+                    }
+                    references = @Furnitures/WallLamp.usdz@
+                )
+                {
+                    reorder nameChildren = ["tripo_node_20afb53c_7e8d_45f7_b25c_e46f9d8fd7bf", "_materials", "PointLight"]
+                    float2 ui:nodegraph:node:pos = (-284.67612, 161.16455)
+                    int ui:nodegraph:node:stackingOrder = 3
+                    quatf xformOp:orient = (0.70710665, 0.7071068, 2.2476467e-8, 8.429368e-8)
+                    float3 xformOp:scale = (0.5, 0.49999997, 0.49999997)
+                    float3 xformOp:translate = (7.7553506, -2.8244212, -4.1331463)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Xform "PointLight"
+                    {
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385072e-8, -5.3385072e-8)
+                        float3 xformOp:scale = (1.0000002, 1.0000002, 1.0000002)
+                        float3 xformOp:translate = (-0.15089989, 0.035977125, 0.13395262)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                        def RealityKitComponent "PointLight"
+                        {
+                            float attenuationFalloffExponent = 2
+                            float attenuationRadius = 5000
+                            float3 color = (1, 0.6587387, 0.31717235)
+                            token info:id = "RealityKit.PointLight"
+                            float intensity = 10000
+                        }
+                    }
+                }
+            }
+
+            def "ToiletDoor" (
+                active = true
+                customData = {
+                    float3 rotationEulerHint = (-1.570796, 3.1415927, -3.1415925)
+                }
+                prepend references = @Furnitures/ToiletDoor.usdz@
+            )
+            {
+                quatf xformOp:orient = (0.70710677, 0.70710677, 2.2476458e-8, 8.4293696e-8)
+                float3 xformOp:scale = (2.4, 2.4, 2.4)
+                float3 xformOp:translate = (6.0971255, 6.239861e-7, 1.9993818)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+            }
+        }
+
+        over "CupBoard1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wood> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (1, 0, 0, 0)
             float3 xformOp:scale = (1, 1, 1)
-            float3 xformOp:translate = (-2.3501482, -5.458749, 0.8817376)
+            double3 xformOp:translate = (0.9819427132606506, -5.699999809265137, 1.924990177154541)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "CupBoard2" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wood> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (2.0819413661956787, -5.699999809265137, 1.679934024810791)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "wall4" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/wall> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        def Xform "Edge" (
+            active = true
+        )
+        {
+            quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            float3 xformOp:translate = (-0.07785892, 0.05167961, -0.0030006461)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            def Cube "Cube" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Root/Wood> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                double size = 0.2
+                quatf xformOp:orient = (1, 0, 0, 0)
+                float3 xformOp:scale = (0.1, 0.6, 60)
+                float3 xformOp:translate = (8.064897, 0.06898286, 0.064044595)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Material "DefaultMaterial"
+                {
+                    token outputs:mtlx:surface
+                    token outputs:realitykit:vertex
+                    token outputs:surface.connect = </Root/Indoor/Edge/Cube/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+
+                    def Shader "DefaultSurfaceShader"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.3861328, 0.3030529, 0.23914212) (
+                            colorSpace = "srgb_displayp3"
+                        )
+                        float inputs:roughness = 0.8
+                        token outputs:surface
+                    }
+                }
+            }
+
+            def Cube "Cube_1" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Root/Wood> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                double size = 0.2
+                float2 ui:nodegraph:node:pos = (20, 20)
+                int ui:nodegraph:node:stackingOrder = 1
+                quatf xformOp:orient = (1, 6.5955835e-17, 0, 0)
+                float3 xformOp:scale = (0.1, 0.6, 60)
+                float3 xformOp:translate = (-7.87605, 0.06898328, 0.06404358)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Material "DefaultMaterial"
+                {
+                    token outputs:mtlx:surface
+                    token outputs:realitykit:vertex
+                    token outputs:surface.connect = </Root/Indoor/Edge/Cube_1/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+
+                    def Shader "DefaultSurfaceShader"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.3861328, 0.3030529, 0.23914212) (
+                            colorSpace = "srgb_displayp3"
+                        )
+                        float inputs:roughness = 0.8
+                        token outputs:surface
+                    }
+                }
+            }
+
+            def Cube "Cube_2" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.3191167e-16, 1.5707963, 0)
+                }
+            )
+            {
+                rel material:binding = </Root/Wood> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                double size = 0.2
+                float2 ui:nodegraph:node:pos = (40, 40)
+                int ui:nodegraph:node:stackingOrder = 2
+                quatf xformOp:orient = (0.70710677, 4.6637816e-17, 0.70710677, -4.6637816e-17)
+                float3 xformOp:scale = (0.1, 0.6, 35)
+                float3 xformOp:translate = (-4.6558642, 0.06898328, -5.9246063)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Material "DefaultMaterial"
+                {
+                    token outputs:mtlx:surface
+                    token outputs:realitykit:vertex
+                    token outputs:surface.connect = </Root/Indoor/Edge/Cube_2/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+
+                    def Shader "DefaultSurfaceShader"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.3861328, 0.3030529, 0.23914212) (
+                            colorSpace = "srgb_displayp3"
+                        )
+                        float inputs:roughness = 0.8
+                        token outputs:surface
+                    }
+                }
+            }
+
+            def Cube "Cube_3" (
+                active = true
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                customData = {
+                    float3 rotationEulerHint = (1.3191167e-16, 1.5707963, 0)
+                }
+            )
+            {
+                rel material:binding = </Root/Wood> (
+                    bindMaterialAs = "weakerThanDescendants"
+                )
+                double size = 0.2
+                float2 ui:nodegraph:node:pos = (60, 60)
+                int ui:nodegraph:node:stackingOrder = 3
+                quatf xformOp:orient = (0.7071068, 4.6637803e-17, 0.7071067, -4.6637826e-17)
+                float3 xformOp:scale = (0.09999998, 0.59999996, 37)
+                float3 xformOp:translate = (4.4610534, 0.06898328, -5.924625)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Material "DefaultMaterial"
+                {
+                    token outputs:mtlx:surface
+                    token outputs:realitykit:vertex
+                    token outputs:surface.connect = </Root/Indoor/Edge/Cube_3/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+
+                    def Shader "DefaultSurfaceShader"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.3861328, 0.3030529, 0.23914212) (
+                            colorSpace = "srgb_displayp3"
+                        )
+                        float inputs:roughness = 0.8
+                        token outputs:surface
+                    }
+                }
+            }
+        }
+
+        over "wall1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/wall> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "_Shelf" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wood> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube"
+        {
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-17.357568740844727, 2.702502489089966, 0.650005042552948)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
     }
@@ -330,8 +2167,372 @@ def Xform "Root"
             float2 inputs:uvtiling = (1, 1)
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-213.65083, 148.03477)
-            int ui:nodegraph:node:stackingOrder = 32
+            int ui:nodegraph:node:stackingOrder = 33
         }
+    }
+
+    def Material "Menuboard1"
+    {
+        token outputs:mtlx:surface.connect = </Root/Menuboard1/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Menuboard1/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @Furnitures/Menuboard1.png@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 7
+        }
+    }
+
+    def Material "Menuboard2"
+    {
+        token outputs:mtlx:surface.connect = </Root/Menuboard2/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
+        int ui:nodegraph:node:stackingOrder = 1
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Menuboard2/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @Furnitures/Menuboard2.png@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 8
+        }
+    }
+
+    def Material "Poster"
+    {
+        token outputs:mtlx:surface.connect = </Root/Poster/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (51.901, 16.785145)
+        int ui:nodegraph:node:stackingOrder = 2
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Poster/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @Furnitures/PosterImage.jpeg@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 10
+        }
+    }
+
+    def Material "Poster_1"
+    {
+        token outputs:mtlx:surface.connect = </Root/Poster_1/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (71.901, 36.785145)
+        int ui:nodegraph:node:stackingOrder = 3
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Poster_1/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @Furnitures/Poster2.jpeg@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 11
+        }
+    }
+
+    def Material "DoorWall"
+    {
+        token outputs:mtlx:surface.connect = </Root/DoorWall/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        token outputs:surface.connect = None
+        float2 ui:nodegraph:node:pos = (-304.72418, 147.09288)
+        int ui:nodegraph:node:stackingOrder = 1
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (0, 110.5)
+
+        def Shader "UsdPreviewSurface" (
+            active = false
+        )
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            token outputs:surface
+        }
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/DoorWall/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (-430.6289, 110.92578)
+            int ui:nodegraph:node:stackingOrder = 30
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @Furnitures/DoorWall.png@
+            float2 inputs:texcoord
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-642.9464, 19.031008)
+            int ui:nodegraph:node:stackingOrder = 42
+        }
+    }
+
+    def Xform "PointLight"
+    {
+        float3 xformOp:translate = (-3.6082845, 1.2238928, -2.7001646)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "PointLight"
+        {
+            float3 color = (1, 0.7839322, 0.60406715)
+            token info:id = "RealityKit.PointLight"
+            float intensity = 10000
+        }
+    }
+
+    def Xform "PointLight_1"
+    {
+        float2 ui:nodegraph:node:pos = (20, 20)
+        int ui:nodegraph:node:stackingOrder = 1
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (-4.734877, 1.2238928, -2.7001646)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "PointLight"
+        {
+            float3 color = (1, 0.7839322, 0.60406715)
+            token info:id = "RealityKit.PointLight"
+            float intensity = 10000
+        }
+    }
+
+    def Xform "PointLight_2"
+    {
+        float2 ui:nodegraph:node:pos = (40, 40)
+        int ui:nodegraph:node:stackingOrder = 2
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (-6.427466, 1.2194986, -2.7001646)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "PointLight"
+        {
+            float3 color = (1, 0.7839322, 0.60406715)
+            token info:id = "RealityKit.PointLight"
+            float intensity = 10000
+        }
+    }
+
+    def Xform "PointLight_3"
+    {
+        float2 ui:nodegraph:node:pos = (60, 60)
+        int ui:nodegraph:node:stackingOrder = 3
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (-6.427466, 1.2194986, -2.7001646)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "PointLight"
+        {
+            float3 color = (1, 0.7839322, 0.60406715)
+            token info:id = "RealityKit.PointLight"
+            float intensity = 10000
+        }
+    }
+
+    def Material "Wood"
+    {
+        token outputs:mtlx:surface.connect = </Root/Wood/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Wood/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @textures/New Folder/wood.png@
+            string inputs:filtertype
+            string inputs:vaddressmode
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-133.89062, 69.04297)
+            int ui:nodegraph:node:stackingOrder = 7
+        }
+    }
+
+    def Material "Drawing1"
+    {
+        token outputs:mtlx:surface.connect = </Root/Drawing1/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (71.901, 36.785145)
+        int ui:nodegraph:node:stackingOrder = 3
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Drawing1/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @textures/New Folder/Drawing1.png@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 11
+        }
+    }
+
+    def Material "Drawing2"
+    {
+        token outputs:mtlx:surface.connect = </Root/Drawing2/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (91.901, 56.785145)
+        int ui:nodegraph:node:stackingOrder = 4
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Drawing2/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @textures/New Folder/Drawing2.png@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 11
+        }
+    }
+
+    def Material "Drawing3"
+    {
+        token outputs:mtlx:surface.connect = </Root/Drawing3/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (111.901, 76.78514)
+        int ui:nodegraph:node:stackingOrder = 5
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Drawing3/Image.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+        }
+
+        def Shader "Image"
+        {
+            uniform token info:id = "ND_image_color3"
+            asset inputs:file = @textures/New Folder/Drawing3.png@
+            string inputs:filtertype
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
+            int ui:nodegraph:node:stackingOrder = 11
+        }
+    }
+
+    def "Door" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        prepend references = @Furnitures/Door.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (2.5, 2.5, 2.5)
+        float3 xformOp:translate = (-0.16957682, 3.585592e-7, -5.889111)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 }
 
