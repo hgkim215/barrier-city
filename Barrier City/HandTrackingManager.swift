@@ -120,16 +120,27 @@ final class HandTrackingManager {
         }
     }
 
-    func stop(model: AppModel) {
+    /// 이 뷰 인스턴스가 소유한 ARKit 자원만 종료한다.
+    /// 이전 몰입 뷰의 늦은 종료에서도 새 세션의 AppModel 상태를 건드리지 않는다.
+    func stopSession() {
         runGeneration &+= 1
         running = false
         session.stop()
         resetAllTrackingState(allowImmediateFistCapture: false)
+    }
+
+    /// 현재 몰입 세션 소유자만 호출해야 하는 공유 입력 상태 정리.
+    func clearModelInput(model: AppModel) {
         model.releaseWheelHandInput()
         model.stopFistDrive(requestRecenter: true)
         model.handTrackingStatus = model.useHandTracking && !model.isImmersive
             ? "체험을 시작하면 손 추적을 연결합니다"
             : "꺼짐"
+    }
+
+    func stop(model: AppModel) {
+        stopSession()
+        clearModelInput(model: model)
     }
 
     // MARK: - 처리
@@ -144,6 +155,11 @@ final class HandTrackingManager {
         // OFF 직후 이미 전달 대기 중이던 마지막 anchor가 입력을 되살리는 것을 막는다.
         guard model.useHandTracking else {
             model.releaseWheelHandInput()
+            resetAllTrackingState(allowImmediateFistCapture: false)
+            return
+        }
+        guard !GuideFlowModel.shared.isInteractionLocked else {
+            model.discardGuideLockedInput()
             resetAllTrackingState(allowImmediateFistCapture: false)
             return
         }

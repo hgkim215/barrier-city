@@ -21,3 +21,6 @@ proxy/.wrangler/
 .env
 *.env
 node_modules/
+
+# Local isolated development worktrees
+.worktrees/

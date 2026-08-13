@@ -9,6 +9,7 @@
 //  (정교한 키오스크 화면 UI는 디자인 영역으로 분리. 여기서는 인터랙션·장벽 전달만.)
 //
 
+import RealityKit
 import SwiftUI
 
 struct KioskOrderView: View {
@@ -29,6 +30,12 @@ struct KioskOrderView: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                Button("확인") {
+                    im.acknowledgeKioskBarrier()
+                    GuideFlowModel.shared.handleQuestEvent(.kioskFailed)
+                }
+                .buttonStyle(.borderedProminent)
+                .frame(minHeight: 52)
             } else {
                 Text("키오스크")
                     .font(.largeTitle).bold()
@@ -37,7 +44,6 @@ struct KioskOrderView: View {
                     .foregroundStyle(.secondary)
                 Button {
                     im.kioskTooHighShown = true
-                    QuestModel.shared.advance(on: .kioskFailed)
                 } label: {
                     Label("키오스크 사용하기", systemImage: "hand.tap.fill")
                         .font(.title2)

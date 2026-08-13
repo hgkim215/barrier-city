@@ -13,7 +13,7 @@ import Observation
 enum QuestEvent: Equatable {
     case enteredIndoor   // 실내(카페) 진입 성공
     case kioskFailed     // 키오스크 "사용하기" → 장벽 안내
-    case npcHelpDone     // 정의만 — 발행은 NPC 씬 배치 후(이번 스코프 밖)
+    case npcHelpDone     // NPC 대화에서 주문 완료 시 발행
 }
 
 /// 퀘스트 한 단계(목표 + 방법 + 완료 조건). 순수 값 타입.
@@ -28,20 +28,29 @@ struct QuestStep: Identifiable, Equatable {
 enum QuestTuning {
     /// head 앞으로 띄우는 거리(m)
     static let forwardDistance: Float = 1.2
-    /// head 기준 좌우 오프셋(m, -면 왼쪽)
-    static let lateralOffset: Float = -0.35
-    /// head 기준 세로 오프셋(m, -면 눈높이보다 아래)
-    static let verticalOffset: Float = -0.15
+    /// 중앙 모달의 head 기준 좌우 오프셋(m, -면 왼쪽)
+    static let centerLateralOffset: Float = 0
+    /// 중앙 모달의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
+    static let centerVerticalOffset: Float = -0.05
+    /// 상단 선행 HUD의 head 기준 좌우 오프셋(m, -면 왼쪽)
+    static let hudLateralOffset: Float = -0.4
+    /// 상단 선행 HUD의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
+    static let hudVerticalOffset: Float = 0.2
     /// 데드존 각도(rad). 이 안이면 따라가지 않음(15°).
     static let deadZoneAngle: Float = 15 * .pi / 180
     /// 데드존 거리(m). 이 안이면 따라가지 않음.
     static let deadZoneDistance: Float = 0.2
     /// 지수 스무딩 수렴 속도(초당 배율 계수). 클수록 빨리 붙는다.
     static let smoothingRate: Float = 4.0
-    /// 완료 연출 유지 시간(초).
-    static let completedHoldSeconds: Double = 1.5
-    /// head 포즈를 못 얻을 때 고정 배치 위치(씬 원점 기준).
-    static let fallbackPosition = SIMD3<Float>(-0.35, 1.4, -1.2)
+    /// head 포즈를 못 얻을 때 중앙 모달의 고정 배치 위치(씬 원점 기준).
+    static let centerFallbackPosition = SIMD3<Float>(0, 1.45, -1.2)
+    /// head 포즈를 못 얻을 때 상단 선행 HUD의 고정 배치 위치(씬 원점 기준).
+    static let hudFallbackPosition = SIMD3<Float>(-0.4, 1.65, -1.2)
+}
+
+enum QuestAdvanceOutcome: Equatable {
+    case ignored
+    case advanced(completed: QuestStep, next: QuestStep?)
 }
 
 /// 퀘스트 전역 상태.
@@ -69,9 +78,6 @@ final class QuestModel {
 
     /// 현재 단계 인덱스. steps.count면 전체 완료(이번 스코프에선 도달 안 함).
     private(set) var currentIndex = 0
-    /// 완료 연출용: 방금 완료된 단계(잠시 표시 후 nil).
-    private(set) var justCompletedStep: QuestStep?
-
     /// 현재 표시할 목표 단계(전체 완료면 nil).
     var currentStep: QuestStep? {
         currentIndex < steps.count ? steps[currentIndex] : nil
@@ -80,24 +86,20 @@ final class QuestModel {
     /// 몰입 공간 재진입 시 1단계로 리셋(InteractionModel 리셋 패턴과 동일).
     func reset() {
         currentIndex = 0
-        justCompletedStep = nil
     }
 
-    /// 이벤트 발행. 현재 단계의 완료 이벤트와 일치할 때만 진행하고 완료 연출을 띄운다.
+    /// 이벤트 발행. 현재 단계의 완료 이벤트와 일치할 때만 진행한다.
     /// 불일치 이벤트(중복·순서 꼬임)는 무시된다.
-    func advance(on event: QuestEvent) {
-        guard let step = currentStep else { return }
-        let matches = (event == step.completionEvent)
-        let next = QuestProgression.nextIndex(currentIndex: currentIndex,
-                                              stepCount: steps.count,
-                                              eventMatchesCurrent: matches)
-        guard next != currentIndex else { return }   // 변화 없으면 무시
-        justCompletedStep = step
-        currentIndex = next
-        // 완료 연출을 completedHoldSeconds 후 해제(그 사이 새 완료가 오면 최신 것 우선).
-        Task { @MainActor [self] in
-            try? await Task.sleep(for: .seconds(QuestTuning.completedHoldSeconds))
-            if self.justCompletedStep == step { self.justCompletedStep = nil }
-        }
+    @discardableResult
+    func advance(on event: QuestEvent) -> QuestAdvanceOutcome {
+        guard let step = currentStep else { return .ignored }
+        let nextIndex = QuestProgression.nextIndex(
+            currentIndex: currentIndex,
+            stepCount: steps.count,
+            eventMatchesCurrent: event == step.completionEvent)
+        guard nextIndex != currentIndex else { return .ignored }
+
+        currentIndex = nextIndex
+        return .advanced(completed: step, next: currentStep)
     }
 }

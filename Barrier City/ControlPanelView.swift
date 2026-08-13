@@ -8,8 +8,8 @@ struct ControlPanelView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
-    @State private var isImmersiveTransitioning = false
     @State private var immersiveError: String?
+    @State private var isCafeTransitioning = false
     @AppStorage(DevelopmentOptions.simulatorMicrophoneKey)
     private var simulatorMicrophoneEnabled = false
 
@@ -84,28 +84,42 @@ struct ControlPanelView: View {
             .padding(12)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-            if model.isImmersive {
+            switch model.immersiveSessionState.phase {
+            case .open, .closing:
                 Button(role: .destructive) {
                     Task { @MainActor in
-                        guard !isImmersiveTransitioning else { return }
-                        isImmersiveTransitioning = true
+                        guard let generation = model.beginImmersiveClose() else { return }
                         await dismissSpace()
-                        isImmersiveTransitioning = false
+                        model.completeImmersiveClose(generation: generation)
                     }
                 } label: {
-                    Label("체험 종료", systemImage: "xmark.circle.fill")
+                    Label(model.immersiveSessionState.controlTitle,
+                          systemImage: "xmark.circle.fill")
                 }
-            } else {
+            case .closed, .opening:
                 Button {
                     Task { @MainActor in
-                        guard !isImmersiveTransitioning else { return }
-                        isImmersiveTransitioning = true
+                        guard let generation = model.beginImmersiveOpen() else { return }
                         immersiveError = nil
-                        defer { isImmersiveTransitioning = false }
-                        _ = await openImmersiveSpaceIfNeeded()
+                        switch await openSpace(id: "wheelchair") {
+                        case .opened:
+                            model.completeImmersiveOpen(generation: generation, succeeded: true)
+                        case .userCancelled:
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "몰입 공간 열기가 취소되었습니다."
+                            }
+                        case .error:
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+                            }
+                        @unknown default:
+                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                            }
+                        }
                     }
                 } label: {
-                    Label(isImmersiveTransitioning ? "여는 중…" : "체험 시작",
+                    Label(model.immersiveSessionState.controlTitle,
                           systemImage: "figure.roll")
                 }
                 .buttonStyle(.borderedProminent)
@@ -129,14 +143,14 @@ struct ControlPanelView: View {
 #if DEBUG
             Button {
                 Task { @MainActor in
-                    guard !isImmersiveTransitioning else { return }
-                    isImmersiveTransitioning = true
+                    guard !isCafeTransitioning else { return }
+                    isCafeTransitioning = true
                     immersiveError = nil
-                    defer { isImmersiveTransitioning = false }
+                    defer { isCafeTransitioning = false }
                     await enterCafeForDevelopment()
                 }
             } label: {
-                Label(isImmersiveTransitioning ? "카페 준비 중…" : "개발: 카페 바로 시작",
+                Label(isCafeTransitioning ? "카페 준비 중…" : "개발: 카페 바로 시작",
                       systemImage: "cup.and.saucer.fill")
                     .frame(maxWidth: .infinity)
             }
@@ -258,7 +272,7 @@ struct ControlPanelView: View {
             .frame(width: 460)
         }
         .frame(width: 460, height: 720)
-        .disabled(isImmersiveTransitioning)
+        .disabled(model.immersiveSessionState.isTransitioning || isCafeTransitioning)
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {
@@ -293,7 +307,10 @@ struct ControlPanelView: View {
         }
 
         if InteractionModel.shared.scene == .outdoor {
-            await SceneSwitcher.switchToIndoor()
+            SceneSwitcher.requestIndoorTransition()
+            for _ in 0..<100 where InteractionModel.shared.isTransitioning {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
         if InteractionModel.shared.scene != .indoor {
             immersiveError = InteractionModel.shared.transitionError
@@ -307,15 +324,26 @@ struct ControlPanelView: View {
         // 종료 콜백보다 늦게 정리되거나 이전 장면 참조가 남아 있어도 재오픈을 막지 않는다.
         if model.isImmersive { return true }
 
+        guard let generation = model.beginImmersiveOpen() else {
+            return model.isImmersive
+        }
+
         switch await openSpace(id: "wheelchair") {
         case .opened:
+            model.completeImmersiveOpen(generation: generation, succeeded: true)
             return true
         case .userCancelled:
-            immersiveError = "몰입 공간 열기가 취소되었습니다."
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "몰입 공간 열기가 취소되었습니다."
+            }
         case .error:
-            immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+            }
         @unknown default:
-            immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+            }
         }
         return false
     }

@@ -87,6 +87,11 @@ struct WheelchairMovementSystem: System {
         do {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
             let motion = model.motion
+            if GuideFlowModel.shared.isInteractionLocked {
+                model.discardGuideLockedInput()
+                Self.applyWorld(worldRoot, model: model)
+                return
+            }
             let now = ProcessInfo.processInfo.systemUptime
             let updateStartedAt = now
             var raycastCount = 0

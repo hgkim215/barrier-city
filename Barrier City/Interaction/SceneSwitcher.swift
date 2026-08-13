@@ -30,14 +30,19 @@ enum SceneSwitcher {
         let heading: Float
     }
 
+    static func requestIndoorTransition() {
+        let im = InteractionModel.shared
+        im.startSceneTransition { token in
+            await switchToIndoor(token: token)
+        }
+    }
+
     /// "예" 선택 시 호출. Outdoor에서만 동작하며, 실패 시 Outdoor를 유지하고
     /// 패널에 안내 문구를 띄운다.
-    static func switchToIndoor() async {
+    private static func switchToIndoor(token: SceneTransitionToken) async {
         let im = InteractionModel.shared
-        guard !im.isTransitioning, im.scene == .outdoor,
+        guard im.isCurrentTransition(token), im.scene == .outdoor,
               let app = AppModel.current, let worldRoot = app.worldRoot else { return }
-        im.isTransitioning = true
-        defer { im.isTransitioning = false }
 
         // 1) 새 시각·콜리전 엔티티를 기존 장면 밖에서 모두 준비한다. 이 구간에서는
         //    현재 맵, 플레이어 포즈, 인터랙션 상태를 전혀 변경하지 않는다.
@@ -53,7 +58,7 @@ enum SceneSwitcher {
         }
 
         // 로드 중 몰입 공간이 닫혔거나 다른 세션으로 교체됐다면 준비한 엔티티를 버린다.
-        guard !Task.isCancelled,
+        guard im.isCurrentTransition(token),
               AppModel.current === app,
               app.worldRoot === worldRoot,
               im.scene == .outdoor,
@@ -77,11 +82,15 @@ enum SceneSwitcher {
         collisionParent.addChild(prepared.collision)
         let layout = resolveIndoorLayout(in: prepared.visible, relativeTo: worldRoot)
 
-        // 2) 이 아래에는 await/throw가 없다. 화면, 콜리전, 포즈, 인터랙션과 퀘스트를
+        // 2) 이 아래에는 await/throw가 없다. 화면, 콜리전, 포즈, 인터랙션과 가이드를
         //    한 MainActor 실행 구간에서 커밋해 외부가 중간 상태를 관찰하지 못하게 한다.
         app.npcClerk.enterIndoor(worldRoot: worldRoot,
                                  indoorMap: prepared.visible,
-                                 kioskCenter: layout.kioskCenter)
+                                 kioskCenter: layout.kioskCenter,
+                                 isTransitionCurrent: {
+                                     im.isCurrentTransition(token)
+                                 })
+        guard im.isCurrentTransition(token) else { return }
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y
@@ -111,7 +120,7 @@ enum SceneSwitcher {
         oldVisible.removeFromParent()
         oldCollision.removeFromParent()
 
-        QuestModel.shared.advance(on: .enteredIndoor)
+        GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)
     }
 
     /// 모든 실패 가능 작업을 현재 장면과 분리된 엔티티에서 끝낸다.

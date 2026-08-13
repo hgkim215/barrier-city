@@ -111,7 +111,7 @@ final class InteractionModel {
     /// "아니요"로 닫힌 트리거 id. 범위 이탈 시 해제되어 재접근하면 다시 뜬다.
     var dismissedTriggerID: String?
     /// 씬 전환 중(패널 버튼 비활성화 + 판정 일시 정지).
-    var isTransitioning = false
+    var isTransitioning: Bool { transitionSession.isTransitioning }
     /// 전환 실패 등 패널에 표시할 안내 문구.
     var transitionError: String?
 
@@ -129,6 +129,8 @@ final class InteractionModel {
     @ObservationIgnored var collisionMap: Entity?
     /// SceneEvents.Update 구독(해제 방지용 보관).
     @ObservationIgnored var updateSubscription: EventSubscription?
+    private var transitionSession = SceneTransitionSession()
+    @ObservationIgnored private var transitionTask: Task<Void, Never>?
 
     /// "아니요": 현재 패널을 닫고, 범위를 벗어났다 재진입하기 전까지 다시 띄우지 않는다.
     func dismissActive() {
@@ -139,6 +141,7 @@ final class InteractionModel {
     /// 몰입 공간 종료 시 이전 RealityKit 장면과 구독을 더 이상 붙잡지 않는다.
     /// 다음 진입은 `InteractionSetup.install`이 완전히 새로운 참조로 다시 구성한다.
     func tearDown() {
+        endImmersiveSession()
         updateSubscription?.cancel()
         updateSubscription = nil
         panelEntity = nil
@@ -148,10 +151,48 @@ final class InteractionModel {
         triggers = []
         activeTrigger = nil
         dismissedTriggerID = nil
-        isTransitioning = false
         transitionError = nil
         kioskTooHighShown = false
         scene = .outdoor
+    }
+
+    /// 키오스크 장벽 확인과 근접 트리거 억제를 한 상태 변경으로 처리한다.
+    func acknowledgeKioskBarrier() {
+        dismissActive()
+        kioskTooHighShown = false
+        kioskPanelEntity?.isEnabled = false
+    }
+
+    // MARK: - 씬 전환 수명주기
+
+    func beginImmersiveSession() {
+        transitionTask?.cancel()
+        transitionTask = nil
+        transitionSession.beginSession()
+    }
+
+    func endImmersiveSession() {
+        transitionTask?.cancel()
+        transitionTask = nil
+        transitionSession.endSession()
+    }
+
+    func startSceneTransition(
+        _ operation: @escaping @MainActor (SceneTransitionToken) async -> Void
+    ) {
+        guard let token = transitionSession.beginTransition() else { return }
+        transitionTask = Task { @MainActor [weak self] in
+            await operation(token)
+            guard let self else { return }
+            transitionSession.finishTransition(token)
+            if !transitionSession.isTransitioning {
+                transitionTask = nil
+            }
+        }
+    }
+
+    func isCurrentTransition(_ token: SceneTransitionToken) -> Bool {
+        !Task.isCancelled && transitionSession.isCurrent(token)
     }
 
     // MARK: - 순수 판정 로직

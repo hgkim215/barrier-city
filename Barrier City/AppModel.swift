@@ -52,8 +52,37 @@ final class AppModel {
         WheelchairMovementSystem.registerSystem()
     }
 
-    /// 몰입 공간이 열려 있는지.
-    var isImmersive = false
+    /// 몰입 공간 열기/닫기와 뷰 생명주기가 공유하는 단일 상태.
+    private(set) var immersiveSessionState = ImmersiveSessionState()
+
+    /// 기존 손 추적·진단 코드가 읽는 호환 속성.
+    var isImmersive: Bool { immersiveSessionState.isImmersive }
+
+    func beginImmersiveOpen() -> Int? {
+        immersiveSessionState.beginOpen()
+    }
+
+    @discardableResult
+    func completeImmersiveOpen(generation: Int, succeeded: Bool) -> Bool {
+        immersiveSessionState.completeOpen(generation: generation, succeeded: succeeded)
+    }
+
+    func beginImmersiveClose() -> Int? {
+        immersiveSessionState.beginClose()
+    }
+
+    @discardableResult
+    func completeImmersiveClose(generation: Int) -> Bool {
+        immersiveSessionState.completeClose(generation: generation)
+    }
+
+    func immersiveSessionAppeared() -> Int? {
+        immersiveSessionState.appeared()
+    }
+
+    func immersiveSessionDisappeared(generation: Int) -> Bool {
+        immersiveSessionState.disappeared(generation: generation)
+    }
 
     /// 손 추적을 쓸지(실기), 버튼 입력을 쓸지(시뮬레이터).
     var useHandTracking = false
@@ -232,6 +261,34 @@ final class AppModel {
         rightGrabbed = false
         handSpeedLeft = 0
         handSpeedRight = 0
+    }
+
+    func prepareForGuidePhaseChange(isLocked: Bool) {
+        motion.leftVelocity = 0
+        motion.rightVelocity = 0
+        pendingImpulseLeft = 0
+        pendingImpulseRight = 0
+        brakeRequested = false
+        releaseWheelHandInput()
+        stopFistDrive(
+            requestRecenter: true,
+            status: isLocked && testFistDriveEnabled ? "가이드 확인 중" : nil)
+    }
+
+    func discardGuideLockedInput() {
+        motion.leftVelocity = 0
+        motion.rightVelocity = 0
+        pendingImpulseLeft = 0
+        pendingImpulseRight = 0
+        brakeRequested = false
+        releaseWheelHandInput()
+        fistDriveActive = false
+        fistDriveForwardAxis = 0
+        fistDriveTurnAxis = 0
+        fistDriveTargetLeft = 0
+        fistDriveTargetRight = 0
+        fistDriveLastUpdate = 0
+        fistDriveHand = ""
     }
 
     /// System이 호출: 누적 충격량을 가져오고 리셋.

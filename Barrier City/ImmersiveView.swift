@@ -24,6 +24,7 @@ struct ImmersiveView: View {
 
     @State private var runtime = ImmersiveRuntimeState()
     @State private var handTracker = HandTrackingManager()
+    @State private var immersiveSessionGeneration: Int?
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
     private static let chairScale: Float = 0.95                  // 전체(몸체 기준) 크기
@@ -196,9 +197,9 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskOrderView()
             }
-            // [김현기] 퀘스트 가이드 HUD(head lazy-follow는 QuestSetup이 처리)
+            // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
-                QuestHUDView()
+                ExperienceGuideView()
             }
             // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
             Attachment(id: "npcInteraction") {
@@ -207,15 +208,19 @@ struct ImmersiveView: View {
             }
         }
         .onAppear {
-            model.isImmersive = true
+            immersiveSessionGeneration = model.immersiveSessionAppeared()
             AppModel.current = model
         }
         .onDisappear {
-            model.isImmersive = false
+            handTracker.stopSession()
+            guard let immersiveSessionGeneration,
+                  model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
+                return
+            }
+            QuestSetup.stop()
             model.npcClerk.resetForOutdoor()
             ImpactAudio.shared.stop()
-            handTracker.stop(model: model)
-            QuestSetup.stop()
+            handTracker.clearModelInput(model: model)
             InteractionModel.shared.tearDown()
             model.worldRoot = nil
             model.characterBody = nil

@@ -84,6 +84,7 @@ final class NPCClerkController {
     @ObservationIgnored private var interactionBubble: Entity?
     @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
+    private var isGuideInteractionLocked = false
 
     private var staffHome = NPCClerkTuning.fallbackStaffHome
     private var servicePoint = NPCClerkTuning.fallbackServicePoint
@@ -111,6 +112,12 @@ final class NPCClerkController {
         interactionBubble = panel
     }
 
+    func setGuideInteractionLocked(_ locked: Bool) {
+        isGuideInteractionLocked = locked
+        interactionBubble?.isEnabled = isInteractionBubbleVisible && !locked
+        if locked { isTalkAvailable = false }
+    }
+
     /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
     func resetForOutdoor() {
         greetingTask?.cancel()
@@ -124,6 +131,7 @@ final class NPCClerkController {
         interactionBubble = nil
         isInteractionBubbleVisible = false
         isTalkAvailable = false
+        isGuideInteractionLocked = false
         phase = .unavailable
         availableAnimationNames = []
         lastPlayedAnimation = ""
@@ -139,7 +147,9 @@ final class NPCClerkController {
     /// Indoor의 authoring marker(BarTable/Human/AreaK)로 동선과 계산대 위치를 구성한다.
     func enterIndoor(worldRoot: Entity,
                      indoorMap: Entity,
-                     kioskCenter: SIMD2<Float>) {
+                     kioskCenter: SIMD2<Float>,
+                     isTransitionCurrent: @escaping @MainActor () -> Bool) {
+        guard isTransitionCurrent() else { return }
         greetingTask?.cancel()
         animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
@@ -181,6 +191,7 @@ final class NPCClerkController {
             print("⚠️ Barista를 찾지 못함 — Indoor.usda의 Barista 엔티티 확인")
             return
         }
+        guard isTransitionCurrent() else { return }
         barista.removeFromParent()
 
         // 스켈레톤 애니메이션과 NPC 이동 transform이 충돌하지 않도록 이동·회전은
@@ -499,7 +510,7 @@ final class NPCClerkController {
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
             conversationAnchor = nil
-            QuestModel.shared.advance(on: .npcHelpDone)
+            GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
             phase = .completed
             workTarget = nil
             workPauseRemaining = randomWorkPause()
@@ -576,7 +587,7 @@ final class NPCClerkController {
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible
-        interactionBubble?.isEnabled = visible
+        interactionBubble?.isEnabled = visible && !isGuideInteractionLocked
     }
 
 }

@@ -13,6 +13,23 @@ import RealityKit
 import SwiftUI
 import simd
 
+extension AppModel: OutdoorSessionResettable {
+    var posX: Float {
+        get { motion.positionX }
+        set { motion.positionX = newValue }
+    }
+
+    var posZ: Float {
+        get { motion.positionZ }
+        set { motion.positionZ = newValue }
+    }
+
+    var heading: Float {
+        get { motion.heading }
+        set { motion.heading = newValue }
+    }
+}
+
 @MainActor
 enum InteractionSetup {
 
@@ -28,10 +45,10 @@ enum InteractionSetup {
         //    InteractionModel은 싱글턴이라 '체험 종료' 후에도 상태가 남는다. 첫 입장에서
         //    scene이 .indoor가 된 채 재진입하면 switchToIndoor의 `scene == .outdoor` 가드가
         //    막혀 "예"를 눌러도 전환이 안 되던 버그를 방지한다.
+        im.beginImmersiveSession()
         im.scene = .outdoor
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
-        im.isTransitioning = false
         im.transitionError = nil
         im.kioskTooHighShown = false
         appModel.npcClerk.resetForOutdoor()
@@ -71,6 +88,11 @@ enum InteractionSetup {
         } else {
             print("⚠️ DOOR1 프림을 찾지 못해 폴백 좌표 사용: \(center)")
         }
+        OutdoorSessionStart.reset(
+            appModel,
+            startPosition: .zero,
+            doorCenter: center,
+            fallbackDoorCenter: InteractionTuning.doorFallbackCenter)
         im.triggers = [ProximityTrigger(
             id: "door.enter",
             center: center,
@@ -92,7 +114,15 @@ enum InteractionSetup {
     private static func tick(deltaTime: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
+        if GuideFlowModel.shared.isInteractionLocked {
+            im.activeTrigger = nil
+            im.panelEntity?.isEnabled = false
+            im.kioskPanelEntity?.isEnabled = false
+            app.npcClerk.setGuideInteractionLocked(true)
+            return
+        }
         guard !im.isTransitioning else { return }
+        app.npcClerk.setGuideInteractionLocked(false)
 
         let verdict = InteractionModel.evaluate(
             playerX: app.motion.positionX, playerZ: app.motion.positionZ,
