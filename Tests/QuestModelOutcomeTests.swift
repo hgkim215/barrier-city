@@ -29,6 +29,5 @@ struct QuestModelOutcomeTests {
 
         model.reset()
         expect(model.currentIndex, 0, "reset")
-        print("QuestModelOutcomeTests: PASS")
     }
 }

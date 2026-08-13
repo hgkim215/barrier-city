@@ -32,7 +32,6 @@ final class QuestHUDFollower {
         running = false
         model.worldTrackingStatus = "연결 중"
         guard WorldTrackingProvider.isSupported else {
-            print("WorldTracking 미지원 — 퀘스트 HUD 고정 배치 폴백")
             model.worldTrackingStatus = "미지원 · 고정 배치"
             model.worldTrackingFallbacks += 1
             wasUsingFallback = true
@@ -48,7 +47,6 @@ final class QuestHUDFollower {
             model.worldTrackingStatus = "연결됨"
         } catch {
             guard generation == runGeneration, !Task.isCancelled, !stopped else { return }
-            print("WorldTracking 시작 실패: \(error) — 퀘스트 HUD 고정 배치 폴백")
             model.worldTrackingStatus = "시작 실패 · 고정 배치"
             model.worldTrackingFallbacks += 1
             wasUsingFallback = true

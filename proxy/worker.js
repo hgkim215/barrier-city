@@ -250,9 +250,7 @@ export default {
       await enforceRateLimit(request, env, route.rateLimiter);
 
       if (pathname === "/realtime-token") {
-        const response = await createRealtimeClientSecret(env, requestId);
-        console.info(JSON.stringify({ event: "proxy_request", requestId, path: pathname, status: response.status }));
-        return response;
+        return createRealtimeClientSecret(env, requestId);
       }
 
       const payload = route.sanitize(await parseJSONBody(request));
@@ -264,16 +262,12 @@ export default {
         },
         body: JSON.stringify(payload),
       });
-
-      console.info(JSON.stringify({ event: "proxy_request", requestId, path: pathname, status: upstream.status }));
       return proxyUpstreamResponse(upstream, requestId);
     } catch (error) {
       if (error instanceof RequestError) {
-        console.warn(JSON.stringify({ event: "proxy_rejected", requestId, path: pathname, code: error.code, status: error.status }));
         const extraHeaders = error.status === 429 ? { "Retry-After": "60" } : {};
         return jsonResponse(error.code, error.message, error.status, requestId, extraHeaders);
       }
-      console.error(JSON.stringify({ event: "proxy_failure", requestId, path: pathname }));
       return jsonResponse("upstream_failure", "Upstream request failed", 502, requestId);
     }
   },

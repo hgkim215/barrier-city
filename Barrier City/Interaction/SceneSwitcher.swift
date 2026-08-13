@@ -53,7 +53,6 @@ enum SceneSwitcher {
             return
         } catch {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
-            print("⚠️ Indoor 씬 준비 실패 — 기존 Outdoor 유지: \(error)")
             return
         }
 
@@ -70,7 +69,6 @@ enum SceneSwitcher {
 
         guard prepared.visible.findEntity(named: "Barista") != nil else {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
-            print("⚠️ Indoor Barista 없음 — 기존 Outdoor 유지")
             return
         }
 
@@ -152,9 +150,6 @@ enum SceneSwitcher {
         if let kiosk = indoorVisible.findEntity(named: "Kiosk") {
             let bounds = kiosk.visualBounds(relativeTo: worldRoot)
             kioskCenter = SIMD2(bounds.center.x, bounds.center.z)
-            print("키오스크 트리거 등록: (\(bounds.center.x), \(bounds.center.z))")
-        } else {
-            print("⚠️ Kiosk 프림을 찾지 못해 폴백 좌표 사용: \(kioskCenter)")
         }
 
         var spawn = SIMD2<Float>(InteractionTuning.indoorSpawnX,
@@ -170,9 +165,6 @@ enum SceneSwitcher {
                 // 휠체어의 로컬 정면은 -Z.
                 heading = atan2(-towardCafe.x, -towardCafe.y)
             }
-            print("실내 스폰: (\(spawn.x), \(spawn.y)), heading=\(heading)")
-        } else {
-            print("⚠️ Indoor DOOR1을 찾지 못해 스폰 폴백 사용: \(spawn)")
         }
         return IndoorLayout(kioskCenter: kioskCenter, spawn: spawn, heading: heading)
     }

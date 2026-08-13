@@ -35,6 +35,5 @@ struct HandTrackingLifecycleContractTests {
         _ = requireRange("func stopSession()", in: tracker)
         _ = requireRange("func clearModelInput(model: AppModel)", in: tracker)
 
-        print("HandTrackingLifecycleContractTests: PASS")
     }
 }

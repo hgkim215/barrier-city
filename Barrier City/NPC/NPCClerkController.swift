@@ -71,9 +71,7 @@ enum NPCClerkTuning {
 @MainActor
 final class NPCClerkController {
     private(set) var phase: NPCClerkPhase = .unavailable
-    private(set) var availableAnimationNames: [String] = []
     private(set) var lastPlayedAnimation: String = ""
-    private(set) var placementSummary: String = ""
     private(set) var isInteractionBubbleVisible = false
     private(set) var isTalkAvailable = false
 
@@ -133,9 +131,7 @@ final class NPCClerkController {
         isTalkAvailable = false
         isGuideInteractionLocked = false
         phase = .unavailable
-        availableAnimationNames = []
         lastPlayedAnimation = ""
-        placementSummary = ""
         conversationAnchor = nil
         workTarget = nil
         handledAnimationSequence = 0
@@ -173,13 +169,6 @@ final class NPCClerkController {
         workAreaMax = placement.workAreaMax
         workTarget = nil
         workPauseRemaining = randomWorkPause()
-        placementSummary = String(
-            format: "대기(%.2f, %.2f), 배회영역[(%.2f, %.2f)~(%.2f, %.2f)], 계산대(%.2f, %.2f), 고객(%.2f, %.2f)",
-            staffHome.x, staffHome.y,
-            workAreaMin.x, workAreaMin.y,
-            workAreaMax.x, workAreaMax.y,
-            servicePoint.x, servicePoint.y,
-            customerPoint.x, customerPoint.y)
 
         // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
         indoorMap.findEntity(named: "Human")?.isEnabled = false
@@ -188,7 +177,6 @@ final class NPCClerkController {
         // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
         guard let barista = indoorMap.findEntity(named: "Barista") else {
             phase = .unavailable
-            print("⚠️ Barista를 찾지 못함 — Indoor.usda의 Barista 엔티티 확인")
             return
         }
         guard isTransitionCurrent() else { return }
@@ -214,9 +202,6 @@ final class NPCClerkController {
 
         locomotionRoot = locomotion
         baristaEntity = barista
-        availableAnimationNames = collectAnimationNames(in: barista).sorted()
-        print("NPC 배치: \(placementSummary)")
-        print("NPC 애니메이션: \(availableAnimationNames)")
         phase = .working
         setInteractionBubbleVisible(true)
         playAnimation(.idle)
@@ -549,10 +534,7 @@ final class NPCClerkController {
         guard restart || lastPlayedAnimation != cue.rawValue else { return }
         guard cue != .greet || !hasPlayedGreetingAnimation || allowsGreetingReplay else { return }
         guard let barista = baristaEntity,
-              let match = findAnimation(named: cue.rawValue, in: barista) else {
-            print("⚠️ NPC 애니메이션 '\(cue.rawValue)'을 찾지 못함 — 현재 키: \(availableAnimationNames)")
-            return
-        }
+              let match = findAnimation(named: cue.rawValue, in: barista) else { return }
         animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
@@ -570,17 +552,6 @@ final class NPCClerkController {
             if let match = findAnimation(named: name, in: child) { return match }
         }
         return nil
-    }
-
-    private func collectAnimationNames(in entity: Entity) -> [String] {
-        var names: [String] = []
-        if let library = entity.components[AnimationLibraryComponent.self] {
-            names.append(contentsOf: library.animations.map(\.key))
-        }
-        for child in entity.children {
-            names.append(contentsOf: collectAnimationNames(in: child))
-        }
-        return Array(Set(names))
     }
 
     // MARK: - Spatial interaction bubble

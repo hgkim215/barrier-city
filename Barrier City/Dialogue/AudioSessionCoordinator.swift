@@ -82,11 +82,7 @@ final class AudioSessionCoordinator {
     func release(_ activity: Activity) {
         guard count(for: activity) > 0 else { return }
         decrement(activity)
-        do {
-            try reconcileProfile()
-        } catch {
-            print("오디오 세션 복구 실패: \(error.localizedDescription)")
-        }
+        try? reconcileProfile()
     }
 
     private func count(for activity: Activity) -> Int {

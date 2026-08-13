@@ -45,9 +45,7 @@ final class ImpactAudio {
         do {
             try AudioSessionCoordinator.shared.acquire(.effects)
             hasAudioSessionClaim = true
-        } catch {
-            print("ImpactAudio 시작 실패: \(error)")
-        }
+        } catch {}
     }
 
     /// 단차 덜컹 소리.
@@ -99,9 +97,7 @@ final class ImpactAudio {
             try engine.start()
             bumpPlayer.play()
             thunkPlayer.play()
-        } catch {
-            print("ImpactAudio 재시작 실패: \(error)")
-        }
+        } catch {}
     }
 
     /// 짧은 충격음 한 발을 합성한다.

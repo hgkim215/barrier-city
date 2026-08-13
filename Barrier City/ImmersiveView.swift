@@ -59,8 +59,6 @@ struct ImmersiveView: View {
                 Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
                 worldRoot.addChild(cafeVisible)
                 InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
-            } else {
-                print("⚠️ Immersive.usda(시각) 로드 실패 — 이름/번들 확인")
             }
             content.add(worldRoot)
             model.worldRoot = worldRoot
@@ -74,8 +72,6 @@ struct ImmersiveView: View {
                 Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
                 content.add(cafeCollision)
                 InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
-            } else {
-                print("⚠️ Immersive.usda(콜리전) 로드 실패")
             }
 
             // [디버그] 무조건 착지하는 단순 바닥 콜리전(컨트롤러 동작 확인용).
@@ -167,8 +163,6 @@ struct ImmersiveView: View {
                     runtime.rightBaseMats = comp.materials
                     runtime.rightHiMats = Self.emissiveTinted(comp.materials)
                 }
-            } else {
-                print("⚠️ WhellChair.usdz 로드 실패 — 이름/번들 확인")
             }
 
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
@@ -271,17 +265,6 @@ struct ImmersiveView: View {
         guard let e, !mats.isEmpty, var comp = e.components[ModelComponent.self] else { return }
         comp.materials = mats
         e.components.set(comp)
-    }
-
-    /// [임시] 엔티티 트리를 이름/타입/위치/크기와 함께 콘솔에 출력.
-    private static func dumpHierarchy(_ e: Entity, _ indent: String = "") {
-        let b = e.visualBounds(relativeTo: e.parent)
-        let p = e.position
-        let hasModel = e.components.has(ModelComponent.self) ? " [Model]" : ""
-        let name = e.name.isEmpty ? "<no name>" : e.name
-        print(String(format: "%@• '%@'%@ pos=(%.3f,%.3f,%.3f) size=(%.3f,%.3f,%.3f)",
-                     indent, name, hasModel, p.x, p.y, p.z, b.extents.x, b.extents.y, b.extents.z))
-        for c in e.children { dumpHierarchy(c, indent + "    ") }
     }
 
     // MARK: - USDA 정적 콜리전(베이크용)

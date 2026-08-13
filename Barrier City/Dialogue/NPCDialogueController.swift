@@ -514,10 +514,6 @@ final class NPCDialogueController {
                 self?.handleRealtimeEvent(event)
             }
         } catch {
-            print(
-                "[Realtime][Controller] start failed; switching to legacy mode: "
-                    + error.localizedDescription
-            )
             await session.stop()
             realtimeSession = nil
             isEncounterActive = false
@@ -537,9 +533,6 @@ final class NPCDialogueController {
             if realtimeInputTurnIsActive { return }
             guard realtimeCanAcceptInput else {
                 realtimeSuppressesCurrentInputTurn = true
-#if DEBUG
-                print("[Realtime][Controller] ignored speech detected outside listening window")
-#endif
                 return
             }
             realtimeResponseTimeoutTask?.cancel()

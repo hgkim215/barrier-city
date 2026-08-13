@@ -59,23 +59,15 @@ enum InteractionSetup {
                 panel.isEnabled = false
                 worldRoot.addChild(panel)
                 im.panelEntity = panel
-            } else {
-                print("⚠️ entryPrompt attachment 없음 — 문 패널 비활성")
             }
             if let kiosk = attachments.entity(for: "kioskScreen") {
                 kiosk.isEnabled = false
                 worldRoot.addChild(kiosk)
                 im.kioskPanelEntity = kiosk
-            } else {
-                print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
             }
             if let npcInteraction = attachments.entity(for: "npcInteraction") {
                 appModel.npcClerk.installInteractionBubble(npcInteraction, in: worldRoot)
-            } else {
-                print("⚠️ npcInteraction attachment 없음 — 점원 인터랙션 비활성")
             }
-        } else {
-            print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
         }
 
         // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
@@ -84,9 +76,6 @@ enum InteractionSetup {
            let door = im.visibleMap?.findEntity(named: "DOOR1") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
-            print("문 트리거: DOOR1 위치 사용 (\(p.x), \(p.z))")
-        } else {
-            print("⚠️ DOOR1 프림을 찾지 못해 폴백 좌표 사용: \(center)")
         }
         OutdoorSessionStart.reset(
             appModel,

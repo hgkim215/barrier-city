@@ -25,7 +25,6 @@ enum QuestSetup {
         GuideFlowModel.shared.reset()
 
         guard let panel = attachments.entity(for: "questHUD") else {
-            print("⚠️ questHUD attachment 없음 — 안내 UI 없이 체험 계속")
             GuideFlowModel.shared.failOpen()
             return
         }

@@ -69,6 +69,5 @@ struct GuideFlowStateTests {
         expect(failOpen.phase, .missionActive(index: 0), "attachment failure unlocks mission")
         expect(failOpen.isInteractionLocked, false, "fail-open is unlocked")
 
-        print("GuideFlowStateTests: PASS")
     }
 }
