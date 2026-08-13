@@ -199,6 +199,17 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(quantity["maximum"] as? Int, 1)
     }
 
+    func test_realtimeInstructionsUpdate_onlyChangesInstructions() throws {
+        let data = try RealtimeClientEvent.sessionUpdate(instructions: "호감도 0.20")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let session = try XCTUnwrap(object["session"] as? [String: Any])
+
+        XCTAssertEqual(object["type"] as? String, "session.update")
+        XCTAssertEqual(session["type"] as? String, "realtime")
+        XCTAssertEqual(session["instructions"] as? String, "호감도 0.20")
+        XCTAssertEqual(session.count, 2)
+    }
+
     func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {
         let endpoint = try XCTUnwrap(URL(string: "https://api.openai.test/v1/realtime/calls"))
 

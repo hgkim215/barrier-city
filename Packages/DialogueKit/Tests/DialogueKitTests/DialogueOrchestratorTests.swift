@@ -136,6 +136,17 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertGreaterThan(rapport, 0)
     }
 
+    func test_observePlayerTurn_updatesClimateWithoutGeneratingResponse() async {
+        let sut = makeSUT(MockLLM([.done]))
+
+        let politeClimate = await sut.observePlayerTurn("부탁드려요")
+        let hostileClimate = await sut.observePlayerTurn("닥쳐")
+
+        XCTAssertEqual(politeClimate.rapport, 0.15, accuracy: 0.0001)
+        XCTAssertEqual(hostileClimate.rapport, -0.15, accuracy: 0.0001)
+        XCTAssertEqual(hostileClimate.tone, .neutral)
+    }
+
     func test_trailingFragmentWithoutTerminator_isFlushed() async {
         let llm = MockLLM([.token("네"), .token(" 알겠습니다")], throwAfter: nil)  // 종결부호 없음, throw 없음
         let sut = makeSUT(llm)

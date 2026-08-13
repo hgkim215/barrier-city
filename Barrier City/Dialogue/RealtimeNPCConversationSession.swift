@@ -87,6 +87,12 @@ final class RealtimeNPCConversationSession {
         try await requestResponse()
     }
 
+    /// 다음 응답부터 적용할 관계 점수와 말투를 진행 중인 Realtime 세션에 반영한다.
+    func updateInstructions(_ instructions: String) async throws {
+        guard isStarted else { throw RealtimeClientError.notConnected }
+        try await client.send(RealtimeClientEvent.sessionUpdate(instructions: instructions))
+    }
+
     /// 서버 VAD는 발화 경계와 transcript만 만들고, 유효한 사용자 transcript를 받은 뒤
     /// 앱이 명시적으로 응답을 생성한다.
     func requestResponse(instructions: String? = nil) async throws {

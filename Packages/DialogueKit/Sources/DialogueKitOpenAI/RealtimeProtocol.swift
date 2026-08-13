@@ -147,6 +147,18 @@ public enum RealtimeServerEvent: Sendable, Equatable {
 }
 
 public enum RealtimeClientEvent {
+    /// 진행 중인 세션의 기본 지시만 갱신한다. `session.update`는 포함된 필드만
+    /// 변경하므로 기존 도구와 오디오/VAD 설정은 그대로 유지된다.
+    public static func sessionUpdate(instructions: String) throws -> Data {
+        try encode([
+            "type": "session.update",
+            "session": [
+                "type": "realtime",
+                "instructions": instructions,
+            ],
+        ])
+    }
+
     public static func sessionUpdate(
         instructions: String,
         tools: [RealtimeFunctionTool],

@@ -502,12 +502,8 @@ final class NPCDialogueController {
         realtimeSession = session
         do {
             try await session.start(
-                instructions: RealtimeConversationGuide().instructions(
-                    persona: Self.makePersona(
-                        accessibilityAttitude: accessibilityAttitude,
-                        clerkPersonality: clerkPersonality
-                    ),
-                    climate: SocialClimate(rapport: rapport)
+                instructions: realtimeInstructions(
+                    for: SocialClimate(rapport: rapport)
                 ),
                 tools: Self.realtimeTools
             ) { [weak self] event in
@@ -575,8 +571,21 @@ final class NPCDialogueController {
             status = .thinking
             guard let realtimeSession else { return }
             realtimeCommandTask?.cancel()
-            realtimeCommandTask = Task { @MainActor [weak self] in
+            realtimeCommandTask = Task { @MainActor [weak self, realtimeSession] in
                 do {
+                    guard let self else { return }
+                    let climate = await self.orchestrator.observePlayerTurn(transcript)
+                    try Task.checkCancellation()
+                    guard self.isEncounterActive,
+                          self.realtimeSession === realtimeSession else { return }
+                    self.rapport = climate.rapport
+                    self.tone = climate.tone
+                    try await realtimeSession.updateInstructions(
+                        self.realtimeInstructions(for: climate)
+                    )
+                    try Task.checkCancellation()
+                    guard self.isEncounterActive,
+                          self.realtimeSession === realtimeSession else { return }
                     try await realtimeSession.requestResponse()
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -632,6 +641,16 @@ final class NPCDialogueController {
             status = .idle
             publishMissionEvent(.exited)
         }
+    }
+
+    private func realtimeInstructions(for climate: SocialClimate) -> String {
+        RealtimeConversationGuide().instructions(
+            persona: Self.makePersona(
+                accessibilityAttitude: accessibilityAttitude,
+                clerkPersonality: clerkPersonality
+            ),
+            climate: climate
+        )
     }
 
     /// `response.done`은 생성 완료일 뿐 실제 WebRTC 재생 완료가 아니다. 오디오가 재생

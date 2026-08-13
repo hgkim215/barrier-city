@@ -48,6 +48,14 @@ public actor DialogueOrchestrator {
         climate.applyInactivityPenalty(amount)
     }
 
+    /// 네트워크 응답 생성과 분리해 사용자 발화의 태도만 관계 상태에 반영한다.
+    /// Realtime처럼 응답 생성을 다른 계층이 담당하는 경로에서도 같은 규칙을 재사용한다.
+    @discardableResult
+    public func observePlayerTurn(_ utterance: String) -> SocialClimate {
+        climate.apply(Self.assessAttitude(utterance))
+        return climate
+    }
+
     public func handle(utterance: String, history: [Message],
                        onSentence: @Sendable (String) -> Void = { _ in }) async -> TurnResult {
         // 1) 입력 가드
@@ -59,8 +67,7 @@ public actor DialogueOrchestrator {
             return fallback(.turnLimitReached)
         }
         // 2) 태도 추정(경량 휴리스틱) → climate 갱신(④)
-        let turn = Self.assessAttitude(utterance)
-        climate.apply(turn)
+        observePlayerTurn(utterance)
         turnCount += 1
         let intent = router.infer(from: utterance)
         let continuesExplainedAccessRequest = hasExplainedAccessBarrier
