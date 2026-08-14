@@ -7,12 +7,18 @@
 //
 
 import Foundation
+import OSLog
 import DialogueKit
 import DialogueKitOpenAI
 
 @MainActor
 @Observable
 final class NPCDialogueController {
+    private static let lifecycleLogger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "ConversationLifecycle"
+    )
+
     enum Status: String { case idle = "대기", listening = "듣는 중", thinking = "생각 중", speaking = "말하는 중" }
 
     /// 버튼 없이 이어지는 공간 대화의 음성 구간 판정값.
@@ -97,6 +103,8 @@ final class NPCDialogueController {
     private var realtimeCanAcceptInput = false
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
+    /// 로컬 주문 판정 직후 퀘스트 이벤트는 발행했지만 최종 음성 응답은 아직 끝나지 않은 상태.
+    private var realtimeTerminalEvent: MissionEvent?
 
     init(
         accessibilityAttitude: AccessibilityAttitude = .ableist,
@@ -136,6 +144,7 @@ final class NPCDialogueController {
                 .greeting: CannedLine(text: "어서 오세요.", audioKey: "greeting"),
                 .timeout: CannedLine(text: "죄송해요, 다시 한 번 말씀해 주시겠어요?", audioKey: "timeout"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked"),
+                .orderConfirm: CannedLine(text: "레인보우 스무디 한 잔, 주문 완료됐어요.", audioKey: "order-confirm"),
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
             ]),
             turnLimit: AutomaticConversationTuning.maximumTurns)
@@ -166,6 +175,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         automaticTurnCount = 0
         animationSequence = 0
@@ -219,7 +229,7 @@ final class NPCDialogueController {
             hasRequestedGreetingAnimation = true
             requestAnimation(.greet)
         }
-        await voice.speak(RealtimeConversationGuide.mandatoryOpeningLine) { [weak self] line in
+        await voice.speak(RealtimeConversationGuide.legacyOpeningFallback) { [weak self] line in
             self?.npcSubtitle = line
         }
         guard isEncounterActive, !Task.isCancelled else {
@@ -237,6 +247,11 @@ final class NPCDialogueController {
     /// 거리 이탈·씬 종료처럼 공간 상태가 대화를 끝낼 때 호출한다.
     /// 마이크를 즉시 닫고 진행 중인 자동 턴을 취소하되, 호감도와 미션 결과는 보존한다.
     func cancelEncounter() {
+#if DEBUG
+        Self.lifecycleLogger.debug(
+            "[CONVERSATION_LIFECYCLE] cancel active=\(self.isEncounterActive, privacy: .public) realtime=\(self.realtimeSession != nil, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public) status=\(self.status.rawValue, privacy: .public)"
+        )
+#endif
         isEncounterActive = false
         voice.stop()
         automaticConversationTask?.cancel()
@@ -252,6 +267,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
@@ -336,16 +352,21 @@ final class NPCDialogueController {
         tone = await orchestrator.climate.tone
         // Greet는 세션의 첫 인사 전용이다. 이후 감정 톤이 좋아져도 다시 호출하지 않는다.
         if !result.usedFallback { requestAnimation(.idle) }
-        if let event = result.event {
-            lastEvent = String(describing: event)
-            lastMissionEvent = event
-            missionEventSequence += 1
-        }
-
         let full = result.spokenSentences.joined(separator: " ")
         history.append(Message(role: .user, content: utterance))
         if !full.isEmpty { history.append(Message(role: .assistant, content: full)) }
 
+        if let event = result.event {
+            // 게임 상태 이벤트는 TTS 재생 완료와 독립적으로 즉시 전달한다. 음성 플레이어의
+            // 종료 콜백이 지연되더라도 이미 확정된 주문과 퀘스트 진행이 유실되면 안 된다.
+            publishMissionEvent(event)
+            if event == .orderPlaced || event == .exited {
+                // 새 입력은 즉시 막되, 이미 큐에 들어간 최종 응답 음성은 끝까지 재생한다.
+                // 주문 완료 이벤트 자체는 별도의 exited 이벤트로 덮어쓰지 않는다.
+                isEncounterActive = false
+                automaticConversationTask = nil
+            }
+        }
         await speechTask.value
         status = .idle
     }
@@ -363,11 +384,6 @@ final class NPCDialogueController {
                 guard isEncounterActive, !Task.isCancelled else { return }
 
                 automaticTurnCount += 1
-                if lastMissionEvent == .orderPlaced || lastMissionEvent == .exited {
-                    isEncounterActive = false
-                    automaticConversationTask = nil
-                    return
-                }
                 if automaticTurnCount >= AutomaticConversationTuning.maximumTurns {
                     await finishAutomaticEncounter(
                         farewell: AutomaticConversationTuning.turnLimitFarewell)
@@ -469,6 +485,11 @@ final class NPCDialogueController {
         lastEvent = String(describing: event)
         lastMissionEvent = event
         missionEventSequence += 1
+#if DEBUG
+        Self.lifecycleLogger.notice(
+            "[ORDER_EVENT] event=\(String(describing: event), privacy: .public) sequence=\(self.missionEventSequence, privacy: .public) active=\(self.isEncounterActive, privacy: .public)"
+        )
+#endif
     }
 
     // MARK: - Realtime speech-to-speech conversation
@@ -488,6 +509,7 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
+        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
@@ -571,7 +593,19 @@ final class NPCDialogueController {
                 if realtimeCanAcceptInput { armRealtimeResponseTimeout() }
                 return
             }
-            realtimeMission.observe(userTranscript: transcript)
+            let orderDecision = realtimeMission.observe(userTranscript: transcript)
+#if DEBUG
+            Self.lifecycleLogger.debug(
+                "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: orderDecision), privacy: .public) terminal=\(orderDecision.endsConversationAfterResponse, privacy: .public)"
+            )
+#endif
+            if orderDecision.endsConversationAfterResponse {
+                // 퀘스트 진행은 모델 응답이나 오디오 lifecycle에 의존시키지 않는다.
+                // pending 이벤트를 여기서 소비해 response.done에서 중복 발행되지 않게 한다.
+                _ = realtimeMission.takeCompletedEvent()
+                realtimeTerminalEvent = .orderPlaced
+                publishMissionEvent(.orderPlaced)
+            }
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
@@ -587,7 +621,11 @@ final class NPCDialogueController {
                     self.rapport = climate.rapport
                     self.tone = climate.tone
                     try await realtimeSession.requestResponse(
-                        instructions: self.realtimeInstructions(for: climate)
+                        instructions: self.realtimeInstructions(
+                            for: climate,
+                            orderDecision: orderDecision
+                        ),
+                        toolChoice: orderDecision.disablesTools ? .none : .auto
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -615,6 +653,11 @@ final class NPCDialogueController {
 
         case .outputAudioStopped:
             realtimeOutputIsPlaying = false
+#if DEBUG
+            Self.lifecycleLogger.debug(
+                "[CONVERSATION_LIFECYCLE] output_audio_stopped responseDonePending=\(self.realtimeResponseDonePending, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public)"
+            )
+#endif
             if realtimeResponseDonePending {
                 realtimeResponseDonePending = false
                 finishRealtimeResponse()
@@ -635,6 +678,11 @@ final class NPCDialogueController {
 
         case .responseDone:
             cancelRealtimeGenerationTimeout()
+#if DEBUG
+            Self.lifecycleLogger.debug(
+                "[CONVERSATION_LIFECYCLE] response_done audioPlaying=\(self.realtimeOutputIsPlaying, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public)"
+            )
+#endif
             if realtimeOutputIsPlaying {
                 realtimeResponseDonePending = true
                 return
@@ -642,21 +690,39 @@ final class NPCDialogueController {
             finishRealtimeResponse()
 
         case .failure(let message):
+            let completionWasPublished = realtimeTerminalEvent == .orderPlaced
+            let completedOrder = completionWasPublished
+                || realtimeMission.takeCompletedEvent() == .orderPlaced
             cancelEncounter()
-            npcSubtitle = "음성 연결 오류: \(message)"
             status = .idle
-            publishMissionEvent(.exited)
+            if completedOrder {
+                // 주문 슬롯은 이미 앱에서 확정됐다. 최종 생성 연결이 끊겨도 퀘스트와
+                // 대화 종료 상태가 서로 어긋나지 않도록 완료를 우선한다.
+                npcSubtitle = "레인보우 스무디 한 잔, 주문 완료됐어요."
+                if !completionWasPublished { publishMissionEvent(.orderPlaced) }
+            } else {
+                npcSubtitle = "음성 연결 오류: \(message)"
+                publishMissionEvent(.exited)
+            }
         }
     }
 
-    private func realtimeInstructions(for climate: SocialClimate) -> String {
-        RealtimeConversationGuide().instructions(
+    private func realtimeInstructions(
+        for climate: SocialClimate,
+        orderDecision: RainbowSmoothieOrderDecision = .continueConversation
+    ) -> String {
+        """
+        \(RealtimeConversationGuide().instructions(
             persona: Self.makePersona(
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
             climate: climate
-        )
+        ))
+
+        # App-owned order state for this response
+        \(orderDecision.promptGuide)
+        """
     }
 
     private func realtimeFollowUpInstructions(_ immediateInstructions: String) -> String {
@@ -696,6 +762,17 @@ final class NPCDialogueController {
                     self?.handleRealtimeEvent(.failure(error.localizedDescription))
                 }
             }
+            return
+        }
+        if realtimeTerminalEvent != nil {
+#if DEBUG
+            Self.lifecycleLogger.notice(
+                "[CONVERSATION_LIFECYCLE] terminal_response_finished closing encounter"
+            )
+#endif
+            realtimeTerminalEvent = nil
+            cancelEncounter()
+            status = .idle
             return
         }
         if let event = realtimeMission.takeCompletedEvent() {
@@ -810,23 +887,6 @@ final class NPCDialogueController {
     }
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
-        .init(name: "complete_order",
-              description: "Record the mission order only after the employee has agreed to verbal ordering and both sides have confirmed exactly one Rainbow Smoothie.",
-              parameters: [
-                .init(
-                    name: "item",
-                    type: .string,
-                    description: "Canonical confirmed menu item. Must be rainbow_smoothie.",
-                    allowedStringValues: [RainbowSmoothieMissionOrder.canonicalItem]
-                ),
-                .init(
-                    name: "quantity",
-                    type: .integer,
-                    description: "Confirmed quantity. Must be exactly 1.",
-                    minimumIntegerValue: RainbowSmoothieMissionOrder.quantity,
-                    maximumIntegerValue: RainbowSmoothieMissionOrder.quantity
-                ),
-              ]),
         .init(name: "request_help",
               description: "Call only when the visitor explicitly asks for another employee or assistance."),
         .init(name: "end_conversation",

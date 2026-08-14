@@ -21,12 +21,20 @@ public struct RealtimeMissionCoordinator: Sendable {
         orderProgress.reset()
     }
 
-    public mutating func observe(userTranscript: String) {
-        orderProgress.observe(userTranscript: userTranscript)
+    @discardableResult
+    public mutating func observe(
+        userTranscript: String
+    ) -> RainbowSmoothieOrderDecision {
+        let decision = orderProgress.observe(userTranscript: userTranscript)
+        if decision == .completeOrder {
+            pendingEvent = .orderPlaced
+        }
+        return decision
     }
 
-    /// 즉시 게시할 이벤트를 반환한다. 주문 완료·대화 종료는 tool 결과를 모델에 보낸 뒤
-    /// response.done에서 세션을 닫아야 하므로 pendingEvent로 보관한다.
+    /// 즉시 게시할 이벤트를 반환한다. 대화 종료는 tool 결과를 모델에 보낸 뒤
+    /// response.done에서 세션을 닫아야 하므로 pendingEvent로 보관한다. 주문 완료는
+    /// `observe`가 로컬 슬롯을 채우는 순간 별도로 보관한다.
     public mutating func register(
         name: String,
         callID: String,
@@ -36,26 +44,6 @@ public struct RealtimeMissionCoordinator: Sendable {
         let followUpInstructions: String
         let immediateEvent: MissionEvent?
         switch name {
-        case "complete_order":
-            let isValidOrder = orderProgress.canComplete
-                && RainbowSmoothieMissionOrder.validates(toolArgumentsJSON: arguments)
-            pendingEvent = isValidOrder ? .orderPlaced : nil
-            immediateEvent = nil
-            output = isValidOrder
-                ? #"{"success":true,"message":"order recorded"}"#
-                : #"{"success":false,"message":"order requirements are incomplete; ask the visitor for the missing confirmation and wait"}"#
-            followUpInstructions = isValidOrder
-                ? """
-                  Tools are disabled for this response. In one short natural Korean sentence, confirm that
-                  exactly one Rainbow Smoothie has been ordered. Do not say it is still processing, do not
-                  ask another question, and then stop.
-                  """
-                : """
-                  Tools are disabled for this response. The order was NOT recorded. In one or two short
-                  natural Korean sentences, say that the order is not complete and ask for one missing
-                  confirmation required by the conversation flow. Never claim that it is processing or
-                  retry any tool. Then stop and wait for the visitor.
-                  """
         case "request_help":
             immediateEvent = .helpRequested
             output = #"{"success":true,"message":"help requested"}"#

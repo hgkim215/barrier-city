@@ -72,6 +72,12 @@ struct NPCDialoguePanelView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             userTranscript
+
+#if DEBUG
+            Text("주문 흐름 v\(DevelopmentOptions.orderFlowVersion) · 빌드 \(DevelopmentOptions.appBuildNumber)")
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+#endif
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 16)

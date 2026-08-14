@@ -108,7 +108,8 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(guide.contains("Assume the standard kiosk process"))
         XCTAssertTrue(guide.contains("personality-specific acceptance timing"))
-        XCTAssertTrue(guide.contains("Call complete_order exactly once"))
+        XCTAssertTrue(guide.contains("There is no order"))
+        XCTAssertTrue(guide.contains("completion tool"))
         XCTAssertTrue(guide.contains("never call it for silence"))
         XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
     }
@@ -128,9 +129,10 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(messages.first!.content.contains("Rainbow Smoothie"))
         XCTAssertTrue(messages.first!.content.contains("레인보우 스무디"))
+        XCTAssertTrue(messages.first!.content.contains("레인보우 마카롱 스무디"))
         XCTAssertTrue(messages.first!.content.contains("Do not mark a different menu item"))
         XCTAssertTrue(realtime.contains("Rainbow Smoothie"))
-        XCTAssertTrue(realtime.contains("or for a different menu item"))
+        XCTAssertTrue(realtime.contains("레인보우 마카롱 스무디"))
     }
 
     func test_clerkPersonality_isExplicitInLegacyAndRealtimePrompts() {
@@ -165,21 +167,50 @@ final class PromptBuilderTests: XCTestCase {
             climate: SocialClimate()
         )
 
-        XCTAssertEqual(
-            RealtimeConversationGuide.mandatoryOpeningLine,
-            "안녕하세요~ 주문은 키오스크로 부탁드릴게요."
-        )
-        XCTAssertTrue(
-            RealtimeConversationGuide.mandatoryOpeningInstructions.contains(
-                "Speak ONLY this exact Korean sentence and nothing else"
-            )
-        )
+        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("# Conversation stage"))
+        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("# Response goal"))
+        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("direct them to use the kiosk"))
+        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("Do not use a fixed stock script"))
+        XCTAssertFalse(RealtimeConversationGuide.openingInstructions.contains("Speak ONLY this exact"))
         XCTAssertTrue(guide.contains("# Required conversation flow"))
         XCTAssertTrue(guide.contains("private scene context"))
         XCTAssertTrue(guide.contains("explaining an access barrier"))
         XCTAssertTrue(guide.contains("Do not ask for an item"))
-        XCTAssertTrue(guide.contains("item=\"rainbow_smoothie\" and quantity=1"))
-        XCTAssertTrue(guide.contains("success=false"))
+        XCTAssertTrue(guide.contains("barrier explanation only determines"))
+        XCTAssertTrue(guide.contains("ask only how many cups"))
+    }
+
+    func test_collectionDecision_separatesBarrierAcceptance_item_andQuantity() {
+        let askQuantity = PromptBuilder().build(
+            persona: persona,
+            climate: SocialClimate(),
+            history: [],
+            userUtterance: "레인보우 스무디 주세요",
+            turnLimit: 8,
+            orderDecision: .acceptDirectly,
+            orderCollectionDecision: .askQuantity
+        ).first!.content
+        let complete = PromptBuilder().build(
+            persona: persona,
+            climate: SocialClimate(),
+            history: [],
+            userUtterance: "한 잔이요",
+            turnLimit: 8,
+            orderDecision: .acceptDirectly,
+            orderCollectionDecision: .completeOrder
+        ).first!.content
+
+        XCTAssertTrue(askQuantity.contains("QUANTITY=missing"))
+        XCTAssertTrue(askQuantity.contains("Ask naturally how many cups"))
+        XCTAssertTrue(askQuantity.contains("Barrier explanation only opens counter ordering"))
+        XCTAssertTrue(askQuantity.contains("주문 처리 중"))
+        XCTAssertTrue(complete.contains("ORDER_COMPLETE=true"))
+        XCTAssertTrue(complete.contains("TERMINAL_RESPONSE=true"))
+        XCTAssertTrue(complete.contains("vary the wording"))
+        XCTAssertTrue(complete.contains("app will close the conversation"))
+        XCTAssertTrue(complete.contains("The order is already complete, not pending"))
+        XCTAssertFalse(askQuantity.contains("몇 잔이요?"))
+        XCTAssertFalse(complete.contains("주문 완료됐습니다"))
     }
 
     func test_realtimeGuide_definesDistinctPersonalityAcceptanceTiming() {

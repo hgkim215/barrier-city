@@ -50,7 +50,18 @@ public struct IntentRouter: Sendable {
             "높", "못", "불편", "어려", "닿지", "안 닿", "손이 안", "손이 못",
             "휠체어", "몸이", "팔이",
         ].contains(where: value.contains)
-        return mentionsInterface && mentionsPhysicalDifficulty
+        let mentionsReachDifficulty = [
+            "안 닿", "못 닿", "닿지", "손이 안", "손이 못", "손이 닿기",
+        ].contains(where: value.contains)
+        let requestsCounterAccommodation = [
+            "여기서", "대신", "직접", "해주", "해 주", "받아주", "받아 주",
+            "주문 받아", "주문받아",
+        ].contains(where: value.contains)
+
+        // 직전 NPC가 키오스크를 안내한 대화 문맥에서는 사용자가 매번 "키오스크"를
+        // 반복하지 않는다. 도달 불가와 카운터 대행 요청을 함께 말하면 같은 장벽 설명이다.
+        return (mentionsInterface && mentionsPhysicalDifficulty)
+            || (mentionsReachDifficulty && requestsCounterAccommodation)
     }
 
     /// 이미 키오스크 장벽을 설명한 뒤에는 같은 명사를 반복하지 않은 짧은 항변도
@@ -66,7 +77,9 @@ public struct IntentRouter: Sendable {
     public func route(_ intent: DialogueIntent) -> MissionEvent? {
         switch intent.kind {
         case .orderRequest: return nil
-        case .orderComplete: return .orderPlaced
+        // 상품명 인식만으로는 완료하지 않는다. 주문 상태 머신이 수량까지 확인한 뒤
+        // `orderPlaced`를 직접 발행한다.
+        case .orderComplete: return nil
         case .helpRequest:   return .helpRequested
         case .leave:         return .exited
         case .smalltalk, .unknown: return nil

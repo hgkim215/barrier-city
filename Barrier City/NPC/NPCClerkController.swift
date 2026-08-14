@@ -96,6 +96,8 @@ final class NPCClerkController {
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
     private var hasPlayedGreetingAnimation = false
+    /// 퀘스트 완료 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
+    private var pendingOrderConversationEnd = false
 
     init(dialogue: NPCDialogueController) {
         self.dialogue = dialogue
@@ -137,6 +139,7 @@ final class NPCClerkController {
         handledAnimationSequence = 0
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
+        pendingOrderConversationEnd = false
         dialogue.reset()
     }
 
@@ -154,6 +157,7 @@ final class NPCClerkController {
         handledAnimationSequence = 0
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
+        pendingOrderConversationEnd = false
         conversationAnchor = nil
         isInteractionBubbleVisible = false
         isTalkAvailable = false
@@ -222,6 +226,7 @@ final class NPCClerkController {
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
         handleDialogueSignals()
+        finishCompletedOrderPresentationIfReady()
 
         // 대화 시작부터 종료 이벤트 처리 전까지는 phase 변화와 무관하게 위치를 잠근다.
         // 비동기 음성 세션이 greeting/conversing 사이를 오가는 동안 업무 동선이 끼어들어
@@ -494,13 +499,11 @@ final class NPCClerkController {
         handledMissionSequence = dialogue.missionEventSequence
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
-            conversationAnchor = nil
             GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
-            phase = .completed
-            workTarget = nil
-            workPauseRemaining = randomWorkPause()
-            playAnimation(.idle)
+            pendingOrderConversationEnd = true
+            finishCompletedOrderPresentationIfReady()
         case .exited:
+            pendingOrderConversationEnd = false
             conversationAnchor = nil
             greetingTask?.cancel()
             greetingTask = nil
@@ -512,6 +515,18 @@ final class NPCClerkController {
         case .helpRequested, .none:
             break
         }
+    }
+
+    /// 주문 완료 이벤트는 즉시 퀘스트에 전달하되, 점원이 마지막 확인 문장을 말하는 동안에는
+    /// 자리를 지킨다. 대화 세션이 실제로 닫힌 다음 업무 상태로 전환한다.
+    private func finishCompletedOrderPresentationIfReady() {
+        guard pendingOrderConversationEnd, !dialogue.isEncounterActive else { return }
+        pendingOrderConversationEnd = false
+        conversationAnchor = nil
+        phase = .completed
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
+        playAnimation(.idle)
     }
 
     /// 대화 중 사용자가 멀어지면 즉시 마이크를 닫고 말 걸기 상태로 돌아간다.

@@ -18,6 +18,14 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(router.infer(from: "키오스크가 너무 높아서 손이 안 닿아요").kind, .orderRequest)
     }
 
+    func test_contextualReachBarrier_withoutRepeatingKiosk_isRecognized() {
+        let utterance = "손이 안 닿아서 그러는데 여기서 해주시면 안 돼요?"
+
+        XCTAssertTrue(router.describesKioskAccessBarrier(in: utterance))
+        XCTAssertEqual(router.infer(from: utterance).kind, .orderRequest)
+        XCTAssertFalse(router.describesKioskAccessBarrier(in: "선반에 손이 안 닿아요"))
+    }
+
     func test_rainbowSmoothie_withBarrier_isConcreteOrderAndPreservesBarrierSignal() {
         let utterance = "키오스크 화면에 손이 안 닿아서 레인보우 스무디 주세요"
 
@@ -27,6 +35,7 @@ final class IntentRouterTests: XCTestCase {
 
     func test_onlyRainbowSmoothie_isMissionOrder() {
         XCTAssertEqual(router.infer(from: "레인보우스무디 하나 주세요").kind, .orderComplete)
+        XCTAssertEqual(router.infer(from: "레인보우 마카롱 스무디 한 잔 주세요").kind, .orderComplete)
         XCTAssertEqual(router.infer(from: "아메리카노 주세요").kind, .orderRequest)
         XCTAssertEqual(router.infer(from: "딸기 스무디 주세요").kind, .orderRequest)
         XCTAssertEqual(router.infer(from: "레인보우 스무디 두 잔 주세요").kind, .orderRequest)
@@ -34,35 +43,30 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(router.infer(from: "레인보우 스무디 말고 라떼 주세요").kind, .orderRequest)
     }
 
-    func test_realtimeMissionOrderArguments_requireCanonicalItemAndSingleQuantity() {
-        XCTAssertTrue(
-            RainbowSmoothieMissionOrder.validates(
-                toolArgumentsJSON: #"{"item":"rainbow_smoothie","quantity":1}"#
-            )
-        )
-        XCTAssertFalse(
-            RainbowSmoothieMissionOrder.validates(
-                toolArgumentsJSON: #"{"item":"americano","quantity":1}"#
-            )
-        )
-        XCTAssertFalse(
-            RainbowSmoothieMissionOrder.validates(
-                toolArgumentsJSON: #"{"item":"rainbow_smoothie","quantity":2}"#
-            )
-        )
-        XCTAssertFalse(
-            RainbowSmoothieMissionOrder.validates(toolArgumentsJSON: "not-json")
-        )
-    }
-
     func test_realtimeMissionProgress_requiresTranscriptEvidenceAndPersonalityAttempts() {
         var cautious = RainbowSmoothieMissionProgress(personality: .cautious)
 
-        cautious.observe(userTranscript: "레인보우 스무디 주세요")
+        XCTAssertEqual(
+            cautious.observe(userTranscript: "레인보우 스무디 주세요"),
+            .continueConversation
+        )
         XCTAssertFalse(cautious.canComplete)
-        cautious.observe(userTranscript: "키오스크가 높아서 손이 안 닿아요")
+        XCTAssertEqual(
+            cautious.observe(userTranscript: "키오스크가 높아서 손이 안 닿아요"),
+            .continueConversation
+        )
         XCTAssertFalse(cautious.canComplete)
-        cautious.observe(userTranscript: "진짜 안 닿아요. 직접 받아주세요")
+        XCTAssertEqual(
+            cautious.observe(userTranscript: "진짜 안 닿아요. 직접 받아주세요"),
+            .askItem
+        )
+        XCTAssertTrue(cautious.acceptsCounterOrder)
+        XCTAssertEqual(
+            cautious.observe(userTranscript: "레인보우 스무디 주세요"),
+            .askQuantity
+        )
+        XCTAssertFalse(cautious.canComplete)
+        XCTAssertEqual(cautious.observe(userTranscript: "한 잔이요"), .completeOrder)
         XCTAssertTrue(cautious.canComplete)
 
         cautious.reset()
@@ -71,47 +75,90 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertFalse(cautious.canComplete)
 
         var hurried = RainbowSmoothieMissionProgress(personality: .hurried)
-        hurried.observe(userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요")
-        XCTAssertTrue(hurried.canComplete)
-        hurried.observe(userTranscript: "아니요, 아메리카노로 바꿀게요")
-        XCTAssertFalse(hurried.canComplete)
-    }
-
-    func test_realtimeMissionCoordinator_rejectedOrderReturnsOneNonTerminalFollowUp() throws {
-        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
-        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
-        coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요")
-
-        let immediateEvent = coordinator.register(
-            name: "complete_order",
-            callID: "call-rejected",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        XCTAssertEqual(
+            hurried.observe(userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 마카롱 스무디 한 잔 주세요"),
+            .completeOrder
         )
-        let functionCall = try XCTUnwrap(coordinator.takeFunctionCall())
+        XCTAssertTrue(hurried.canComplete)
 
-        XCTAssertNil(immediateEvent)
-        XCTAssertTrue(functionCall.output.contains(#""success":false"#))
-        XCTAssertTrue(functionCall.followUpInstructions.contains("retry any tool"))
-        XCTAssertNil(coordinator.takeFunctionCall())
-        XCTAssertNil(coordinator.takeCompletedEvent())
+        var correctedQuantity = RainbowSmoothieMissionProgress(personality: .hurried)
+        XCTAssertEqual(
+            correctedQuantity.observe(userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 두 잔 주세요"),
+            .askQuantity
+        )
+        XCTAssertFalse(correctedQuantity.canComplete)
+        XCTAssertEqual(correctedQuantity.observe(userTranscript: "한 잔이요"), .completeOrder)
     }
 
-    func test_realtimeMissionCoordinator_validOrderCompletesAfterFollowUp() throws {
+    func test_realtimeMissionCoordinator_itemThenQuantity_completesWithoutToolCall() {
         var coordinator = RealtimeMissionCoordinator(personality: .blunt)
         coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
         coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
-        coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요")
-
-        _ = coordinator.register(
-            name: "complete_order",
-            callID: "call-success",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 스무디 주세요"),
+            .askQuantity
         )
-        let functionCall = try XCTUnwrap(coordinator.takeFunctionCall())
-
-        XCTAssertTrue(functionCall.output.contains(#""success":true"#))
+        XCTAssertNil(coordinator.takeCompletedEvent())
+        XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .completeOrder)
         XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
         XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_realtimeMissionCoordinator_fullMacaronOrder_completesImmediately() {
+        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
+        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
+        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요"),
+            .completeOrder
+        )
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_realtimeMissionCoordinator_loggedNaturalFlow_completesOrder() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+
+        XCTAssertEqual(
+            coordinator.observe(
+                userTranscript: "손이 안 닿아서 그러는데 여기서 해주시면 안 돼요?"
+            ),
+            .askItem
+        )
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔이요."),
+            .completeOrder
+        )
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_onlyCompletedOrderEndsConversationAfterResponse() {
+        XCTAssertFalse(RainbowSmoothieOrderDecision.continueConversation.endsConversationAfterResponse)
+        XCTAssertFalse(RainbowSmoothieOrderDecision.askItem.endsConversationAfterResponse)
+        XCTAssertFalse(RainbowSmoothieOrderDecision.askQuantity.endsConversationAfterResponse)
+        XCTAssertTrue(RainbowSmoothieOrderDecision.completeOrder.endsConversationAfterResponse)
+    }
+
+    func test_oneCupSpeechTranscriptionVariants_completeTheKnownItem() {
+        let variants = [
+            "한 잔이요", "한 장이요", "한 컵이요", "하나요", "일 잔이요",
+            "1잔이요", "1장이요", "1개요", "1컵이요",
+        ]
+
+        for transcript in variants {
+            var progress = RainbowSmoothieMissionProgress(personality: .hurried)
+            XCTAssertEqual(
+                progress.observe(userTranscript: "키오스크가 높아 손이 안 닿아서 레인보우 스무디 주세요"),
+                .askQuantity,
+                transcript
+            )
+            XCTAssertEqual(
+                progress.observe(userTranscript: transcript),
+                .completeOrder,
+                transcript
+            )
+        }
     }
 
     func test_shortBarrierInsistence_isRecognizedForStatefulFollowUp() {
@@ -125,8 +172,8 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(router.infer(from: "메뉴가 뭐예요?").kind, .orderRequest)
     }
 
-    func test_orderComplete_mapsTo_orderPlaced() {
-        XCTAssertEqual(router.route(DialogueIntent(kind: .orderComplete)), .orderPlaced)
+    func test_orderComplete_waitsForOrderStateMachine() {
+        XCTAssertNil(router.route(DialogueIntent(kind: .orderComplete)))
     }
 
     func test_helpRequest_mapsTo_helpRequested() {

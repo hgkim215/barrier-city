@@ -27,6 +27,7 @@ final class DialogueOrchestratorTests: XCTestCase {
             cache: DialogueCache(lines: [
                 .timeout: CannedLine(text: "잠시만요…", audioKey: "timeout_ko"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked_ko"),
+                .orderConfirm: CannedLine(text: "한 잔 주문됐어요.", audioKey: "order-confirm_ko"),
             ]),
             turnLimit: turnLimit)
     }
@@ -52,11 +53,24 @@ final class DialogueOrchestratorTests: XCTestCase {
         ])
         let sut = makeSUT(llm)
         let r = await sut.handle(
-            utterance: "키오스크 화면에 손이 안 닿아서 레인보우 스무디 주세요",
+            utterance: "키오스크 화면에 손이 안 닿아서 레인보우 마카롱 스무디 한 잔 주세요",
             history: []
         )
         XCTAssertEqual(r.event, .orderPlaced)
         XCTAssertFalse(r.usedFallback)
+    }
+
+    func test_completedOrder_preservesEventWhenGenerationFails() async {
+        let sut = makeSUT(MockLLM([.token("생성되지 않음")], throwAfter: 0))
+
+        let result = await sut.handle(
+            utterance: "키오스크 화면에 손이 안 닿아서 레인보우 마카롱 스무디 한 잔 주세요",
+            history: []
+        )
+
+        XCTAssertEqual(result.event, .orderPlaced)
+        XCTAssertEqual(result.spokenSentences, ["한 잔 주문됐어요."])
+        XCTAssertTrue(result.usedFallback)
     }
 
     func test_ableistStaff_refusesTwice_thenReluctantlyAcceptsThirdOrderRequest() async {
@@ -73,11 +87,13 @@ final class DialogueOrchestratorTests: XCTestCase {
         let second = await sut.handle(utterance: "아메리카노 주문 받아주세요", history: [])
         let third = await sut.handle(utterance: "직접 주문 좀 받아주세요", history: [])
         let fourth = await sut.handle(utterance: "그럼 레인보우 스무디 주세요", history: [])
+        let fifth = await sut.handle(utterance: "한 잔이요", history: [])
 
         XCTAssertNil(first.event)
         XCTAssertNil(second.event)
         XCTAssertNil(third.event)
-        XCTAssertEqual(fourth.event, .orderPlaced)
+        XCTAssertNil(fourth.event)
+        XCTAssertEqual(fifth.event, .orderPlaced)
     }
 
     func test_genericAcceptedOrder_asksForItemBeforeCompleting() async {
@@ -89,10 +105,12 @@ final class DialogueOrchestratorTests: XCTestCase {
         )
         let otherItem = await sut.handle(utterance: "아메리카노 주세요", history: [])
         let missionItem = await sut.handle(utterance: "레인보우 스무디 주세요", history: [])
+        let quantity = await sut.handle(utterance: "한 잔이요", history: [])
 
         XCTAssertNil(request.event)
         XCTAssertNil(otherItem.event)
-        XCTAssertEqual(missionItem.event, .orderPlaced)
+        XCTAssertNil(missionItem.event)
+        XCTAssertEqual(quantity.event, .orderPlaced)
     }
 
     func test_warmRapport_doesNotSkipBluntPersonalityResistance() async {
@@ -219,7 +237,7 @@ final class DialogueOrchestratorTests: XCTestCase {
         )
         await sut.beginEncounter()
         let third = await sut.handle(
-            utterance: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주문 받아주세요",
+            utterance: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 한 잔 주문 받아주세요",
             history: []
         )
 
@@ -257,12 +275,10 @@ final class DialogueOrchestratorTests: XCTestCase {
                     utterance: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요",
                     history: []
                 )
-                if attempt < acceptanceAttempt {
-                    XCTAssertNil(result.event, "\(personality) accepted on attempt \(attempt)")
-                } else {
-                    XCTAssertEqual(result.event, .orderPlaced, "\(personality) did not accept on attempt \(attempt)")
-                }
+                XCTAssertNil(result.event, "\(personality) completed before quantity on attempt \(attempt)")
             }
+            let quantity = await sut.handle(utterance: "한 잔이요", history: [])
+            XCTAssertEqual(quantity.event, .orderPlaced, "\(personality) did not complete after quantity")
         }
     }
 
@@ -287,9 +303,11 @@ final class DialogueOrchestratorTests: XCTestCase {
         )
         let insistence = await sut.handle(utterance: "진짜 안 닿아요", history: [])
         let order = await sut.handle(utterance: "레인보우 스무디 주세요", history: [])
+        let quantity = await sut.handle(utterance: "한 잔이요", history: [])
 
         XCTAssertNil(explanation.event)
         XCTAssertNil(insistence.event)
-        XCTAssertEqual(order.event, .orderPlaced)
+        XCTAssertNil(order.event)
+        XCTAssertEqual(quantity.event, .orderPlaced)
     }
 }

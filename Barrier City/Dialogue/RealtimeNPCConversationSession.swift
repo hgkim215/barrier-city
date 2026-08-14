@@ -70,7 +70,12 @@ final class RealtimeNPCConversationSession {
             try await configureSession(instructions: instructions, tools: tools)
             try Task.checkCancellation()
             try await requestResponse(
-                instructions: RealtimeConversationGuide.mandatoryOpeningInstructions,
+                instructions: """
+                \(instructions)
+
+                # App-owned conversation stage for this response
+                \(RealtimeConversationGuide.openingInstructions)
+                """,
                 toolChoice: .none
             )
         } catch {
