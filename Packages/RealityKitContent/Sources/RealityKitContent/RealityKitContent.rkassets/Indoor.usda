@@ -312,7 +312,7 @@ def Xform "Root"
             double size = 0.2
             quatf xformOp:orient = (1, 0, 0, 0)
             float3 xformOp:scale = (3, 3, 3)
-            float3 xformOp:translate = (-18.077549, 0.20225942, 1.9036945)
+            float3 xformOp:translate = (-18.077549, 0.20225942, 1.7013739)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
             def Material "DefaultMaterial"
