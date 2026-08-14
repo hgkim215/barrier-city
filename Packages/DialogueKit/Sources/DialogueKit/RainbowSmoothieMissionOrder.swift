@@ -153,16 +153,18 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             - COUNTER_SERVICE_ACCEPTED=true
             - ITEM=Rainbow Smoothie
             - QUANTITY=1
-            - ORDER_COMPLETE=true
+            - ORDER_PLACED=true
+            - DRINK_READY=false
             - TERMINAL_RESPONSE=true
             ## Required response action
-            - Briefly confirm in natural spoken Korean that the one-cup Rainbow Smoothie order is complete.
-            - Close the exchange naturally in the same response while staying in character.
+            - Briefly confirm in natural spoken Korean that the one-cup Rainbow Smoothie order was accepted.
+            - Say naturally that you will let the visitor know when the drink is ready, then close the exchange.
             ## Boundaries and forbidden claims
             - Use one or two short sentences and vary the wording; do not recite a fixed script.
             - Do not ask a question, offer another action, or reopen the kiosk issue.
-            - Never say 처리 중, 확인 중, 잠시 기다려, 아직 완료되지 않음, or any equivalent delay.
-              The order is already complete, not pending.
+            - Do not claim the drink is ready, hand it over, or tell the visitor to collect it yet.
+            - Do not vaguely say the order is still being checked or may have failed. The order itself is
+              already accepted; only drink preparation remains.
             - Stop after the confirmation because the app will close the conversation when the audio ends.
             """
         }

@@ -144,7 +144,10 @@ final class NPCDialogueController {
                 .greeting: CannedLine(text: "어서 오세요.", audioKey: "greeting"),
                 .timeout: CannedLine(text: "죄송해요, 다시 한 번 말씀해 주시겠어요?", audioKey: "timeout"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked"),
-                .orderConfirm: CannedLine(text: "레인보우 스무디 한 잔, 주문 완료됐어요.", audioKey: "order-confirm"),
+                .orderConfirm: CannedLine(
+                    text: "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요.",
+                    audioKey: "order-confirm"
+                ),
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
             ]),
             turnLimit: AutomaticConversationTuning.maximumTurns)
@@ -356,18 +359,20 @@ final class NPCDialogueController {
         history.append(Message(role: .user, content: utterance))
         if !full.isEmpty { history.append(Message(role: .assistant, content: full)) }
 
-        if let event = result.event {
-            // 게임 상태 이벤트는 TTS 재생 완료와 독립적으로 즉시 전달한다. 음성 플레이어의
-            // 종료 콜백이 지연되더라도 이미 확정된 주문과 퀘스트 진행이 유실되면 안 된다.
+        let terminalEvent = result.event.flatMap { event in
+            event == .orderPlaced || event == .exited ? event : nil
+        }
+        if let event = result.event, terminalEvent == nil {
             publishMissionEvent(event)
-            if event == .orderPlaced || event == .exited {
-                // 새 입력은 즉시 막되, 이미 큐에 들어간 최종 응답 음성은 끝까지 재생한다.
-                // 주문 완료 이벤트 자체는 별도의 exited 이벤트로 덮어쓰지 않는다.
-                isEncounterActive = false
-                automaticConversationTask = nil
-            }
         }
         await speechTask.value
+        if let terminalEvent {
+            // 마지막 확인 음성을 끝낸 뒤 먼저 논리적 대화 세션을 닫고 퀘스트 이벤트를 보낸다.
+            // NPC 주문 접수와 전체 체험 완료는 후속 퀘스트 단계에서 별도로 진행된다.
+            isEncounterActive = false
+            automaticConversationTask = nil
+            publishMissionEvent(terminalEvent)
+        }
         status = .idle
     }
 
@@ -600,11 +605,8 @@ final class NPCDialogueController {
             )
 #endif
             if orderDecision.endsConversationAfterResponse {
-                // 퀘스트 진행은 모델 응답이나 오디오 lifecycle에 의존시키지 않는다.
-                // pending 이벤트를 여기서 소비해 response.done에서 중복 발행되지 않게 한다.
-                _ = realtimeMission.takeCompletedEvent()
+                // 주문 슬롯은 확정됐지만 퀘스트 이벤트는 최종 확인 음성과 세션 종료 뒤에 보낸다.
                 realtimeTerminalEvent = .orderPlaced
-                publishMissionEvent(.orderPlaced)
             }
             realtimeMicrophoneIsReady = false
             status = .thinking
@@ -690,16 +692,15 @@ final class NPCDialogueController {
             finishRealtimeResponse()
 
         case .failure(let message):
-            let completionWasPublished = realtimeTerminalEvent == .orderPlaced
-            let completedOrder = completionWasPublished
+            let completedOrder = realtimeTerminalEvent == .orderPlaced
                 || realtimeMission.takeCompletedEvent() == .orderPlaced
             cancelEncounter()
             status = .idle
             if completedOrder {
                 // 주문 슬롯은 이미 앱에서 확정됐다. 최종 생성 연결이 끊겨도 퀘스트와
                 // 대화 종료 상태가 서로 어긋나지 않도록 완료를 우선한다.
-                npcSubtitle = "레인보우 스무디 한 잔, 주문 완료됐어요."
-                if !completionWasPublished { publishMissionEvent(.orderPlaced) }
+                npcSubtitle = "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요."
+                publishMissionEvent(.orderPlaced)
             } else {
                 npcSubtitle = "음성 연결 오류: \(message)"
                 publishMissionEvent(.exited)
@@ -764,7 +765,7 @@ final class NPCDialogueController {
             }
             return
         }
-        if realtimeTerminalEvent != nil {
+        if let terminalEvent = realtimeTerminalEvent {
 #if DEBUG
             Self.lifecycleLogger.notice(
                 "[CONVERSATION_LIFECYCLE] terminal_response_finished closing encounter"
@@ -773,6 +774,8 @@ final class NPCDialogueController {
             realtimeTerminalEvent = nil
             cancelEncounter()
             status = .idle
+            // 논리적 Realtime 세션을 닫은 상태에서만 NPC/퀘스트 계층으로 전달한다.
+            publishMissionEvent(terminalEvent)
             return
         }
         if let event = realtimeMission.takeCompletedEvent() {

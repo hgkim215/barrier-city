@@ -26,7 +26,7 @@ enum NPCClerkPhase: String {
     case working = "업무 중"
     case greeting = "인사 중"
     case conversing = "대화 중"
-    case completed = "주문 완료"
+    case orderAccepted = "주문 접수 완료"
 }
 
 /// Barista 배치와 동선을 한곳에서 조절하는 튜닝값.
@@ -96,7 +96,7 @@ final class NPCClerkController {
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
     private var hasPlayedGreetingAnimation = false
-    /// 퀘스트 완료 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
+    /// 주문 접수 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
     private var pendingOrderConversationEnd = false
 
     init(dialogue: NPCDialogueController) {
@@ -114,7 +114,9 @@ final class NPCClerkController {
 
     func setGuideInteractionLocked(_ locked: Bool) {
         isGuideInteractionLocked = locked
-        interactionBubble?.isEnabled = isInteractionBubbleVisible && !locked
+        interactionBubble?.isEnabled = isInteractionBubbleVisible
+            && !locked
+            && GuideFlowModel.shared.allowsNPCOrderConversation
         if locked { isTalkAvailable = false }
     }
 
@@ -226,7 +228,7 @@ final class NPCClerkController {
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
         handleDialogueSignals()
-        finishCompletedOrderPresentationIfReady()
+        finishAcceptedOrderPresentationIfReady()
 
         // 대화 시작부터 종료 이벤트 처리 전까지는 phase 변화와 무관하게 위치를 잠근다.
         // 비동기 음성 세션이 greeting/conversing 사이를 오가는 동안 업무 동선이 끼어들어
@@ -242,8 +244,9 @@ final class NPCClerkController {
             return
         }
 
-        isTalkAvailable = (phase == .working || phase == .completed)
+        isTalkAvailable = (phase == .working || phase == .orderAccepted)
             && playerDistance <= NPCClerkTuning.detectionRadius
+            && GuideFlowModel.shared.allowsNPCOrderConversation
 
         switch phase {
         case .unavailable:
@@ -260,7 +263,7 @@ final class NPCClerkController {
                 face(point: player, deltaTime: dt)
             }
 
-        case .completed:
+        case .orderAccepted:
             updateWorkLoop(deltaTime: dt)
         }
 
@@ -465,7 +468,8 @@ final class NPCClerkController {
     }
 
     private func beginGreeting() {
-        guard phase == .working || phase == .completed else { return }
+        guard phase == .working || phase == .orderAccepted,
+              GuideFlowModel.shared.allowsNPCOrderConversation else { return }
         // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
         conversationAnchor = currentClerkPosition
         phase = .greeting
@@ -501,7 +505,7 @@ final class NPCClerkController {
         case .orderPlaced:
             GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
             pendingOrderConversationEnd = true
-            finishCompletedOrderPresentationIfReady()
+            finishAcceptedOrderPresentationIfReady()
         case .exited:
             pendingOrderConversationEnd = false
             conversationAnchor = nil
@@ -517,13 +521,13 @@ final class NPCClerkController {
         }
     }
 
-    /// 주문 완료 이벤트는 즉시 퀘스트에 전달하되, 점원이 마지막 확인 문장을 말하는 동안에는
-    /// 자리를 지킨다. 대화 세션이 실제로 닫힌 다음 업무 상태로 전환한다.
-    private func finishCompletedOrderPresentationIfReady() {
+    /// 주문 접수 이벤트는 대화 세션이 닫힌 뒤 전달된다. NPC도 같은 시점에 업무 상태로
+    /// 전환하며, 전체 퀘스트 완료는 음료 준비·수령·착석 후속 단계가 별도로 결정한다.
+    private func finishAcceptedOrderPresentationIfReady() {
         guard pendingOrderConversationEnd, !dialogue.isEncounterActive else { return }
         pendingOrderConversationEnd = false
         conversationAnchor = nil
-        phase = .completed
+        phase = .orderAccepted
         workTarget = nil
         workPauseRemaining = randomWorkPause()
         playAnimation(.idle)
@@ -573,7 +577,9 @@ final class NPCClerkController {
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible
-        interactionBubble?.isEnabled = visible && !isGuideInteractionLocked
+        interactionBubble?.isEnabled = visible
+            && !isGuideInteractionLocked
+            && GuideFlowModel.shared.allowsNPCOrderConversation
     }
 
 }

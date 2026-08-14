@@ -19,11 +19,17 @@ final class IntentRouterTests: XCTestCase {
     }
 
     func test_contextualReachBarrier_withoutRepeatingKiosk_isRecognized() {
-        let utterance = "손이 안 닿아서 그러는데 여기서 해주시면 안 돼요?"
+        let utterances = [
+            "손이 안 닿아서 그러는데 여기서 해주시면 안 돼요?",
+            "아니 저 손이 안 닿아서 그러는데요. 닫아주시면 안 되나요?",
+            "선반에 손이 안 닿아요",
+        ]
 
-        XCTAssertTrue(router.describesKioskAccessBarrier(in: utterance))
-        XCTAssertEqual(router.infer(from: utterance).kind, .orderRequest)
-        XCTAssertFalse(router.describesKioskAccessBarrier(in: "선반에 손이 안 닿아요"))
+        for utterance in utterances {
+            XCTAssertTrue(router.describesKioskAccessBarrier(in: utterance), utterance)
+            XCTAssertEqual(router.infer(from: utterance).kind, .orderRequest, utterance)
+        }
+        XCTAssertFalse(router.describesKioskAccessBarrier(in: "여기서 주문해 주세요"))
     }
 
     func test_rainbowSmoothie_withBarrier_isConcreteOrderAndPreservesBarrierSignal() {
@@ -121,7 +127,7 @@ final class IntentRouterTests: XCTestCase {
 
         XCTAssertEqual(
             coordinator.observe(
-                userTranscript: "손이 안 닿아서 그러는데 여기서 해주시면 안 돼요?"
+                userTranscript: "아니 저 손이 안 닿아서 그러는데요. 닫아주시면 안 되나요?"
             ),
             .askItem
         )

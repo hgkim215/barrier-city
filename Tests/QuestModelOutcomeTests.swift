@@ -20,12 +20,27 @@ struct QuestModelOutcomeTests {
         expect(model.currentIndex, 1, "current index after first event")
 
         _ = model.advance(on: .kioskFailed)
-        let last = model.steps[2]
+        let staffOrder = model.steps[2]
+        let drinkWait = model.steps[3]
         expect(model.advance(on: .npcHelpDone),
-               .advanced(completed: last, next: nil),
-               "last event returns no next step")
-        expect(model.currentStep, nil, "quest completed")
+               .advanced(completed: staffOrder, next: drinkWait),
+               "NPC event advances to drink wait")
+        expect(model.currentIndex, 3, "NPC completion is not experience completion")
+        expect(model.currentStep, drinkWait, "drink wait remains pending")
         expect(model.advance(on: .npcHelpDone), .ignored, "duplicate completion ignored")
+
+        let collectDrink = model.steps[4]
+        expect(model.advance(on: .drinkReady),
+               .advanced(completed: drinkWait, next: collectDrink),
+               "drink ready advances to collection")
+        let takeSeat = model.steps[5]
+        expect(model.advance(on: .drinkCollected),
+               .advanced(completed: collectDrink, next: takeSeat),
+               "collection advances to seating")
+        expect(model.advance(on: .seatedAtTable),
+               .advanced(completed: takeSeat, next: nil),
+               "seating completes the experience")
+        expect(model.currentStep, nil, "all post-order steps completed")
 
         model.reset()
         expect(model.currentIndex, 0, "reset")

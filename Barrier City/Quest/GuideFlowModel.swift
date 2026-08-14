@@ -20,6 +20,7 @@ final class GuideFlowModel {
     var isInteractionLocked: Bool { state.isInteractionLocked }
     var placement: GuidePlacement { state.placement }
     var visibleMissionCount: Int { state.visibleMissionCount }
+    var allowsNPCOrderConversation: Bool { state.allowsNPCOrderConversation }
 
     func reset() {
         QuestModel.shared.reset()
@@ -37,7 +38,14 @@ final class GuideFlowModel {
     func handleQuestEvent(_ event: QuestEvent) {
         let previousPhase = state.phase
         let previousIndex = QuestModel.shared.currentIndex
-        guard case .missionActive = state.phase else {
+        let acceptsQuestEvent: Bool
+        switch state.phase {
+        case .missionActive, .postOrderPending:
+            acceptsQuestEvent = true
+        default:
+            acceptsQuestEvent = false
+        }
+        guard acceptsQuestEvent else {
 #if DEBUG
             Self.logger.debug(
                 "[QUEST_FLOW] ignored event=\(String(describing: event), privacy: .public) phase=\(String(describing: previousPhase), privacy: .public) questIndex=\(previousIndex, privacy: .public)"
