@@ -25,6 +25,5 @@ struct SceneTransitionSessionTests {
         session.finishTransition(current)
         expect(session.isTransitioning, false, "current transition can finish")
 
-        print("SceneTransitionSessionTests: PASS")
     }
 }

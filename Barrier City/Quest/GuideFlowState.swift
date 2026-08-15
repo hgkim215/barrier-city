@@ -5,6 +5,8 @@ enum GuidePhase: Equatable {
     case tutorial(index: Int)
     case missionAnnouncement(index: Int)
     case missionActive(index: Int)
+    /// 음료 준비·수령·착석 UI가 구현되기 전까지 화면 없이 유지하는 후속 진행 상태.
+    case postOrderPending(index: Int)
     case completionAnnouncement
     case completed
 }
@@ -34,14 +36,14 @@ struct GuideFlowState: Equatable {
 
     var isInteractionLocked: Bool {
         switch phase {
-        case .missionActive, .completed: false
+        case .missionActive, .postOrderPending, .completed: false
         case .introduction, .tutorial, .missionAnnouncement, .completionAnnouncement: true
         }
     }
 
     var placement: GuidePlacement {
         switch phase {
-        case .missionActive, .completed: .upperLeadingHUD
+        case .missionActive, .postOrderPending, .completed: .upperLeadingHUD
         default: .centerModal
         }
     }
@@ -49,9 +51,14 @@ struct GuideFlowState: Equatable {
     var visibleMissionCount: Int {
         switch phase {
         case .missionAnnouncement(let index), .missionActive(let index): index + 1
-        case .completionAnnouncement, .completed: 3
+        case .postOrderPending, .completionAnnouncement, .completed: 3
         case .introduction, .tutorial: 0
         }
+    }
+
+    /// NPC 주문 대화는 세 번째 미션이 실제 활성화된 동안에만 시작할 수 있다.
+    var allowsNPCOrderConversation: Bool {
+        phase == .missionActive(index: 2)
     }
 
     mutating func send(_ action: GuideAction) {
@@ -72,7 +79,13 @@ struct GuideFlowState: Equatable {
             phase = .missionAnnouncement(index: 1)
         case (.missionActive(index: 1), .questAdvanced(nextIndex: 2)):
             phase = .missionAnnouncement(index: 2)
-        case (.missionActive(index: 2), .questAdvanced(nextIndex: nil)):
+        case (.missionActive(index: 2), .questAdvanced(nextIndex: 3)):
+            phase = .postOrderPending(index: 3)
+        case (.postOrderPending(index: 3), .questAdvanced(nextIndex: 4)):
+            phase = .postOrderPending(index: 4)
+        case (.postOrderPending(index: 4), .questAdvanced(nextIndex: 5)):
+            phase = .postOrderPending(index: 5)
+        case (.postOrderPending(index: 5), .questAdvanced(nextIndex: nil)):
             phase = .completionAnnouncement
         case (.completionAnnouncement, .confirmCompletion):
             phase = .completed

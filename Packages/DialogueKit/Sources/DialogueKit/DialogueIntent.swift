@@ -1,7 +1,11 @@
 import Foundation
 
 public enum IntentKind: String, Codable, Sendable {
-    case orderComplete, helpRequest, leave, smalltalk, unknown
+    /// 주문 의사·키오스크 장벽만 밝힌 상태. 메뉴를 더 물어야 하므로 미션을 끝내지 않는다.
+    case orderRequest
+    /// 구체적인 음료를 말해 실제 주문을 확정할 수 있는 상태.
+    case orderComplete
+    case helpRequest, leave, smalltalk, unknown
 }
 
 /// ⑥ LLM 구조화 출력으로 받는 의도. 스키마 밖/깨진 값은 .unknown으로 안전 강등.

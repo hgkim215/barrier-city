@@ -16,24 +16,44 @@ public actor DialogueOrchestrator {
     private let promptBuilder = PromptBuilder()
     private let router = IntentRouter()
     private let turnLimit: Int
-    private let forcedOrderAcceptanceAttempt: Int
     private var turnCount = 0
-    private var orderRequestCount = 0
+    private var orderProgress: RainbowSmoothieMissionProgress
 
     public init(persona: NPCPersona, climate: SocialClimate? = nil, llm: LLMClient,
                 guardian: SafetyGuard, cache: DialogueCache, turnLimit: Int,
-                forcedOrderAcceptanceAttempt: Int = 3) {
+                forcedOrderAcceptanceAttempt: Int? = nil) {
         self.persona = persona
         self.climate = climate ?? SocialClimate(rapport: persona.accessibilityAttitude.initialRapport)
         self.llm = llm
         self.guardian = guardian; self.cache = cache; self.turnLimit = turnLimit
-        self.forcedOrderAcceptanceAttempt = max(1, forcedOrderAcceptanceAttempt)
+        let acceptanceAttempt = max(
+            1,
+            persona.accessibilityAttitude == .inclusive
+                ? 1
+                : (forcedOrderAcceptanceAttempt ?? persona.clerkPersonality.verbalOrderAcceptanceAttempt)
+        )
+        orderProgress = RainbowSmoothieMissionProgress(
+            requiredOrderAttempts: acceptanceAttempt
+        )
     }
 
-    /// 거리 이탈 후 다시 만난 새 대화의 턴 제한만 초기화한다.
-    /// 같은 점원의 호감도와 누적 주문 요청 횟수는 유지해 미션 진행이 되돌아가지 않는다.
+    /// 거리 이탈 후 다시 만난 새 대화의 턴 제한만 초기화한다. 같은 점원의 카운터
+    /// 주문 수용 여부와 수집한 주문 슬롯은 유지해 대화가 처음부터 되돌아가지 않는다.
     public func beginEncounter() {
         turnCount = 0
+    }
+
+    /// 응답 없는 만남도 다음 대화의 태도에 반영되도록 관계 상태에 감점을 누적한다.
+    public func applyInactivityPenalty(_ amount: Float = 0.1) {
+        climate.applyInactivityPenalty(amount)
+    }
+
+    /// 네트워크 응답 생성과 분리해 사용자 발화의 태도만 관계 상태에 반영한다.
+    /// Realtime처럼 응답 생성을 다른 계층이 담당하는 경로에서도 같은 규칙을 재사용한다.
+    @discardableResult
+    public func observePlayerTurn(_ utterance: String) -> SocialClimate {
+        climate.apply(Self.assessAttitude(utterance))
+        return climate
     }
 
     public func handle(utterance: String, history: [Message],
@@ -47,16 +67,28 @@ public actor DialogueOrchestrator {
             return fallback(.turnLimitReached)
         }
         // 2) 태도 추정(경량 휴리스틱) → climate 갱신(④)
-        let turn = Self.assessAttitude(utterance)
-        climate.apply(turn)
+        observePlayerTurn(utterance)
         turnCount += 1
         let intent = router.infer(from: utterance)
-        let orderDecision = decideOrderService(for: intent)
+        let acceptedBeforeTurn = orderProgress.acceptsCounterOrder
+        let orderCollectionDecision = orderProgress.observe(
+            userTranscript: utterance
+        )
+        let orderDecision = orderServiceDecision(
+            for: intent,
+            utterance: utterance,
+            acceptedBeforeTurn: acceptedBeforeTurn
+        )
+        let resolvedMissionEvent = missionEvent(
+            for: intent,
+            orderCollectionDecision: orderCollectionDecision
+        )
 
         // 3) 프롬프트 조립(③)
         let messages = promptBuilder.build(persona: persona, climate: climate,
             history: history, userUtterance: utterance, turnLimit: turnLimit,
-            orderDecision: orderDecision)
+            orderDecision: orderDecision,
+            orderCollectionDecision: orderCollectionDecision)
 
         // 4) LLM 스트림 → 완성되는 문장부터 즉시 UI/음성 큐로 전달
         var chunker = SentenceChunker()
@@ -76,45 +108,66 @@ public actor DialogueOrchestrator {
             }
         } catch {
             // 이미 완성된 문장을 보여줬다면 그것을 유지하고, 그렇지 않을 때만 폴백한다.
-            if sentences.isEmpty { return fallback(.timeout) }
+            if sentences.isEmpty {
+                return fallback(
+                    orderCollectionDecision.endsConversationAfterResponse ? .orderConfirm : .timeout,
+                    event: resolvedMissionEvent
+                )
+            }
             return TurnResult(spokenSentences: sentences,
-                              event: missionEvent(for: intent, orderDecision: orderDecision),
+                              event: resolvedMissionEvent,
                               usedFallback: false)
         }
         if let tail = chunker.flush() {
             sentences.append(tail)
             onSentence(tail)
         }
-        if sentences.isEmpty { return fallback(.timeout) }   // 빈 응답도 폴백
+        if sentences.isEmpty {
+            return fallback(
+                orderCollectionDecision.endsConversationAfterResponse ? .orderConfirm : .timeout,
+                event: resolvedMissionEvent
+            )
+        }
 
         // 5) 의도는 제한된 게임 상태이므로 로컬에서 즉시 라우팅(⑥)
-        let event = missionEvent(for: intent, orderDecision: orderDecision)
-        return TurnResult(spokenSentences: sentences, event: event, usedFallback: false)
+        return TurnResult(
+            spokenSentences: sentences,
+            event: resolvedMissionEvent,
+            usedFallback: false
+        )
     }
 
-    private func decideOrderService(for intent: DialogueIntent) -> OrderServiceDecision {
-        guard intent.kind == .orderComplete else { return .notApplicable }
-        orderRequestCount += 1
-        if persona.accessibilityAttitude == .inclusive || climate.tone == .warm || climate.tone == .supportive {
-            return .acceptDirectly
+    private func orderServiceDecision(
+        for intent: DialogueIntent,
+        utterance: String,
+        acceptedBeforeTurn: Bool
+    ) -> OrderServiceDecision {
+        let isOrderIntent = intent.kind == .orderRequest || intent.kind == .orderComplete
+        let isRelevantAttempt = isOrderIntent || router.continuesAccessRequest(in: utterance)
+        guard isRelevantAttempt else {
+            return .notApplicable
         }
-        // 비친화 점원도 설정된 최대 시도에는 주문을 받아 미션이 막히지 않게 한다.
-        if orderRequestCount >= forcedOrderAcceptanceAttempt { return .acceptReluctantly }
-        return .refuseKioskOnly
+        if acceptedBeforeTurn { return .acceptDirectly }
+        guard orderProgress.acceptsCounterOrder else { return .refuseKioskOnly }
+        return persona.accessibilityAttitude == .inclusive
+            ? .acceptDirectly
+            : .acceptReluctantly
     }
 
     private func missionEvent(for intent: DialogueIntent,
-                              orderDecision: OrderServiceDecision) -> MissionEvent? {
-        if intent.kind == .orderComplete {
-            return orderDecision.completesOrder ? .orderPlaced : nil
+                              orderCollectionDecision: RainbowSmoothieOrderDecision) -> MissionEvent? {
+        if orderCollectionDecision == .completeOrder { return .orderPlaced }
+        switch intent.kind {
+        case .helpRequest: return .helpRequested
+        case .leave: return .exited
+        case .orderRequest, .orderComplete, .smalltalk, .unknown: return nil
         }
-        return router.route(intent)
     }
 
-    private func fallback(_ situation: Situation) -> TurnResult {
+    private func fallback(_ situation: Situation, event: MissionEvent? = nil) -> TurnResult {
         let line = cache.line(for: situation)
         return TurnResult(spokenSentences: line.map { [$0.text] } ?? [],
-                          event: nil, usedFallback: true)
+                          event: event, usedFallback: true)
     }
 
     /// 경량 태도 휴리스틱. 장애 장벽을 단호하게 지적하는 것은 공격성으로 보지 않는다.

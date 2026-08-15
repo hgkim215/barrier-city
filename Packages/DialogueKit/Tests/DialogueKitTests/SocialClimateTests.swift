@@ -31,6 +31,15 @@ final class SocialClimateTests: XCTestCase {
         XCTAssertEqual(c.rapport, -1.0, accuracy: 0.0001)
     }
 
+    func test_inactivityPenalty_lowersRapport_andClampsAtMinimum() {
+        var c = SocialClimate(rapport: -0.95)
+        c.applyInactivityPenalty(0.1)
+        XCTAssertEqual(c.rapport, -1.0, accuracy: 0.0001)
+
+        c.applyInactivityPenalty(-0.5)
+        XCTAssertEqual(c.rapport, -1.0, accuracy: 0.0001)
+    }
+
     func test_helpChance_growsWithPositiveRapport() {
         var c = SocialClimate()
         XCTAssertEqual(c.helpChance, 0.5, accuracy: 0.0001) // 중립

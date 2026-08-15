@@ -13,7 +13,11 @@ import Observation
 enum QuestEvent: Equatable {
     case enteredIndoor   // 실내(카페) 진입 성공
     case kioskFailed     // 키오스크 "사용하기" → 장벽 안내
-    case npcHelpDone     // NPC 대화에서 주문 완료 시 발행
+    case npcHelpDone     // NPC 최종 응답과 대화 종료 뒤 주문 접수 완료 시 발행
+    // 아래 세 이벤트는 후속 UI/음료 에셋 상호작용 연결을 위한 빈 상태 계약이다.
+    case drinkReady
+    case drinkCollected
+    case seatedAtTable
 }
 
 /// 퀘스트 한 단계(목표 + 방법 + 완료 조건). 순수 값 타입.
@@ -60,7 +64,8 @@ final class QuestModel {
 
     static let shared = QuestModel()
 
-    /// 고정 3단계 시퀀스(문구는 실기기 흐름 기준, 스펙 확정값).
+    /// 앞의 세 단계는 현재 UI에 노출한다. 뒤의 세 단계는 음료 준비·수령·착석 UI가
+    /// 구현될 때 연결할 상태 계약이며, 그전까지 가이드 화면에는 표시하지 않는다.
     let steps: [QuestStep] = [
         QuestStep(id: "quest.reachCafe",
                   title: "카페 입구로 이동하세요",
@@ -74,9 +79,21 @@ final class QuestModel {
                   title: "직원에게 도움을 요청하세요",
                   detail: "키오스크가 너무 높아 혼자서는 주문할 수 없습니다",
                   completionEvent: .npcHelpDone),
+        QuestStep(id: "quest.waitForDrink",
+                  title: "음료가 준비될 때까지 기다리세요",
+                  detail: "준비 완료 알림 UI 연결 예정",
+                  completionEvent: .drinkReady),
+        QuestStep(id: "quest.collectDrink",
+                  title: "준비된 음료를 수령하세요",
+                  detail: "음료 에셋 상호작용 연결 예정",
+                  completionEvent: .drinkCollected),
+        QuestStep(id: "quest.takeSeat",
+                  title: "지정된 자리로 이동해 앉으세요",
+                  detail: "착석 상호작용 연결 예정",
+                  completionEvent: .seatedAtTable),
     ]
 
-    /// 현재 단계 인덱스. steps.count면 전체 완료(이번 스코프에선 도달 안 함).
+    /// 현재 단계 인덱스. steps.count가 되어야 전체 체험 퀘스트가 완료된다.
     private(set) var currentIndex = 0
     /// 현재 표시할 목표 단계(전체 완료면 nil).
     var currentStep: QuestStep? {

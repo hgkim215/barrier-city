@@ -14,7 +14,8 @@ final class ImpactAudio {
     private let thunkPlayer = AVAudioPlayerNode()
     private var bumpBuffer: AVAudioPCMBuffer?
     private var thunkBuffer: AVAudioPCMBuffer?
-    private var started = false
+    private var isPrepared = false
+    private var hasAudioSessionClaim = false
 
     private let sampleRate: Double = 44_100
     private lazy var format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
@@ -23,30 +24,28 @@ final class ImpactAudio {
 
     /// 오디오 세션/엔진 준비. ImmersiveView 등장 시 한 번 호출(중복 호출 안전).
     func prepare() {
-        guard !started else { return }
+        if !isPrepared {
+            // 합성 버퍼 생성.
+            bumpBuffer  = makeImpact(freq: 70,  duration: 0.22, noiseMix: 0.25, decay: 18)
+            thunkBuffer = makeImpact(freq: 130, duration: 0.14, noiseMix: 0.6,  decay: 30)
 
-        // 다른 소리와 섞이고, 들리도록 재생 카테고리 설정.
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, options: [.mixWithOthers])
-        try? session.setActive(true)
+            engine.attach(bumpPlayer)
+            engine.attach(thunkPlayer)
+            engine.connect(bumpPlayer,  to: engine.mainMixerNode, format: format)
+            engine.connect(thunkPlayer, to: engine.mainMixerNode, format: format)
+            isPrepared = true
+            AudioSessionCoordinator.shared.registerEffectsLifecycle(
+                suspend: { [weak self] in self?.suspendForAudioTransition() },
+                resume: { [weak self] in self?.resumeAfterAudioTransition() }
+            )
+        }
 
-        // 합성 버퍼 생성.
-        bumpBuffer  = makeImpact(freq: 70,  duration: 0.22, noiseMix: 0.25, decay: 18)
-        thunkBuffer = makeImpact(freq: 130, duration: 0.14, noiseMix: 0.6,  decay: 30)
-
-        engine.attach(bumpPlayer)
-        engine.attach(thunkPlayer)
-        engine.connect(bumpPlayer,  to: engine.mainMixerNode, format: format)
-        engine.connect(thunkPlayer, to: engine.mainMixerNode, format: format)
+        guard !hasAudioSessionClaim else { return }
 
         do {
-            try engine.start()
-            bumpPlayer.play()
-            thunkPlayer.play()
-            started = true
-        } catch {
-            print("ImpactAudio 시작 실패: \(error)")
-        }
+            try AudioSessionCoordinator.shared.acquire(.effects)
+            hasAudioSessionClaim = true
+        } catch {}
     }
 
     /// 단차 덜컹 소리.
@@ -59,11 +58,22 @@ final class ImpactAudio {
         play(thunkPlayer, buffer: thunkBuffer, intensity: intensity)
     }
 
+    /// 몰입 공간이 닫히면 엔진과 공유 오디오 세션 사용권을 함께 반환한다.
+    func stop() {
+        suspendForAudioTransition()
+        guard hasAudioSessionClaim else { return }
+        hasAudioSessionClaim = false
+        AudioSessionCoordinator.shared.release(.effects)
+    }
+
     // MARK: - 내부
 
     private func play(_ player: AVAudioPlayerNode, buffer: AVAudioPCMBuffer?, intensity: Float) {
-        if !started { prepare() }
-        guard started, let buffer else { return }
+        if !hasAudioSessionClaim { prepare() }
+        if !engine.isRunning, AudioSessionCoordinator.shared.effectsPlaybackIsActive {
+            resumeAfterAudioTransition()
+        }
+        guard engine.isRunning, let buffer else { return }
         // 너무 작은 충격은 무시(잡소리 방지).
         let vol = max(0, min(1, intensity))
         guard vol > 0.05 else { return }
@@ -71,6 +81,23 @@ final class ImpactAudio {
         // 새 충격이 오면 이전 소리를 끊고 다시 재생.
         player.scheduleBuffer(buffer, at: nil, options: .interrupts, completionHandler: nil)
         if !player.isPlaying { player.play() }
+    }
+
+    private func suspendForAudioTransition() {
+        guard isPrepared else { return }
+        bumpPlayer.stop()
+        thunkPlayer.stop()
+        if engine.isRunning { engine.stop() }
+    }
+
+    private func resumeAfterAudioTransition() {
+        guard isPrepared, !engine.isRunning else { return }
+        do {
+            engine.prepare()
+            try engine.start()
+            bumpPlayer.play()
+            thunkPlayer.play()
+        } catch {}
     }
 
     /// 짧은 충격음 한 발을 합성한다.

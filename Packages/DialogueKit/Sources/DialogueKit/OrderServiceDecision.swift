@@ -7,7 +7,7 @@ public enum OrderServiceDecision: String, Equatable, Sendable {
     case refuseKioskOnly
     case acceptReluctantly
 
-    public var completesOrder: Bool {
+    public var acceptsVerbalOrder: Bool {
         self == .acceptDirectly || self == .acceptReluctantly
     }
 
@@ -16,11 +16,11 @@ public enum OrderServiceDecision: String, Equatable, Sendable {
         case .notApplicable:
             "The customer has not made an order request this turn. Do not pretend an order was completed."
         case .acceptDirectly:
-            "Take the verbal order at the counter now without requiring the kiosk. Ask for or confirm the menu item."
+            "Agree to take the verbal order at the counter without requiring the kiosk. This acceptance only opens counter service and never completes an order; follow the separate collection behavior for item and quantity."
         case .refuseKioskOnly:
             "Refuse to take the verbal order this turn. Insist that this store accepts orders only through the kiosk, even though its screen is too high. Do not ask for or confirm a menu item."
         case .acceptReluctantly:
-            "Give in and take the verbal order now so the customer can proceed. Make it clear you are doing it only this once, then ask for or confirm the menu item. Do not send them back to the kiosk."
+            "Give in and take the verbal order so the customer can proceed. Make it clear you are doing it only this once. This only opens counter service; follow the separate collection behavior for item and quantity. Do not send them back to the kiosk."
         }
     }
 }

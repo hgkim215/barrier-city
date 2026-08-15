@@ -51,6 +51,5 @@ struct InteractionFlowRegressionTests {
         expect(interactions.kioskMenuVisible, false, "session reset clears kiosk visibility")
         expect(interactions.kioskBarrierVisible, false, "session reset clears barrier state")
 
-        print("InteractionFlowRegressionTests: PASS")
     }
 }

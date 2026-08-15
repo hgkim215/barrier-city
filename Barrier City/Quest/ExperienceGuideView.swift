@@ -40,6 +40,9 @@ struct ExperienceGuideView: View {
                     visibleCount: model.visibleMissionCount,
                     allCompleted: false
                 )
+            case .postOrderPending:
+                // 음료 준비 알림·수령·착석 UI가 구현될 때 이 상태에 연결한다.
+                EmptyView()
             case .completionAnnouncement:
                 ExperienceCompletionView(onConfirm: model.confirmCompletion)
             case .completed:

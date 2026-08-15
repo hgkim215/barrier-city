@@ -1,9 +1,14 @@
 import Observation
+import OSLog
 
 @Observable
 @MainActor
 final class GuideFlowModel {
     static let shared = GuideFlowModel()
+    private static let logger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "QuestFlow"
+    )
 
     private(set) var state: GuideFlowState
 
@@ -15,6 +20,7 @@ final class GuideFlowModel {
     var isInteractionLocked: Bool { state.isInteractionLocked }
     var placement: GuidePlacement { state.placement }
     var visibleMissionCount: Int { state.visibleMissionCount }
+    var allowsNPCOrderConversation: Bool { state.allowsNPCOrderConversation }
 
     func reset() {
         QuestModel.shared.reset()
@@ -30,12 +36,38 @@ final class GuideFlowModel {
     func confirmCompletion() { apply(.confirmCompletion) }
 
     func handleQuestEvent(_ event: QuestEvent) {
-        guard case .missionActive = state.phase else { return }
+        let previousPhase = state.phase
+        let previousIndex = QuestModel.shared.currentIndex
+        let acceptsQuestEvent: Bool
+        switch state.phase {
+        case .missionActive, .postOrderPending:
+            acceptsQuestEvent = true
+        default:
+            acceptsQuestEvent = false
+        }
+        guard acceptsQuestEvent else {
+#if DEBUG
+            Self.logger.debug(
+                "[QUEST_FLOW] ignored event=\(String(describing: event), privacy: .public) phase=\(String(describing: previousPhase), privacy: .public) questIndex=\(previousIndex, privacy: .public)"
+            )
+#endif
+            return
+        }
         switch QuestModel.shared.advance(on: event) {
         case .ignored:
+#if DEBUG
+            Self.logger.debug(
+                "[QUEST_FLOW] ignored event=\(String(describing: event), privacy: .public) phase=\(String(describing: previousPhase), privacy: .public) questIndex=\(previousIndex, privacy: .public)"
+            )
+#endif
             return
         case .advanced(_, let next):
             apply(.questAdvanced(nextIndex: next == nil ? nil : QuestModel.shared.currentIndex))
+#if DEBUG
+            Self.logger.notice(
+                "[QUEST_FLOW] advanced event=\(String(describing: event), privacy: .public) phase=\(String(describing: previousPhase), privacy: .public)->\(String(describing: self.state.phase), privacy: .public) questIndex=\(previousIndex, privacy: .public)->\(QuestModel.shared.currentIndex, privacy: .public)"
+            )
+#endif
         }
     }
 

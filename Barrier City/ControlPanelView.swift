@@ -9,6 +9,9 @@ struct ControlPanelView: View {
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
     @State private var immersiveError: String?
+    @State private var isCafeTransitioning = false
+    @AppStorage(DevelopmentOptions.simulatorMicrophoneKey)
+    private var simulatorMicrophoneEnabled = false
 
     var body: some View {
         ScrollView {
@@ -17,7 +20,7 @@ struct ControlPanelView: View {
                 .font(.title2).bold()
 
             // 전복(게임오버): 다시 시작 안내
-            if model.fallen {
+            if model.motion.hasFallen {
                 VStack(spacing: 12) {
                     Label("넘어졌습니다!", systemImage: "exclamationmark.triangle.fill")
                         .font(.title3).bold()
@@ -98,7 +101,6 @@ struct ControlPanelView: View {
                     Task { @MainActor in
                         guard let generation = model.beginImmersiveOpen() else { return }
                         immersiveError = nil
-
                         switch await openSpace(id: "wheelchair") {
                         case .opened:
                             model.completeImmersiveOpen(generation: generation, succeeded: true)
@@ -139,6 +141,39 @@ struct ControlPanelView: View {
             .tint(.purple)
 
 #if DEBUG
+            Button {
+                Task { @MainActor in
+                    guard !isCafeTransitioning else { return }
+                    isCafeTransitioning = true
+                    immersiveError = nil
+                    defer { isCafeTransitioning = false }
+                    await enterCafeForDevelopment()
+                }
+            } label: {
+                Label(isCafeTransitioning ? "카페 준비 중…" : "개발: 카페 바로 시작",
+                      systemImage: "cup.and.saucer.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+
+#if targetEnvironment(simulator)
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $simulatorMicrophoneEnabled) {
+                    Label("개발: Mac 마이크로 NPC 대화", systemImage: "mic.fill")
+                }
+                .toggleStyle(.switch)
+                .disabled(model.npcDialogue.isEncounterActive)
+
+                Text("다음 대화부터 Realtime 음성을 사용합니다. visionOS Simulator의 오디오 입력 상태에 따라 동작하지 않거나 CoreAudio 경고가 발생할 수 있습니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+#endif
+
             if model.isImmersive {
                 VStack(spacing: 8) {
                     Text("NPC: \(model.npcClerk.phase.rawValue)"
@@ -193,10 +228,10 @@ struct ControlPanelView: View {
 
             // 상태 표시
             HStack(spacing: 24) {
-                stat("속도", String(format: "%.2f m/s", model.speed))
-                stat("방향", String(format: "%.0f°", model.headingDegrees))
-                stat("엔진 틱", "\(model.tick)")
-                stat("매칭", "\(model.matched)")
+                stat("속도", String(format: "%.2f m/s", model.motion.speed))
+                stat("방향", String(format: "%.0f°", model.motion.headingDegrees))
+                stat("FPS", String(format: "%.0f", model.motion.frameRate))
+                stat("물리", String(format: "%.2f ms", model.motion.physicsUpdateMilliseconds))
                 stat("누름", "\(model.pushCount)")
                 stat("충격수신", "\(model.impulseApplied)")
             }
@@ -204,12 +239,14 @@ struct ControlPanelView: View {
 
             // 물리 진단(CharacterController)
             HStack(spacing: 24) {
-                stat("콜리전", "\(model.collisionShapes)")
-                stat("바닥Y", String(format: "%.2f", model.groundY))
-                stat("의자Y", String(format: "%.2f", model.chairY))
-                stat("pitch", String(format: "%.2f", model.pitch))
-                stat("막힘", model.blocked ? "Y" : "N")
-                stat("전복", model.fallen ? "Y" : "N")
+                stat("콜리전", "\(model.motion.collisionShapeCount)")
+                stat("레이/프레임", String(format: "%.1f", model.motion.raycastsPerFrame))
+                stat("프레임", String(format: "%.1f ms", model.motion.frameTimeMilliseconds))
+                stat("바닥Y", String(format: "%.2f", model.motion.groundHeight))
+                stat("의자Y", String(format: "%.2f", model.motion.chairHeight))
+                stat("pitch", String(format: "%.2f", model.motion.pitch))
+                stat("막힘", model.motion.isBlocked ? "Y" : "N")
+                stat("전복", model.motion.hasFallen ? "Y" : "N")
             }
             .font(.callout)
 
@@ -224,12 +261,18 @@ struct ControlPanelView: View {
                 stat("오른쪽거리", String(format: "%.2f", model.rightWheelDist))
             }
                 .font(.callout)
+
+            HStack(spacing: 24) {
+                stat("World", model.worldTrackingStatus)
+                stat("추적 폴백", "\(model.worldTrackingFallbacks)")
+            }
+            .font(.callout)
             }
             .padding(28)
             .frame(width: 460)
         }
         .frame(width: 460, height: 720)
-        .disabled(model.immersiveSessionState.isTransitioning)
+        .disabled(model.immersiveSessionState.isTransitioning || isCafeTransitioning)
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {
@@ -246,6 +289,63 @@ struct ControlPanelView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(v).monospacedDigit()
         }
+    }
+
+    /// 개발 패널에서 몰입 공간 생성과 실내 씬 전환을 한 번에 수행한다.
+    /// `openImmersiveSpace` 반환 직후에는 RealityView의 worldRoot가 아직 준비 중일 수 있어
+    /// 제한 시간 동안 기다린 뒤 기존 SceneSwitcher 경로를 그대로 호출한다.
+    @MainActor
+    private func enterCafeForDevelopment() async {
+        guard await openImmersiveSpaceIfNeeded() else { return }
+
+        for _ in 0..<100 where model.worldRoot == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard model.worldRoot != nil else {
+            immersiveError = "몰입 공간은 열렸지만 카페 씬 준비가 지연되고 있습니다. 다시 눌러 주세요."
+            return
+        }
+
+        if InteractionModel.shared.scene == .outdoor {
+            SceneSwitcher.requestIndoorTransition()
+            for _ in 0..<100 where InteractionModel.shared.isTransitioning {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        if InteractionModel.shared.scene != .indoor {
+            immersiveError = InteractionModel.shared.transitionError
+                ?? "카페 실내로 전환하지 못했습니다."
+        }
+    }
+
+    @MainActor
+    private func openImmersiveSpaceIfNeeded() async -> Bool {
+        // worldRoot는 RealityKit 장면의 구현 참조일 뿐 몰입 공간의 수명주기 상태가 아니다.
+        // 종료 콜백보다 늦게 정리되거나 이전 장면 참조가 남아 있어도 재오픈을 막지 않는다.
+        if model.isImmersive { return true }
+
+        guard let generation = model.beginImmersiveOpen() else {
+            return model.isImmersive
+        }
+
+        switch await openSpace(id: "wheelchair") {
+        case .opened:
+            model.completeImmersiveOpen(generation: generation, succeeded: true)
+            return true
+        case .userCancelled:
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "몰입 공간 열기가 취소되었습니다."
+            }
+        case .error:
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+            }
+        @unknown default:
+            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+            }
+        }
+        return false
     }
 
     private var handTrackingBinding: Binding<Bool> {
