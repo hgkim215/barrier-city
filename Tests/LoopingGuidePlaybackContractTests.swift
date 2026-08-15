@@ -27,6 +27,5 @@ struct LoopingGuidePlaybackContractTests {
             fail("stop must release AVPlayerLooper")
         }
 
-        print("LoopingGuidePlaybackContractTests: PASS")
     }
 }

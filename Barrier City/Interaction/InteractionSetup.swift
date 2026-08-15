@@ -13,7 +13,22 @@ import RealityKit
 import SwiftUI
 import simd
 
-extension AppModel: OutdoorSessionResettable {}
+extension AppModel: OutdoorSessionResettable {
+    var posX: Float {
+        get { motion.positionX }
+        set { motion.positionX = newValue }
+    }
+
+    var posZ: Float {
+        get { motion.positionZ }
+        set { motion.positionZ = newValue }
+    }
+
+    var heading: Float {
+        get { motion.heading }
+        set { motion.heading = newValue }
+    }
+}
 
 @MainActor
 enum InteractionSetup {
@@ -25,7 +40,8 @@ enum InteractionSetup {
                         appModel: AppModel) {
         let im = InteractionModel.shared
 
-        // 0) 매 진입마다 Outdoor 초기 상태로 리셋.
+        // 0) 매 진입마다 주행과 Outdoor 인터랙션을 새 세션 상태로 리셋.
+        appModel.restart()
         //    InteractionModel은 싱글턴이라 '체험 종료' 후에도 상태가 남는다. 첫 입장에서
         //    scene이 .indoor가 된 채 재진입하면 switchToIndoor의 `scene == .outdoor` 가드가
         //    막혀 "예"를 눌러도 전환이 안 되던 버그를 방지한다.
@@ -43,23 +59,15 @@ enum InteractionSetup {
                 panel.isEnabled = false
                 worldRoot.addChild(panel)
                 im.panelEntity = panel
-            } else {
-                print("⚠️ entryPrompt attachment 없음 — 문 패널 비활성")
             }
             if let kiosk = attachments.entity(for: "kioskScreen") {
                 kiosk.isEnabled = false
                 worldRoot.addChild(kiosk)
                 im.kioskPanelEntity = kiosk
-            } else {
-                print("⚠️ kioskScreen attachment 없음 — 키오스크 화면 비활성")
             }
-            if let npcDialogue = attachments.entity(for: "npcDialogue") {
-                appModel.npcClerk.installDialoguePanel(npcDialogue, in: worldRoot)
-            } else {
-                print("⚠️ npcDialogue attachment 없음 — 점원 대화 패널 비활성")
+            if let npcInteraction = attachments.entity(for: "npcInteraction") {
+                appModel.npcClerk.installInteractionBubble(npcInteraction, in: worldRoot)
             }
-        } else {
-            print("⚠️ worldRoot 없음 — 인터랙션 패널 비활성")
         }
 
         // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
@@ -68,9 +76,6 @@ enum InteractionSetup {
            let door = im.visibleMap?.findEntity(named: "DOOR1") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
-            print("문 트리거: DOOR1 위치 사용 (\(p.x), \(p.z))")
-        } else {
-            print("⚠️ DOOR1 프림을 찾지 못해 폴백 좌표 사용: \(center)")
         }
         OutdoorSessionStart.reset(
             appModel,
@@ -109,7 +114,7 @@ enum InteractionSetup {
         app.npcClerk.setGuideInteractionLocked(false)
 
         let verdict = InteractionModel.evaluate(
-            playerX: app.posX, playerZ: app.posZ,
+            playerX: app.motion.positionX, playerZ: app.motion.positionZ,
             triggers: im.triggers,
             activeID: im.activeTrigger?.id,
             dismissedID: im.dismissedTriggerID)
@@ -140,10 +145,10 @@ enum InteractionSetup {
                                       trigger: ProximityTrigger?, forwardOffset: Float) {
         guard let panel else { return }
         guard active, let t = trigger else {
-            panel.isEnabled = false
+            if panel.isEnabled { panel.isEnabled = false }
             return
         }
-        panel.isEnabled = true
+        if !panel.isEnabled { panel.isEnabled = true }
         // 1) 트리거 중심 위 눈높이(맵 로컬)에 놓고 월드 위치를 얻는다.
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)

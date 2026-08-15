@@ -57,6 +57,5 @@ struct OutdoorSessionStartTests {
         expectNear(state.posZ, 0, "reset applies outdoor Z")
         expectNear(state.heading, .pi, "reset applies cafe-facing heading")
 
-        print("OutdoorSessionStartTests: PASS")
     }
 }

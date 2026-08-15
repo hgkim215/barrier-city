@@ -1,16 +1,19 @@
 import Foundation
 import Observation
 import RealityKit
-import RealityKitContent
 import simd
 import DialogueKit
 
-/// Reality Composer Pro에 작성된 점원 감정 애니메이션 키.
+/// Indoor.usda의 Barista AnimationLibrary에 연결된 코드 실행용 애니메이션 키.
 /// 같은 cue가 연속으로 와도 다시 재생할 수 있도록 요청에는 별도 sequence를 사용한다.
 enum NPCAnimationCue: String, CaseIterable {
-    case greeting = "Greeting"
-    case happy = "Happy"
-    case upset = "Upset"
+    case idle = "Idle"
+    case greet = "Greet"
+    case walk = "Walk"
+
+    var repeats: Bool {
+        self == .idle || self == .walk
+    }
 }
 
 struct NPCAnimationRequest: Equatable {
@@ -23,33 +26,35 @@ enum NPCClerkPhase: String {
     case working = "업무 중"
     case greeting = "인사 중"
     case conversing = "대화 중"
-    case completed = "주문 완료"
+    case orderAccepted = "주문 접수 완료"
 }
 
-/// 실제 모델·동선이 확정되기 전까지 한곳에서 조절하는 프로토타입 튜닝값.
+/// Barista 배치와 동선을 한곳에서 조절하는 튜닝값.
 enum NPCClerkTuning {
     /// 점원이 돌아다니는 동안에도 사용자를 놓치지 않도록 실제 NPC 위치 기준으로 넉넉히 감지한다.
     static let detectionRadius: Float = 4.0
-    /// 진입 반경보다 1m 넓혀 경계에서 인사/종료가 반복되지 않게 한다.
+    /// 진입 반경보다 1m 넓혀 대화 중 경계에서 종료가 반복되지 않게 한다.
     static let conversationExitRadius: Float = detectionRadius + 1.0
     static let moveSpeed: Float = 0.8
     static let turnResponse: Float = 7
     static let arrivalDistance: Float = 0.04
-    static let workPauseSeconds: Float = 1.8
+    /// 한 지점에 도착한 뒤 다음 행동을 시작하기까지 매번 달라지는 대기 시간.
+    static let workPauseRange: ClosedRange<Float> = 1.2...4.0
+    /// 너무 짧은 이동을 반복하지 않도록 새 목적지와 현재 위치 사이에 두는 최소 거리.
+    static let minimumRoamDistance: Float = 0.75
+    /// AreaK 경계나 가구에 캐릭터가 겹치지 않도록 안쪽으로 줄이는 여백.
+    static let workAreaMargin: Float = 0.45
     /// BarTable의 고객 쪽 경계에서 직원 구역 안/고객 쪽으로 떨어지는 거리.
     static let staffCounterInset: Float = 1.05
     static let customerStandOff: Float = 0.65
 
-    /// 현재 Skull은 실제 사람보다 작으므로 머리 높이에서 잘 보이게 하는 임시 보정.
-    /// 실제 점원 모델 교체 시 1 / 0으로 되돌리면 된다.
-    static let prototypeScale: Float = 1.8
-    static let prototypeBaseY: Float = 0.42
-    /// Skull 자산의 시각적 정면은 RealityKit 기본 정면(-Z)과 반대(+Z)다.
-    /// 실제 점원 모델이 -Z 정면으로 제작되면 0으로 되돌린다.
-    static let prototypeForwardYawOffset: Float = .pi
+    /// Barista 자체 스케일·축 변환은 Indoor.usda에 작성되어 있어 wrapper는 보정하지 않는다.
+    static let baristaScale: Float = 1.0
+    static let baristaBaseY: Float = 0
+    /// Blender에서 제작된 Barista의 시각적 정면(+Z)을 RealityKit 이동 정면(-Z)에 맞춘다.
+    static let baristaForwardYawOffset: Float = .pi
 
     static let dialogueHeight: Float = 1.55
-    static let dialogueForwardOffset: Float = 0.25
 
     static let fallbackStaffHome = SIMD2<Float>(0, 5.2)
     static let fallbackServicePoint = SIMD2<Float>(0, 3.1)
@@ -66,68 +71,77 @@ enum NPCClerkTuning {
 @MainActor
 final class NPCClerkController {
     private(set) var phase: NPCClerkPhase = .unavailable
-    private(set) var availableAnimationNames: [String] = []
     private(set) var lastPlayedAnimation: String = ""
-    private(set) var placementSummary: String = ""
-    private(set) var isDialogueVisible = false
+    private(set) var isInteractionBubbleVisible = false
+    private(set) var isTalkAvailable = false
 
     let dialogue: NPCDialogueController
 
-    @ObservationIgnored private weak var worldRoot: Entity?
     @ObservationIgnored private var locomotionRoot: Entity?
-    @ObservationIgnored private var prototypeScene: Entity?
-    @ObservationIgnored private var dialoguePanel: Entity?
-    @ObservationIgnored private var emotionPlayback: AnimationPlaybackController?
+    @ObservationIgnored private var baristaEntity: Entity?
+    @ObservationIgnored private var interactionBubble: Entity?
+    @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
+    private var isGuideInteractionLocked = false
 
     private var staffHome = NPCClerkTuning.fallbackStaffHome
     private var servicePoint = NPCClerkTuning.fallbackServicePoint
     private var customerPoint = NPCClerkTuning.fallbackCustomerPoint
-    private var workWaypoints: [SIMD2<Float>] = []
-    private var workWaypointIndex = 0
+    private var workAreaMin = NPCClerkTuning.fallbackAreaMin
+    private var workAreaMax = NPCClerkTuning.fallbackAreaMax
+    private var workTarget: SIMD2<Float>?
     private var workPauseRemaining: Float = 0
+    /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
+    private var conversationAnchor: SIMD2<Float>?
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
-    private var requiresReentry = false
+    private var hasPlayedGreetingAnimation = false
+    /// 주문 접수 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
+    private var pendingOrderConversationEnd = false
 
     init(dialogue: NPCDialogueController) {
         self.dialogue = dialogue
     }
 
     /// ImmersiveView가 생성될 때 attachment를 맵 루트에 한 번 연결한다.
-    func installDialoguePanel(_ panel: Entity, in worldRoot: Entity) {
+    func installInteractionBubble(_ panel: Entity, in worldRoot: Entity) {
         panel.removeFromParent()
         panel.isEnabled = false
         panel.scale = SIMD3(repeating: 0.9)
         worldRoot.addChild(panel)
-        dialoguePanel = panel
-        self.worldRoot = worldRoot
+        interactionBubble = panel
     }
 
     func setGuideInteractionLocked(_ locked: Bool) {
-        guard locked else { return }
-        dialoguePanel?.isEnabled = false
-        isDialogueVisible = false
+        isGuideInteractionLocked = locked
+        interactionBubble?.isEnabled = isInteractionBubbleVisible
+            && !locked
+            && GuideFlowModel.shared.allowsNPCOrderConversation
+        if locked { isTalkAvailable = false }
     }
 
     /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
     func resetForOutdoor() {
         greetingTask?.cancel()
         greetingTask = nil
-        emotionPlayback?.stop()
-        emotionPlayback = nil
+        animationPlayback?.stop()
+        animationPlayback = nil
         locomotionRoot?.removeFromParent()
         locomotionRoot = nil
-        prototypeScene = nil
-        dialoguePanel?.isEnabled = false
-        isDialogueVisible = false
+        baristaEntity = nil
+        interactionBubble?.isEnabled = false
+        interactionBubble = nil
+        isInteractionBubbleVisible = false
+        isTalkAvailable = false
+        isGuideInteractionLocked = false
         phase = .unavailable
-        availableAnimationNames = []
         lastPlayedAnimation = ""
-        placementSummary = ""
+        conversationAnchor = nil
+        workTarget = nil
         handledAnimationSequence = 0
         handledMissionSequence = 0
-        requiresReentry = false
+        hasPlayedGreetingAnimation = false
+        pendingOrderConversationEnd = false
         dialogue.reset()
     }
 
@@ -135,19 +149,21 @@ final class NPCClerkController {
     func enterIndoor(worldRoot: Entity,
                      indoorMap: Entity,
                      kioskCenter: SIMD2<Float>,
-                     isTransitionCurrent: @escaping @MainActor () -> Bool) async {
+                     isTransitionCurrent: @escaping @MainActor () -> Bool) {
         guard isTransitionCurrent() else { return }
         greetingTask?.cancel()
-        emotionPlayback?.stop()
+        animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
         dialogue.reset()
 
-        self.worldRoot = worldRoot
         handledAnimationSequence = 0
         handledMissionSequence = 0
-        requiresReentry = false
-        isDialogueVisible = false
-        dialoguePanel?.isEnabled = false
+        hasPlayedGreetingAnimation = false
+        pendingOrderConversationEnd = false
+        conversationAnchor = nil
+        isInteractionBubbleVisible = false
+        isTalkAvailable = false
+        interactionBubble?.isEnabled = false
 
         let placement = makePlacement(in: indoorMap,
                                       relativeTo: worldRoot,
@@ -155,92 +171,89 @@ final class NPCClerkController {
         staffHome = placement.staffHome
         servicePoint = placement.servicePoint
         customerPoint = placement.customerPoint
-        workWaypoints = placement.workWaypoints
-        workWaypointIndex = 0
-        workPauseRemaining = NPCClerkTuning.workPauseSeconds
-        placementSummary = String(
-            format: "대기(%.2f, %.2f) → 계산대(%.2f, %.2f), 고객(%.2f, %.2f)",
-            staffHome.x, staffHome.y,
-            servicePoint.x, servicePoint.y,
-            customerPoint.x, customerPoint.y)
+        workAreaMin = placement.workAreaMin
+        workAreaMax = placement.workAreaMax
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
 
         // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
         indoorMap.findEntity(named: "Human")?.isEnabled = false
 
-        let animated = try? await Entity(named: "Untitled Scene",
-                                         in: realityKitContentBundle)
-        guard isTransitionCurrent() else { return }
-
-        let loadedScene: Entity
-        if let animated {
-            loadedScene = animated
-        } else {
-            let skull = try? await Entity(named: "Skull",
-                                          in: realityKitContentBundle)
-            guard isTransitionCurrent() else { return }
-            guard let skull else {
-                phase = .unavailable
-                print("⚠️ NPC 프로토타입 로드 실패 — Untitled Scene/Skull 확인")
-                return
-            }
-            // RCP 씬 로드 실패 시에도 배치/이동은 검증할 수 있는 정적 폴백.
-            skull.position.y = 0.45
-            loadedScene = skull
-            print("⚠️ NPC 애니메이션 씬 로드 실패 — 정적 Skull 폴백")
+        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle/Walk는
+        // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
+        guard let barista = indoorMap.findEntity(named: "Barista") else {
+            phase = .unavailable
+            return
         }
+        guard isTransitionCurrent() else { return }
+        barista.removeFromParent()
 
-        // Greeting/Upset이 NPCTest의 로컬 transform을 덮어쓰므로 이동·회전·스케일은
-        // 반드시 이 바깥 wrapper에만 적용한다.
+        // 스켈레톤 애니메이션과 NPC 이동 transform이 충돌하지 않도록 이동·회전은
+        // Barista 바깥 wrapper에만 적용한다. Barista의 authored 축/스케일은 유지한다.
         let locomotion = Entity()
         locomotion.name = "NPCClerkLocomotionRoot"
-        locomotion.position = [staffHome.x, NPCClerkTuning.prototypeBaseY, staffHome.y]
-        locomotion.scale = SIMD3(repeating: NPCClerkTuning.prototypeScale)
-        locomotion.addChild(loadedScene)
+        locomotion.position = [staffHome.x, NPCClerkTuning.baristaBaseY, staffHome.y]
+        locomotion.scale = SIMD3(repeating: NPCClerkTuning.baristaScale)
+        locomotion.addChild(barista)
+        if let bubble = interactionBubble {
+            // 월드 좌표를 매 프레임 추종하지 않고 NPC 이동 wrapper에 직접 결합한다.
+            // 위치와 회전이 동일한 transform 계층에서 갱신되므로 추종 지연이 없고,
+            // 사용자의 시선을 향한 별도 forward/yaw 보정도 적용하지 않는다.
+            bubble.removeFromParent()
+            locomotion.addChild(bubble)
+            bubble.position = [0, NPCClerkTuning.dialogueHeight, 0]
+            bubble.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+        }
         worldRoot.addChild(locomotion)
 
         locomotionRoot = locomotion
-        prototypeScene = loadedScene
-        availableAnimationNames = collectAnimationNames(in: loadedScene).sorted()
-        print("NPC 배치: \(placementSummary)")
-        print("NPC 애니메이션: \(availableAnimationNames)")
+        baristaEntity = barista
         phase = .working
+        setInteractionBubbleVisible(true)
+        playAnimation(.idle)
     }
 
     /// SceneEvents.Update에서 호출한다. Entity.move를 매 프레임 재시작하지 않고
     /// deltaTime 기반으로 직접 보간해 일정한 속도로 움직인다.
     func update(deltaTime rawDeltaTime: Float, appModel: AppModel) {
         guard phase != .unavailable, locomotionRoot != nil else {
-            dialoguePanel?.isEnabled = false
+            interactionBubble?.isEnabled = false
+            isTalkAvailable = false
             return
         }
 
         let dt = min(max(rawDeltaTime, 0), 1.0 / 15.0)
-        let player = SIMD2<Float>(appModel.posX, appModel.posZ)
+        let player = SIMD2<Float>(appModel.motion.positionX, appModel.motion.positionZ)
         // 대화 감지는 계산대의 고정 좌표가 아니라 현재 돌아다니는 NPC의 실제 위치를 쓴다.
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
         handleDialogueSignals()
+        finishAcceptedOrderPresentationIfReady()
 
-        // timeout/작별 뒤에는 사용자가 실제로 자리를 벗어나야 같은 점원이 다시 인사한다.
-        if requiresReentry,
-           playerDistance > NPCClerkTuning.conversationExitRadius {
-            requiresReentry = false
+        // 대화 시작부터 종료 이벤트 처리 전까지는 phase 변화와 무관하게 위치를 잠근다.
+        // 비동기 음성 세션이 greeting/conversing 사이를 오가는 동안 업무 동선이 끼어들어
+        // 점원이 사용자를 두고 걸어가는 현상을 방지하고, 회전만 사용자 쪽으로 허용한다.
+        if let anchor = conversationAnchor {
+            if playerDistance > NPCClerkTuning.conversationExitRadius {
+                endEncounterForDeparture()
+                return
+            }
+            holdPosition(at: anchor)
+            isTalkAvailable = false
+            face(point: player, deltaTime: dt)
+            return
         }
+
+        isTalkAvailable = (phase == .working || phase == .orderAccepted)
+            && playerDistance <= NPCClerkTuning.detectionRadius
+            && GuideFlowModel.shared.allowsNPCOrderConversation
 
         switch phase {
         case .unavailable:
             break
 
         case .working:
-            if requiresReentry {
-                // 작별 직후 NPC가 움직여 거리 잠금이 저절로 풀리지 않도록 사용자가 떠날 때까지 대기한다.
-                face(point: player, deltaTime: dt)
-            } else if shouldStartConversation(player: player) {
-                // 계산대로 걸어오는 과정을 생략하고 발견한 자리에서 즉시 멈춰 대화를 시작한다.
-                beginGreeting()
-            } else {
-                updateWorkLoop(deltaTime: dt)
-            }
+            updateWorkLoop(deltaTime: dt)
 
         case .greeting, .conversing:
             if playerDistance > NPCClerkTuning.conversationExitRadius {
@@ -250,16 +263,22 @@ final class NPCClerkController {
                 face(point: player, deltaTime: dt)
             }
 
-        case .completed:
-            face(point: player, deltaTime: dt)
+        case .orderAccepted:
+            updateWorkLoop(deltaTime: dt)
         }
 
-        updateDialoguePanel()
+    }
+
+    /// Barista 위의 공간 버튼에서 호출한다. 자동 근접 인사 대신 사용자의 명시적인
+    /// 선택으로만 대화를 시작해 NPC가 갑자기 말을 거는 느낌을 없앤다.
+    func startConversation() {
+        guard isTalkAvailable else { return }
+        beginGreeting()
     }
 
     /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
     func playForTesting(_ cue: NPCAnimationCue) {
-        playAnimation(cue)
+        playAnimation(cue, restart: true, allowsGreetingReplay: true)
     }
 
     // MARK: - Placement
@@ -268,7 +287,8 @@ final class NPCClerkController {
         let staffHome: SIMD2<Float>
         let servicePoint: SIMD2<Float>
         let customerPoint: SIMD2<Float>
-        let workWaypoints: [SIMD2<Float>]
+        let workAreaMin: SIMD2<Float>
+        let workAreaMax: SIMD2<Float>
     }
 
     private func makePlacement(in indoorMap: Entity,
@@ -321,22 +341,21 @@ final class NPCClerkController {
             customer = edge + towardCustomer * NPCClerkTuning.customerStandOff
         }
 
-        let margin: Float = 0.45
-        home = clamp(home, minimum: areaMin + margin, maximum: areaMax - margin)
-        service = clamp(service, minimum: areaMin + margin, maximum: areaMax - margin)
+        let insetMin = areaMin + NPCClerkTuning.workAreaMargin
+        let insetMax = areaMax - NPCClerkTuning.workAreaMargin
+        // 마커가 여백보다 좁은 축에서도 닫힌 난수 범위를 만들 수 있도록 정규화한다.
+        let roamMin = SIMD2<Float>(Swift.min(insetMin.x, insetMax.x),
+                                   Swift.min(insetMin.y, insetMax.y))
+        let roamMax = SIMD2<Float>(Swift.max(insetMin.x, insetMax.x),
+                                   Swift.max(insetMin.y, insetMax.y))
+        home = clamp(home, minimum: roamMin, maximum: roamMax)
+        service = clamp(service, minimum: roamMin, maximum: roamMax)
 
-        let candidates = [
-            home + SIMD2<Float>(-1.35, 0),
-            home + SIMD2<Float>(0.95, -0.30),
-            home,
-        ]
-        let waypoints = candidates.map {
-            clamp($0, minimum: areaMin + margin, maximum: areaMax - margin)
-        }
         return Placement(staffHome: home,
                          servicePoint: service,
                          customerPoint: customer,
-                         workWaypoints: waypoints)
+                         workAreaMin: roamMin,
+                         workAreaMax: roamMax)
     }
 
     private func clamp(_ value: Float, _ minimum: Float, _ maximum: Float) -> Float {
@@ -358,27 +377,54 @@ final class NPCClerkController {
         return SIMD2(root.position.x, root.position.z)
     }
 
-    private func shouldStartConversation(player: SIMD2<Float>) -> Bool {
-        guard !requiresReentry else { return false }
-        guard QuestModel.shared.currentStep?.completionEvent == .npcHelpDone else { return false }
-        return simd_distance(player, currentClerkPosition) <= NPCClerkTuning.detectionRadius
-    }
-
     private func updateWorkLoop(deltaTime: Float) {
-        guard !workWaypoints.isEmpty else { return }
         if workPauseRemaining > 0 {
             workPauseRemaining = max(0, workPauseRemaining - deltaTime)
+            playAnimation(.idle)
             return
         }
-        if move(toward: workWaypoints[workWaypointIndex], deltaTime: deltaTime) {
-            workWaypointIndex = (workWaypointIndex + 1) % workWaypoints.count
-            workPauseRemaining = NPCClerkTuning.workPauseSeconds
+        if workTarget == nil {
+            workTarget = randomWorkTarget(awayFrom: currentClerkPosition)
         }
+        guard let workTarget else {
+            playAnimation(.idle)
+            return
+        }
+        playAnimation(.walk)
+        if move(toward: workTarget, deltaTime: deltaTime) {
+            self.workTarget = nil
+            workPauseRemaining = randomWorkPause()
+            playAnimation(.idle)
+        }
+    }
+
+    private func randomWorkTarget(awayFrom current: SIMD2<Float>) -> SIMD2<Float>? {
+        guard workAreaMin.x <= workAreaMax.x,
+              workAreaMin.y <= workAreaMax.y else { return nil }
+
+        var fallback = current
+        // 좁거나 긴 AreaK에서도 무한 반복하지 않도록 유한 횟수 뒤 마지막 후보를 사용한다.
+        for _ in 0..<8 {
+            let candidate = SIMD2<Float>(
+                Float.random(in: workAreaMin.x...workAreaMax.x),
+                Float.random(in: workAreaMin.y...workAreaMax.y)
+            )
+            fallback = candidate
+            if simd_distance(candidate, current) >= NPCClerkTuning.minimumRoamDistance {
+                return candidate
+            }
+        }
+        return fallback
+    }
+
+    private func randomWorkPause() -> Float {
+        Float.random(in: NPCClerkTuning.workPauseRange)
     }
 
     @discardableResult
     private func move(toward target: SIMD2<Float>, deltaTime: Float) -> Bool {
-        guard let root = locomotionRoot else { return false }
+        guard conversationAnchor == nil,
+              let root = locomotionRoot else { return false }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         let delta = target - current
         let distance = simd_length(delta)
@@ -396,6 +442,12 @@ final class NPCClerkController {
         return step >= distance
     }
 
+    private func holdPosition(at anchor: SIMD2<Float>) {
+        guard let root = locomotionRoot else { return }
+        root.position.x = anchor.x
+        root.position.z = anchor.y
+    }
+
     private func face(point: SIMD2<Float>, deltaTime: Float) {
         guard let root = locomotionRoot else { return }
         let position = SIMD2<Float>(root.position.x, root.position.z)
@@ -406,19 +458,24 @@ final class NPCClerkController {
 
     private func face(direction: SIMD2<Float>, deltaTime: Float) {
         guard let root = locomotionRoot else { return }
-        // 이동 wrapper의 -Z를 목표 방향으로 맞춘 뒤, 현재 Skull의 +Z 정면을 180° 보정한다.
-        // 애니메이션이 내부 NPCTest transform을 덮어써도 바깥 wrapper 보정은 유지된다.
+        // 이동 wrapper의 -Z를 목표 방향으로 맞춘 뒤 Barista의 +Z 정면을 180° 보정한다.
+        // 스켈레톤 애니메이션은 자식에만 적용되므로 바깥 wrapper 보정은 유지된다.
         let yaw = atan2(-direction.x, -direction.y)
-            + NPCClerkTuning.prototypeForwardYawOffset
+            + NPCClerkTuning.baristaForwardYawOffset
         let target = simd_quatf(angle: yaw, axis: [0, 1, 0])
         let amount = min(1, NPCClerkTuning.turnResponse * deltaTime)
         root.orientation = simd_slerp(root.orientation, target, amount)
     }
 
     private func beginGreeting() {
-        guard phase == .working else { return }
+        guard phase == .working || phase == .orderAccepted,
+              GuideFlowModel.shared.allowsNPCOrderConversation else { return }
+        // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
+        conversationAnchor = currentClerkPosition
         phase = .greeting
-        setDialogueVisible(true)
+        isTalkAvailable = false
+        playAnimation(.idle)
+        setInteractionBubbleVisible(true)
 
         // 키오스크 장벽 패널과 대화 패널이 겹치지 않게 현재 키오스크 UI를 닫는다.
         let interactions = InteractionModel.shared
@@ -439,7 +496,7 @@ final class NPCClerkController {
         if let request = dialogue.animationRequest,
            request.sequence != handledAnimationSequence {
             handledAnimationSequence = request.sequence
-            playAnimation(request.cue)
+            playAnimation(request.cue, restart: true)
         }
 
         guard dialogue.missionEventSequence != handledMissionSequence else { return }
@@ -447,43 +504,60 @@ final class NPCClerkController {
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
             GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
-            phase = .completed
+            pendingOrderConversationEnd = true
+            finishAcceptedOrderPresentationIfReady()
         case .exited:
+            pendingOrderConversationEnd = false
+            conversationAnchor = nil
             greetingTask?.cancel()
             greetingTask = nil
             dialogue.cancelEncounter()
-            setDialogueVisible(false)
+            setInteractionBubbleVisible(true)
             phase = .working
-            workPauseRemaining = NPCClerkTuning.workPauseSeconds
-            requiresReentry = true
+            workTarget = nil
+            workPauseRemaining = randomWorkPause()
         case .helpRequested, .none:
             break
         }
     }
 
-    /// 대화 중 사용자가 멀어지면 즉시 마이크/패널을 닫고, 감지 반경 안으로 다시 들어올 때까지
-    /// 새 인사를 하지 않는다.
+    /// 주문 접수 이벤트는 대화 세션이 닫힌 뒤 전달된다. NPC도 같은 시점에 업무 상태로
+    /// 전환하며, 전체 퀘스트 완료는 음료 준비·수령·착석 후속 단계가 별도로 결정한다.
+    private func finishAcceptedOrderPresentationIfReady() {
+        guard pendingOrderConversationEnd, !dialogue.isEncounterActive else { return }
+        pendingOrderConversationEnd = false
+        conversationAnchor = nil
+        phase = .orderAccepted
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
+        playAnimation(.idle)
+    }
+
+    /// 대화 중 사용자가 멀어지면 즉시 마이크를 닫고 말 걸기 상태로 돌아간다.
     private func endEncounterForDeparture() {
+        conversationAnchor = nil
         greetingTask?.cancel()
         greetingTask = nil
         dialogue.cancelEncounter()
-        setDialogueVisible(false)
+        setInteractionBubbleVisible(true)
         phase = .working
-        workPauseRemaining = NPCClerkTuning.workPauseSeconds
-        requiresReentry = true
+        workTarget = nil
+        workPauseRemaining = randomWorkPause()
     }
 
     // MARK: - Animation
 
-    private func playAnimation(_ cue: NPCAnimationCue) {
-        guard let scene = prototypeScene,
-              let match = findAnimation(named: cue.rawValue, in: scene) else {
-            print("⚠️ NPC 애니메이션 '\(cue.rawValue)'을 찾지 못함 — 현재 키: \(availableAnimationNames)")
-            return
-        }
-        emotionPlayback?.stop(blendOutDuration: 0.05)
-        emotionPlayback = match.entity.playAnimation(match.resource,
-                                                       transitionDuration: 0.10)
+    private func playAnimation(_ cue: NPCAnimationCue,
+                               restart: Bool = false,
+                               allowsGreetingReplay: Bool = false) {
+        guard restart || lastPlayedAnimation != cue.rawValue else { return }
+        guard cue != .greet || !hasPlayedGreetingAnimation || allowsGreetingReplay else { return }
+        guard let barista = baristaEntity,
+              let match = findAnimation(named: cue.rawValue, in: barista) else { return }
+        animationPlayback?.stop(blendOutDuration: 0.15)
+        let resource = cue.repeats ? match.resource.repeat() : match.resource
+        animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
+        if cue == .greet, !allowsGreetingReplay { hasPlayedGreetingAnimation = true }
         lastPlayedAnimation = cue.rawValue
     }
 
@@ -499,47 +573,13 @@ final class NPCClerkController {
         return nil
     }
 
-    private func collectAnimationNames(in entity: Entity) -> [String] {
-        var names: [String] = []
-        if let library = entity.components[AnimationLibraryComponent.self] {
-            names.append(contentsOf: library.animations.map(\.key))
-        }
-        for child in entity.children {
-            names.append(contentsOf: collectAnimationNames(in: child))
-        }
-        return Array(Set(names))
+    // MARK: - Spatial interaction bubble
+
+    private func setInteractionBubbleVisible(_ visible: Bool) {
+        isInteractionBubbleVisible = visible
+        interactionBubble?.isEnabled = visible
+            && !isGuideInteractionLocked
+            && GuideFlowModel.shared.allowsNPCOrderConversation
     }
 
-    // MARK: - Spatial dialogue panel
-
-    private func setDialogueVisible(_ visible: Bool) {
-        isDialogueVisible = visible
-        dialoguePanel?.isEnabled = visible
-    }
-
-    private func updateDialoguePanel() {
-        guard let panel = dialoguePanel, let worldRoot else { return }
-        guard isDialogueVisible else {
-            panel.isEnabled = false
-            return
-        }
-        panel.isEnabled = true
-        let clerkPosition = currentClerkPosition
-        panel.setPosition([clerkPosition.x, NPCClerkTuning.dialogueHeight, clerkPosition.y],
-                          relativeTo: worldRoot)
-
-        // worldRoot가 플레이어의 반대로 움직이므로 실제 사용자는 world 원점에 있다.
-        var worldPosition = panel.position(relativeTo: nil)
-        let horizontal = SIMD2<Float>(worldPosition.x, worldPosition.z)
-        let distance = simd_length(horizontal)
-        if distance > NPCClerkTuning.dialogueForwardOffset + 0.05 {
-            let pulled = horizontal
-                - simd_normalize(horizontal) * NPCClerkTuning.dialogueForwardOffset
-            worldPosition.x = pulled.x
-            worldPosition.z = pulled.y
-            panel.setPosition(worldPosition, relativeTo: nil)
-        }
-        let yaw = atan2(-worldPosition.x, -worldPosition.z)
-        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
-    }
 }

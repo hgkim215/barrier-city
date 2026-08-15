@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "barrier-city-openai-proxy",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // 한국 요청이 홍콩 POP에서 실행되면 OpenAI 지역 제한에 걸릴 수 있어,
+  // OpenAI가 지원되는 미국 서부 리전에 가깝게 Worker를 배치한다.
+  "placement": {
+    "mode": "targeted",
+    "region": "aws:us-west-2"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // 값은 config에 저장하지 않는다. 배포 전 Worker Secret 존재 여부만 검증한다.
+  "secrets": {
+    "required": ["OPENAI_API_KEY"]
+  },
+
+  // namespace_id는 Cloudflare 계정 전체에서 고유해야 한다. 기존 namespace와 겹치면
+  // 배포 전에 다른 양의 정수 문자열로 변경한다.
+  "ratelimits": [
+    {
+      "name": "CHAT_RATE_LIMITER",
+      "namespace_id": "26081001",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "TTS_RATE_LIMITER",
+      "namespace_id": "26081002",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "EMBEDDINGS_RATE_LIMITER",
+      "namespace_id": "26081003",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "REALTIME_RATE_LIMITER",
+      "namespace_id": "26081004",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ]
+}

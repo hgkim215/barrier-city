@@ -49,6 +49,11 @@ public struct SocialClimate: Sendable {
         rapport = max(-1, min(1, rapport))
     }
 
+    /// NPC가 답변을 기다렸지만 사용자가 응답하지 않은 경우 관계 점수를 낮춘다.
+    public mutating func applyInactivityPenalty(_ amount: Float = 0.1) {
+        rapport = max(-1, min(1, rapport - max(0, amount)))
+    }
+
     public var tone: Tone {
         if rapport >= 0.55 { return .supportive }
         if rapport >= 0.2 { return .warm }

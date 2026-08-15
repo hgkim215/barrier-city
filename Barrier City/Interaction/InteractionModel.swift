@@ -62,7 +62,7 @@ enum InteractionTuning {
     static let doorTriggerRadius: Float = 2.5
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
-    static let exitHysteresis: Float = 0.4
+    nonisolated static let exitHysteresis: Float = 0.4
     /// 패널 표시 높이(m, 맵 좌표 y). 앉은 눈높이보다 살짝 위.
     static let panelHeight: Float = 1.7
     /// DOOR1 프림을 못 찾을 때의 문 트리거 폴백 좌표(맵 좌표 x, z).
@@ -136,6 +136,24 @@ final class InteractionModel {
     func dismissActive() {
         dismissedTriggerID = activeTrigger?.id
         activeTrigger = nil
+    }
+
+    /// 몰입 공간 종료 시 이전 RealityKit 장면과 구독을 더 이상 붙잡지 않는다.
+    /// 다음 진입은 `InteractionSetup.install`이 완전히 새로운 참조로 다시 구성한다.
+    func tearDown() {
+        endImmersiveSession()
+        updateSubscription?.cancel()
+        updateSubscription = nil
+        panelEntity = nil
+        kioskPanelEntity = nil
+        visibleMap = nil
+        collisionMap = nil
+        triggers = []
+        activeTrigger = nil
+        dismissedTriggerID = nil
+        transitionError = nil
+        kioskTooHighShown = false
+        scene = .outdoor
     }
 
     /// 키오스크 장벽 확인과 근접 트리거 억제를 한 상태 변경으로 처리한다.

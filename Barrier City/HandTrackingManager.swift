@@ -59,7 +59,6 @@ final class HandTrackingManager {
 
         // 지원 여부 확인(시뮬레이터/미지원 기기에서 바로 빠져나감)
         guard HandTrackingProvider.isSupported else {
-            print("HandTracking 미지원 환경 — 손 추적 건너뜀")
             model.handTrackingStatus = "이 기기에서는 손 추적을 지원하지 않습니다"
             return
         }
@@ -71,7 +70,6 @@ final class HandTrackingManager {
         let auth = await session.requestAuthorization(for: [.handTracking])
         guard generation == runGeneration, !Task.isCancelled else { return }
         guard auth[.handTracking] == .allowed else {
-            print("HandTracking 권한 거부/불가 — 손 추적 비활성화 (Info.plist 키 확인)")
             model.handTrackingStatus = "손 추적 권한이 필요합니다"
             return
         }
@@ -88,7 +86,6 @@ final class HandTrackingManager {
             running = true
         } catch {
             guard generation == runGeneration, !Task.isCancelled else { return }
-            print("HandTracking 시작 실패: \(error)")
             model.handTrackingStatus = "손 추적 시작 실패: \(error.localizedDescription)"
             return
         }

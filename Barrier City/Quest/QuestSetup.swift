@@ -15,15 +15,16 @@ enum QuestSetup {
     private static var follower: QuestHUDFollower?
     private static var hudPanel: Entity?
     private static var subscription: EventSubscription?
+    private static var startTask: Task<Void, Never>?
 
     static func install(content: RealityViewContent,
                         attachments: RealityViewAttachments,
                         appModel: AppModel) {
         stop()
+        // 재진입마다 온보딩과 미션 진행 상태를 함께 초기화한다.
         GuideFlowModel.shared.reset()
 
         guard let panel = attachments.entity(for: "questHUD") else {
-            print("⚠️ questHUD attachment 없음 — 안내 UI 없이 체험 계속")
             GuideFlowModel.shared.failOpen()
             return
         }
@@ -32,19 +33,23 @@ enum QuestSetup {
 
         let f = QuestHUDFollower()
         follower = f
-        Task { await f.start() }
+        startTask = Task { await f.start(model: appModel) }
 
         subscription = content.subscribe(to: SceneEvents.Update.self) { event in
             guard let panel = hudPanel, let f = follower else { return }
             f.update(panel: panel,
                      dt: Float(event.deltaTime),
-                     placement: GuideFlowModel.shared.placement)
+                     placement: GuideFlowModel.shared.placement,
+                     model: appModel)
         }
     }
 
+    /// 몰입 공간과 함께 HUD 구독 및 독립 ARKit 세션을 종료한다.
     static func stop() {
         subscription?.cancel()
         subscription = nil
+        startTask?.cancel()
+        startTask = nil
         follower?.stop()
         follower = nil
         hudPanel?.removeFromParent()

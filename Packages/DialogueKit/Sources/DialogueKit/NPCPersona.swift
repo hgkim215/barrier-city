@@ -22,17 +22,54 @@ public enum AccessibilityAttitude: String, Sendable {
     }
 }
 
+/// 접근성 태도와 별개로 점원의 말투와 반응 리듬을 결정하는 성격.
+public enum ClerkPersonality: String, CaseIterable, Sendable {
+    case hurried
+    case chatty
+    case cautious
+    case blunt
+
+    public static func random() -> Self {
+        allCases.randomElement() ?? .hurried
+    }
+
+    var promptRule: String {
+        switch self {
+        case .hurried:
+            "You are visibly busy and speak quickly in clipped, practical sentences. After the visitor explicitly explains that the kiosk is physically unreachable, accept the verbal order immediately because arguing would waste time. Sound rushed, not compassionate."
+        case .chatty:
+            "You are sociable and expressive. After the visitor explicitly explains the reach barrier, react conversationally and accept the verbal order immediately. Add one brief personal reaction, but do not turn it into a speech."
+        case .cautious:
+            "You are rule-conscious and hesitant. On the first explicit explanation of the reach barrier, ask one skeptical verification question about whether the screen or controls truly cannot be reached. After the visitor answers or insists once, accept the verbal order. Never demand proof beyond that one question."
+        case .blunt:
+            "You are direct and emotionally dry. On the first two relevant requests or explanations, doubt the need for an exception and push the kiosk procedure in different words. On the third relevant attempt, give in and accept the verbal order. Do not insult the visitor or keep refusing after that."
+        }
+    }
+
+    /// Legacy 대화에서도 Realtime과 같은 성격별 설득 길이를 보장한다.
+    var verbalOrderAcceptanceAttempt: Int {
+        switch self {
+        case .hurried, .chatty: 1
+        case .cautious: 2
+        case .blunt: 3
+        }
+    }
+}
+
 public struct NPCPersona: Sendable {
     public let id: String
     public let role: String
     public let englishSystemBase: String   // 영어 시스템 프롬프트(토큰 절감)
     public let accessibilityAttitude: AccessibilityAttitude
+    public let clerkPersonality: ClerkPersonality
 
     public init(id: String, role: String, englishSystemBase: String,
-                accessibilityAttitude: AccessibilityAttitude = .inclusive) {
+                accessibilityAttitude: AccessibilityAttitude = .inclusive,
+                clerkPersonality: ClerkPersonality = .hurried) {
         self.id = id
         self.role = role
         self.englishSystemBase = englishSystemBase
         self.accessibilityAttitude = accessibilityAttitude
+        self.clerkPersonality = clerkPersonality
     }
 }

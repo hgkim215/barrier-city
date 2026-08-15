@@ -2,19 +2,27 @@ import SwiftUI
 import RealityKit
 import RealityKitContent
 
+/// RealityView 클로저가 직접 갱신하는 렌더링 참조.
+/// SwiftUI 관찰 대상이 아닌 참조 타입에 보관해 view update 도중 @State를 변경하지 않는다.
+@MainActor
+private final class ImmersiveRuntimeState {
+    var leftWheel: Entity?
+    var rightWheel: Entity?
+    var leftWheelMesh: Entity?
+    var rightWheelMesh: Entity?
+    var leftBaseMats: [any RealityKit.Material] = []
+    var rightBaseMats: [any RealityKit.Material] = []
+    var leftHiMats: [any RealityKit.Material] = []
+    var rightHiMats: [any RealityKit.Material] = []
+    var wheelsHighlighted = false
+}
+
 /// 몰입 공간 본체: 평지 + 거리 마커 기둥 + 양옆 바퀴.
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
 
-    @State private var leftWheel: Entity?     // USDZ 뒷바퀴 노드(Roda_Traseira_L)
-    @State private var rightWheel: Entity?    // USDZ 뒷바퀴 노드(Roda_Traseira_R)
-    @State private var leftWheelMesh: Entity?    // 뒷바퀴 메시(발광 틴트 대상)
-    @State private var rightWheelMesh: Entity?
-    @State private var leftBaseMats: [any RealityKit.Material] = []   // 원본 머티리얼
-    @State private var rightBaseMats: [any RealityKit.Material] = []
-    @State private var leftHiMats: [any RealityKit.Material] = []     // 발광 틴트 머티리얼
-    @State private var rightHiMats: [any RealityKit.Material] = []
+    @State private var runtime = ImmersiveRuntimeState()
     @State private var handTracker = HandTrackingManager()
     @State private var immersiveSessionGeneration: Int?
 
@@ -35,7 +43,7 @@ struct ImmersiveView: View {
         // 그래야 System이 매 프레임 이 값을 바꿀 때 body가 다시 평가되고,
         // 아래 RealityView update 클로저가 재실행되어 하이라이트/바퀴 회전이 반영된다.
         let _ = (model.leftGrabbed, model.rightGrabbed,
-                 model.wheelAngleLeft, model.wheelAngleRight,
+                 model.motion.leftWheelAngle, model.motion.rightWheelAngle,
                  model.fistDriveActive)
 
         return RealityView { content, attachments in
@@ -51,8 +59,6 @@ struct ImmersiveView: View {
                 Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
                 worldRoot.addChild(cafeVisible)
                 InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
-            } else {
-                print("⚠️ Immersive.usda(시각) 로드 실패 — 이름/번들 확인")
             }
             content.add(worldRoot)
             model.worldRoot = worldRoot
@@ -62,12 +68,10 @@ struct ImmersiveView: View {
             if let cafeCollision = try? await Entity(named: "Map", in: realityKitContentBundle) {
                 Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
                 let n = await Self.addStaticCollision(cafeCollision)
-                model.collisionShapes = n
-                cafeCollision.components.set(OpacityComponent(opacity: 0))   // 안 보이게(충돌만)
+                model.motion.collisionShapeCount = n
+                Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
                 content.add(cafeCollision)
                 InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
-            } else {
-                print("⚠️ Immersive.usda(콜리전) 로드 실패")
             }
 
             // [디버그] 무조건 착지하는 단순 바닥 콜리전(컨트롤러 동작 확인용).
@@ -113,8 +117,8 @@ struct ImmersiveView: View {
                 // 몸체와 별개로 뒷바퀴만 추가 배율(허브 중심으로 커짐 → 제자리에서 크기만 변함).
                 if let wl { wl.scale = wl.scale * Self.wheelScale }
                 if let wr { wr.scale = wr.scale * Self.wheelScale }
-                leftWheel = wl
-                rightWheel = wr
+                runtime.leftWheel = wl
+                runtime.rightWheel = wr
 
                 // 뒷바퀴를 앞으로(-Z)·위로(+Y)·좌우 바깥으로 이동(chairRoot 기준).
                 // 바닥 안착 '전'에 적용해 허브를 올리면 프레임이 바퀴 위로 더 내려앉는다.
@@ -150,17 +154,15 @@ struct ImmersiveView: View {
 
                 // 잡힘 하이라이트: 뒷바퀴 메시를 찾아 발광(emissive) 틴트 버전을 미리 준비.
                 if let mesh = Self.firstModelEntity(wl), let comp = mesh.components[ModelComponent.self] {
-                    leftWheelMesh = mesh
-                    leftBaseMats = comp.materials
-                    leftHiMats = Self.emissiveTinted(comp.materials)
+                    runtime.leftWheelMesh = mesh
+                    runtime.leftBaseMats = comp.materials
+                    runtime.leftHiMats = Self.emissiveTinted(comp.materials)
                 }
                 if let mesh = Self.firstModelEntity(wr), let comp = mesh.components[ModelComponent.self] {
-                    rightWheelMesh = mesh
-                    rightBaseMats = comp.materials
-                    rightHiMats = Self.emissiveTinted(comp.materials)
+                    runtime.rightWheelMesh = mesh
+                    runtime.rightBaseMats = comp.materials
+                    runtime.rightHiMats = Self.emissiveTinted(comp.materials)
                 }
-            } else {
-                print("⚠️ WhellChair.usdz 로드 실패 — 이름/번들 확인")
             }
 
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
@@ -169,13 +171,17 @@ struct ImmersiveView: View {
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
-            applyRoll(leftWheel, angle: model.wheelAngleLeft)
-            applyRoll(rightWheel, angle: model.wheelAngleRight)
+            applyRoll(runtime.leftWheel, angle: model.motion.leftWheelAngle)
+            applyRoll(runtime.rightWheel, angle: model.motion.rightWheelAngle)
             // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
-            setMaterials(leftWheelMesh,
-                         (model.leftGrabbed || model.fistDriveActive) ? leftHiMats : leftBaseMats)
-            setMaterials(rightWheelMesh,
-                         (model.rightGrabbed || model.fistDriveActive) ? rightHiMats : rightBaseMats)
+            let shouldHighlight = model.leftGrabbed || model.rightGrabbed || model.fistDriveActive
+            if runtime.wheelsHighlighted != shouldHighlight {
+                runtime.wheelsHighlighted = shouldHighlight
+                setMaterials(runtime.leftWheelMesh,
+                             shouldHighlight ? runtime.leftHiMats : runtime.leftBaseMats)
+                setMaterials(runtime.rightWheelMesh,
+                             shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
+            }
         } attachments: {
             // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
@@ -189,8 +195,8 @@ struct ImmersiveView: View {
             Attachment(id: "questHUD") {
                 ExperienceGuideView()
             }
-            // 점원이 계산대에 도착한 뒤 표시되는 공간 대화 패널.
-            Attachment(id: "npcDialogue") {
+            // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
+            Attachment(id: "npcInteraction") {
                 NPCDialoguePanelView(controller: model.npcDialogue,
                                      clerk: model.npcClerk)
             }
@@ -206,9 +212,15 @@ struct ImmersiveView: View {
                 return
             }
             QuestSetup.stop()
-            InteractionModel.shared.endImmersiveSession()
             model.npcClerk.resetForOutdoor()
+            ImpactAudio.shared.stop()
             handTracker.clearModelInput(model: model)
+            InteractionModel.shared.tearDown()
+            model.worldRoot = nil
+            model.characterBody = nil
+            if AppModel.current === model {
+                AppModel.current = nil
+            }
         }
         .task(id: model.useHandTracking) {
             // 창 토글을 몰입 공간 진입 뒤에 바꿔도 즉시 세션을 시작/종료한다.
@@ -255,17 +267,6 @@ struct ImmersiveView: View {
         e.components.set(comp)
     }
 
-    /// [임시] 엔티티 트리를 이름/타입/위치/크기와 함께 콘솔에 출력.
-    private static func dumpHierarchy(_ e: Entity, _ indent: String = "") {
-        let b = e.visualBounds(relativeTo: e.parent)
-        let p = e.position
-        let hasModel = e.components.has(ModelComponent.self) ? " [Model]" : ""
-        let name = e.name.isEmpty ? "<no name>" : e.name
-        print(String(format: "%@• '%@'%@ pos=(%.3f,%.3f,%.3f) size=(%.3f,%.3f,%.3f)",
-                     indent, name, hasModel, p.x, p.y, p.z, b.extents.x, b.extents.y, b.extents.z))
-        for c in e.children { dumpHierarchy(c, indent + "    ") }
-    }
-
     // MARK: - USDA 정적 콜리전(베이크용)
 
     /// 이름에 "collision"이 들어간 엔티티(또는 그 하위)의 메시에만 정적 콜리전을 부여한다.
@@ -296,15 +297,23 @@ struct ImmersiveView: View {
         for child in entity.children { stripPhysics(child) }
     }
 
-    /// 시각 인스턴스에서 충돌용(이름에 collision) 도형은 안 보이게 한다(단순 도형이라 흉하므로).
-    private static func hideColliders(_ entity: Entity, inherited: Bool = false) {
+    /// 시각 인스턴스에서 충돌용(이름에 collision) 도형의 렌더 컴포넌트를 제거한다.
+    /// Entity 자체를 비활성화하면 CollisionComponent도 꺼지므로 시각 요소만 제거해야 한다.
+    static func hideColliders(_ entity: Entity, inherited: Bool = false) {
         let isCollider = inherited || entity.name.lowercased().contains("collision")
-        if isCollider, entity.components[ModelComponent.self] != nil {
-            entity.components.set(OpacityComponent(opacity: 0))
+        if isCollider {
+            entity.components.remove(ModelComponent.self)
         }
         for child in entity.children {
             hideColliders(child, inherited: isCollider)
         }
+    }
+
+    /// 충돌 전용 복제본에서 모든 렌더 컴포넌트를 제거한다.
+    /// addStaticCollision 이후 호출하면 생성된 충돌 형상과 transform 계층은 그대로 남는다.
+    static func stripRendering(_ entity: Entity) {
+        entity.components.remove(ModelComponent.self)
+        for child in entity.children { stripRendering(child) }
     }
 
     /// 엔티티와 모든 하위 모델에 접지 그림자를 부여(바닥 그림자).

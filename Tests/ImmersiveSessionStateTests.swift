@@ -75,6 +75,5 @@ struct ImmersiveSessionStateTests {
                "replacement disappearance owns its teardown")
         expect(staleCallbacks.phase, .closed, "replacement disappearance closes session")
 
-        print("ImmersiveSessionStateTests: PASS")
     }
 }

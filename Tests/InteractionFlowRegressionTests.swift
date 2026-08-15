@@ -37,6 +37,5 @@ struct InteractionFlowRegressionTests {
         expect(verdict.showID, nil, "acknowledged kiosk stays dismissed while still in radius")
         expect(interactions.kioskTooHighShown, false, "acknowledgement clears the barrier detail state")
 
-        print("InteractionFlowRegressionTests: PASS")
     }
 }
