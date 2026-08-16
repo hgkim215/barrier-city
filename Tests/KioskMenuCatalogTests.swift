@@ -12,6 +12,26 @@ struct KioskMenuCatalogTests {
         expect(KioskMenuCatalog.items(for: .best).count, 9, "best fills the 3x3 grid")
         expect(KioskMenuCatalog.items(for: .all).count, 9, "all fills the 3x3 grid")
 
+        let bestIDs = KioskMenuCatalog.items(for: .best).map(\.id)
+        let allIDs = KioskMenuCatalog.items(for: .all).map(\.id)
+        expect(
+            allIDs,
+            [
+                "americano",
+                "earl-grey",
+                "lemon-ade",
+                "chocolate-latte",
+                "decaf-americano",
+                "cafe-mocha",
+                "green-tea",
+                "grapefruit-ade",
+                "rainbow-smoothie",
+            ],
+            "all uses the deterministic mixed-category grid")
+        guard Set(allIDs) != Set(bestIDs) else {
+            fatalError("FAIL: all must contain at least one non-Best product")
+        }
+
         for category in KioskCategory.allCases where category != .best && category != .all {
             guard KioskMenuCatalog.items(for: category).count >= 6 else {
                 fatalError("FAIL: \(category) must expose at least six items")

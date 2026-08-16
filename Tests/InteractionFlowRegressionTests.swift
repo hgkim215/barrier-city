@@ -108,11 +108,38 @@ struct InteractionFlowRegressionTests {
         expect(interactions.kioskSelectedCategory, .coffee, "blocked tab does not select")
         expect(interactions.kioskBarrierVisible, true, "other opens barrier")
 
-        expect(interactions.requestKioskStaffHelp(), true, "first help request accepted")
-        expect(interactions.requestKioskStaffHelp(), false, "help request is idempotent")
-
+        let quest = QuestModel()
+        _ = quest.advance(on: .enteredIndoor)
         var guide = GuideFlowState(phase: .missionActive(index: 1))
-        guide.send(.questAdvanced(nextIndex: 2))
+        var forwardedEvents: [QuestEvent] = []
+        var missionThreeTransitions = 0
+        let eventSink: (QuestEvent) -> Void = { event in
+            forwardedEvents.append(event)
+            guard case .advanced = quest.advance(on: event) else { return }
+            let previousPhase = guide.phase
+            guide.send(.questAdvanced(nextIndex: quest.currentIndex))
+            if previousPhase != guide.phase,
+               guide.phase == .missionAnnouncement(index: 2) {
+                missionThreeTransitions += 1
+            }
+        }
+
+        expect(
+            KioskPrimaryActionCoordinator.activate(
+                interactionModel: interactions,
+                eventSink: eventSink),
+            true,
+            "first primary action is accepted")
+        expect(
+            KioskPrimaryActionCoordinator.activate(
+                interactionModel: interactions,
+                eventSink: eventSink),
+            false,
+            "repeated primary action is rejected")
+        expect(forwardedEvents, [.kioskFailed], "primary action forwards kioskFailed exactly once")
+        expect(missionThreeTransitions, 1, "primary action produces one Mission 3 transition")
+        expect(guide.phase, .missionAnnouncement(index: 2), "event sink reaches Mission 3 announcement")
+
         guide.send(.confirmMission)
         expect(guide.phase, .missionActive(index: 2), "Mission 3 confirmation unlocks interaction")
 

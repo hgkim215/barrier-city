@@ -1,7 +1,14 @@
 import Foundation
+import simd
 
 private func expect(_ actual: Bool, _ expected: Bool, _ message: String) {
     guard actual == expected else {
+        fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
+    }
+}
+
+private func expectNear(_ actual: Float, _ expected: Float, _ message: String) {
+    guard abs(actual - expected) < 0.0001 else {
         fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
     }
 }
@@ -13,19 +20,23 @@ private func sample(
     _ detector: inout KioskReachAttemptDetector,
     _ position: SIMD3<Float>,
     at time: TimeInterval,
-    tracked: Bool = true
+    tracked: Bool = true,
+    halfSize: SIMD2<Float> = [halfWidth, halfHeight]
 ) -> Bool {
     detector.sample(
         position: position,
         timestamp: time,
         isTracked: tracked,
-        halfWidth: halfWidth,
-        halfHeight: halfHeight)
+        halfWidth: halfSize.x,
+        halfHeight: halfSize.y)
 }
 
 @main
 struct KioskReachAttemptDetectorTests {
     static func main() {
+        authoredScreenTransformMapsIntoScreenAlignedWorldMeters()
+        authoredScreenTransformDetectsPhysicalUpwardReach()
+        authoredScreenTransformRejectsFarAndWheelHeightSamples()
         approachTowardScreenFiresAfterDwell()
         upwardReachFiresAfterDwell()
         invalidRegionsAndStationaryHandsDoNotFire()
@@ -33,6 +44,97 @@ struct KioskReachAttemptDetectorTests {
         cooldownDeduplicatesThenAllowsAnotherAttempt()
 
         print("KioskReachAttemptDetectorTests: PASS")
+    }
+
+    /// Fixture axes before face correction:
+    /// local +X -> world -Z, local +Y -> world +Y, local +Z -> world +X.
+    /// Every authored axis carries the Indoor kiosk's 1.7 scale.
+    private static let authoredPlaneTransform = simd_float4x4(columns: (
+        SIMD4<Float>(0, 0, -1.7, 0),
+        SIMD4<Float>(0, 1.7, 0, 0),
+        SIMD4<Float>(1.7, 0, 0, 0),
+        SIMD4<Float>(2, 1, -3, 1)
+    ))
+
+    private static func authoredScreenFrame() -> KioskScreenCoordinateFrame {
+        guard let frame = KioskScreenCoordinateFrame(
+            planeWorldTransform: authoredPlaneTransform,
+            localSurfaceCenter: .zero,
+            localHalfSize: [0.15, 0.18],
+            faceRotationRadians: .pi) else {
+            fatalError("FAIL: valid authored screen fixture must create a frame")
+        }
+        return frame
+    }
+
+    private static func authoredScreenTransformMapsIntoScreenAlignedWorldMeters() {
+        let frame = authoredScreenFrame()
+        let mapped = frame.screenPosition(for: [2.5, 0.9, -2.9])
+
+        expectNear(mapped.x, 0.10, "pi correction maps world +Z to screen-right")
+        expectNear(mapped.y, 0.10, "pi correction maps physical world -Y to screen-up")
+        expectNear(mapped.z, 0.50, "authored 1.7 scale does not shrink front meters")
+        expectNear(frame.halfSizeMeters.x, 0.255, "authored scale expands physical half-width")
+        expectNear(frame.halfSizeMeters.y, 0.306, "authored scale expands physical half-height")
+    }
+
+    private static func authoredScreenTransformDetectsPhysicalUpwardReach() {
+        let frame = authoredScreenFrame()
+        var detector = KioskReachAttemptDetector()
+
+        expect(
+            sample(&detector, frame.screenPosition(for: [2.40, 1.12, -3.00]), at: 10.00,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "world-space origin does not fire")
+        expect(
+            sample(&detector, frame.screenPosition(for: [2.40, 1.03, -3.00]), at: 10.15,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "physical upward movement arms after face correction")
+        expect(
+            sample(&detector, frame.screenPosition(for: [2.39, 1.00, -3.00]), at: 10.36,
+                   halfSize: frame.halfSizeMeters),
+            true,
+            "physical upward dwell fires once")
+    }
+
+    private static func authoredScreenTransformRejectsFarAndWheelHeightSamples() {
+        let frame = authoredScreenFrame()
+
+        var tooFar = KioskReachAttemptDetector()
+        expect(
+            sample(&tooFar, frame.screenPosition(for: [2.80, 1.00, -3.00]), at: 11.00,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "0.80 world meters in front is outside the reach volume")
+        expect(
+            sample(&tooFar, frame.screenPosition(for: [2.69, 0.89, -3.00]), at: 11.15,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "far movement cannot arm after authored scale normalization")
+        expect(
+            sample(&tooFar, frame.screenPosition(for: [2.68, 0.88, -3.00]), at: 11.36,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "far dwell remains rejected")
+
+        var wheelHeight = KioskReachAttemptDetector()
+        expect(
+            sample(&wheelHeight, frame.screenPosition(for: [2.50, 1.55, -3.00]), at: 12.00,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "wheel-height origin is outside the physical screen volume")
+        expect(
+            sample(&wheelHeight, frame.screenPosition(for: [2.39, 1.44, -3.00]), at: 12.15,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "wheel-height movement cannot arm")
+        expect(
+            sample(&wheelHeight, frame.screenPosition(for: [2.38, 1.43, -3.00]), at: 12.36,
+                   halfSize: frame.halfSizeMeters),
+            false,
+            "wheel-height dwell remains rejected")
     }
 
     private static func approachTowardScreenFiresAfterDwell() {

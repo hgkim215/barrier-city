@@ -128,6 +128,22 @@ struct ProximityVerdict {
     let clearDismissed: Bool
 }
 
+/// Coordinates the kiosk barrier's primary action with its quest event sink.
+/// `requestKioskStaffHelp()` owns one-shot session state; this boundary ensures
+/// the accepted action and `.kioskFailed` delivery cannot drift apart in UI code.
+@MainActor
+enum KioskPrimaryActionCoordinator {
+    @discardableResult
+    static func activate(
+        interactionModel: InteractionModel,
+        eventSink: (QuestEvent) -> Void
+    ) -> Bool {
+        guard interactionModel.requestKioskStaffHelp() else { return false }
+        eventSink(.kioskFailed)
+        return true
+    }
+}
+
 /// 공간 인터랙션 전역 상태. System이 아닌 SceneEvents.Update 구독(tick)이 읽고 쓴다.
 @Observable
 @MainActor
@@ -157,6 +173,8 @@ final class InteractionModel {
     @ObservationIgnored var kioskScreenPlane: Entity?
     /// Screen Plane의 로컬 반너비·반높이.
     @ObservationIgnored var kioskScreenHalfSize = SIMD2<Float>.zero
+    /// Screen Plane 표면 중심의 로컬 좌표.
+    @ObservationIgnored var kioskScreenSurfaceCenter = SIMD3<Float>.zero
     /// true면 Screen 배치 실패로 기존 월드 빌보드 배치를 사용한다.
     @ObservationIgnored var kioskUsesBillboardFallback = true
     /// 키오스크 메뉴 표시·입력·장벽·도움 요청 상태.
@@ -251,9 +269,9 @@ final class InteractionModel {
         scene = .outdoor
     }
 
-    func processKioskLocalHandSample(
+    func processKioskScreenHandSample(
         side: KioskHandSide,
-        localPosition: SIMD3<Float>,
+        screenPosition: SIMD3<Float>,
         timestamp: TimeInterval,
         isTracked: Bool,
         halfWidth: Float,
@@ -264,7 +282,7 @@ final class InteractionModel {
             return
         }
         let attempted = kioskReachDetectors[side, default: KioskReachAttemptDetector()].sample(
-            position: localPosition,
+            position: screenPosition,
             timestamp: timestamp,
             isTracked: isTracked,
             halfWidth: halfWidth,
@@ -284,24 +302,33 @@ final class InteractionModel {
             kioskReachDetectors[side]?.reset()
             return
         }
-        let localPosition = plane.convert(position: worldPosition, from: nil)
-        processKioskLocalHandSample(
+        guard let screenFrame = KioskScreenCoordinateFrame(
+            planeWorldTransform: plane.transformMatrix(relativeTo: nil),
+            localSurfaceCenter: kioskScreenSurfaceCenter,
+            localHalfSize: kioskScreenHalfSize,
+            faceRotationRadians: KioskScreenLayout.faceRotationRadians) else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        processKioskScreenHandSample(
             side: side,
-            localPosition: localPosition,
+            screenPosition: screenFrame.screenPosition(for: worldPosition),
             timestamp: timestamp,
             isTracked: isTracked,
-            halfWidth: kioskScreenHalfSize.x,
-            halfHeight: kioskScreenHalfSize.y)
+            halfWidth: screenFrame.halfSizeMeters.x,
+            halfHeight: screenFrame.halfSizeMeters.y)
     }
 
     func applyKioskScreenPlacement(_ placement: KioskScreenPlacement) {
         switch placement {
-        case .attached(let plane, let halfSize):
+        case .attached(let plane, let localSurfaceCenter, let localHalfSize):
             kioskScreenPlane = plane
-            kioskScreenHalfSize = halfSize
+            kioskScreenSurfaceCenter = localSurfaceCenter
+            kioskScreenHalfSize = localHalfSize
             kioskUsesBillboardFallback = false
         case .billboardFallback:
             kioskScreenPlane = nil
+            kioskScreenSurfaceCenter = .zero
             kioskScreenHalfSize = .zero
             kioskUsesBillboardFallback = true
         }
@@ -312,6 +339,7 @@ final class InteractionModel {
         kioskState.reset()
         kioskFailOpenSent = false
         kioskScreenPlane = nil
+        kioskScreenSurfaceCenter = .zero
         kioskScreenHalfSize = .zero
         kioskUsesBillboardFallback = true
         resetKioskReachDetectors()

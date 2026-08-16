@@ -278,9 +278,9 @@ struct KioskOrderView: View {
 
             VStack(spacing: 10) {
                 Button("직원에게 직접 주문하기") {
-                    if im.requestKioskStaffHelp() {
-                        GuideFlowModel.shared.handleQuestEvent(.kioskFailed)
-                    }
+                    KioskPrimaryActionCoordinator.activate(
+                        interactionModel: im,
+                        eventSink: GuideFlowModel.shared.handleQuestEvent)
                 }
                 .font(.system(size: 20, weight: .black, design: .rounded))
                 .foregroundStyle(.white)

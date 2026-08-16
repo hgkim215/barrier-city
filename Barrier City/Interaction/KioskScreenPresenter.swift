@@ -2,7 +2,10 @@ import RealityKit
 import simd
 
 enum KioskScreenPlacement {
-    case attached(plane: Entity, halfSize: SIMD2<Float>)
+    case attached(
+        plane: Entity,
+        localSurfaceCenter: SIMD3<Float>,
+        localHalfSize: SIMD2<Float>)
     case billboardFallback
 }
 
@@ -54,7 +57,13 @@ enum KioskScreenPresenter {
         attachment.isEnabled = true
 
         print("키오스크 Screen UI 배치 완료: plane=\(planeSize), scale=\(scale)")
-        return .attached(plane: plane, halfSize: planeSize * 0.5)
+        return .attached(
+            plane: plane,
+            localSurfaceCenter: SIMD3<Float>(
+                planeBounds.center.x,
+                planeBounds.center.y,
+                planeBounds.max.z),
+            localHalfSize: planeSize * 0.5)
     }
 
     private static func installBillboardFallback(

@@ -14,6 +14,18 @@ struct KioskMenuItem: Identifiable, Equatable {
 }
 
 enum KioskMenuCatalog {
+    private static let allGridIDs = [
+        "americano",
+        "earl-grey",
+        "lemon-ade",
+        "chocolate-latte",
+        "decaf-americano",
+        "cafe-mocha",
+        "green-tea",
+        "grapefruit-ade",
+        "rainbow-smoothie",
+    ]
+
     private static let catalog: [KioskMenuItem] = [
         .init(id: "americano", name: "아메리카노", price: 4500, symbol: "cup.and.saucer.fill", tint: .brown, categories: [.best, .coffee]),
         .init(id: "cafe-latte", name: "카페라떼", price: 5000, symbol: "mug.fill", tint: .orange, categories: [.best, .coffee]),
@@ -74,7 +86,7 @@ enum KioskMenuCatalog {
         case .best:
             Array(catalog.filter { $0.categories.contains(.best) }.prefix(9))
         case .all:
-            Array(catalog.prefix(9))
+            allGridIDs.compactMap { id in catalog.first { $0.id == id } }
         default:
             catalog.filter { $0.categories.contains(category) }
         }
