@@ -4,7 +4,7 @@
 //
 //  Outdoor("Outdoor") → Indoor("Indoor") 배경 전환.
 //  같은 몰입 공간을 유지한 채 ① worldRoot의 시각 맵 교체 ② 씬 원점의 투명 콜리전
-//  사본 교체 ③ DOOR1→Kiosk 방향으로 실내 문 안쪽 포즈를 계산한다.
+//  사본 교체 ③ Door→Kiosk 방향으로 실내 문 안쪽 포즈를 계산한다.
 //
 //  stripPhysics/addStaticCollision은 이윤서 ImmersiveView의 검증된 로더 유틸을
 //  그대로 호출한다(중복 구현 방지, Task 5에서 private 제거).
@@ -155,7 +155,7 @@ enum SceneSwitcher {
         var spawn = SIMD2<Float>(InteractionTuning.indoorSpawnX,
                                  InteractionTuning.indoorSpawnZ)
         var heading = InteractionTuning.indoorSpawnHeading
-        if let door = indoorVisible.findEntity(named: "DOOR1") {
+        if let door = indoorVisible.findEntity(named: "Door") {
             let bounds = door.visualBounds(relativeTo: worldRoot)
             let doorCenter = SIMD2<Float>(bounds.center.x, bounds.center.z)
             let delta = kioskCenter - doorCenter

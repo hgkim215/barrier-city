@@ -70,10 +70,10 @@ enum InteractionSetup {
             }
         }
 
-        // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
+        // 2) 문 트리거 등록: 최신 Outdoor의 Door 프림 좌표를 찾고, 실패 시 authored 폴백 사용.
         var center = InteractionTuning.doorFallbackCenter
         if let worldRoot = appModel.worldRoot,
-           let door = im.visibleMap?.findEntity(named: "DOOR1") {
+           let door = im.visibleMap?.findEntity(named: "Door") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
         }
