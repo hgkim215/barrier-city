@@ -29,9 +29,9 @@ struct OutdoorSessionStartTests {
             doorCenter: SIMD2<Float>(0, -6),
             cafeCenter: .zero,
             fallbackDoorCenter: SIMD2<Float>(0, -6),
-            distanceFromDoor: 3)
+            distanceFromDoor: 1.25)
         expectNear(outside.x, 0, "outside spawn preserves centered door X")
-        expectNear(outside.y, -9, "outside spawn starts beyond the door trigger")
+        expectNear(outside.y, -7.25, "outside spawn is beyond the cafe door")
 
         let diagonalOutside = OutdoorSessionStart.positionOutsideCafe(
             doorCenter: SIMD2<Float>(3, 4),
