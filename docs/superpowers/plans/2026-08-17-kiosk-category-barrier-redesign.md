@@ -35,6 +35,8 @@
 - Modify `Barrier City/Interaction/KioskScreenLayout.swift`: pure orientation constant.
 - Modify `Barrier City/Interaction/KioskScreenPresenter.swift`: local Z-axis screen correction.
 - Modify `Tests/KioskScreenLayoutTests.swift`: rotation regression.
+- Create `Barrier City/Interaction/KioskMenuCatalog.swift`: pure local menu model and category filtering.
+- Create `Tests/KioskMenuCatalogTests.swift`: real catalog filtering and story-item coverage.
 - Modify `Barrier City/Interaction/KioskOrderView.swift`: approved high-contrast UI.
 
 ### Task 1: Model Category Selection and the Accessibility Barrier
@@ -280,15 +282,88 @@ git commit -m "fix: orient kiosk screen content upright"
 ### Task 3: Build the Approved High-Contrast SwiftUI
 
 **Files:**
+- Create: `Tests/KioskMenuCatalogTests.swift`
+- Create: `Barrier City/Interaction/KioskMenuCatalog.swift`
 - Modify: `Barrier City/Interaction/KioskOrderView.swift`
 
 **Interfaces:**
 - Consumes: `KioskCategory.allCases` and all Task 1 `InteractionModel` properties/actions.
-- Produces: functional 540×960 yellow/black category UI and centered two-action barrier.
+- Produces: `KioskMenuItem`, `KioskMenuTint`, `KioskMenuCatalog.items(for:)`, a functional 540×960 yellow/black category UI, and centered two-action barrier.
 
-- [ ] **Step 1: Define deterministic menu data**
+- [ ] **Step 1: Write failing catalog behavior tests**
 
-Change `CafeMenuItem` to carry `price: Int` and `categories: Set<KioskCategory>`. Keep a fixed local catalog. Its first other-category item is:
+Create `Tests/KioskMenuCatalogTests.swift` with literal, consumer-visible expectations:
+
+```swift
+import Foundation
+
+private func expect<T: Equatable>(_ actual: T, _ expected: T, _ message: String) {
+    guard actual == expected else {
+        fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
+    }
+}
+
+@main
+struct KioskMenuCatalogTests {
+    static func main() {
+        expect(KioskMenuCatalog.items(for: .best).count, 9, "best fills the 3x3 grid")
+        expect(KioskMenuCatalog.items(for: .all).count, 9, "all fills the 3x3 grid")
+
+        for category in KioskCategory.allCases where category != .best && category != .all {
+            guard KioskMenuCatalog.items(for: category).count >= 6 else {
+                fatalError("FAIL: \(category) must expose at least six items")
+            }
+        }
+
+        let other = KioskMenuCatalog.items(for: .other)
+        expect(other.first?.id, "rainbow-smoothie", "rainbow smoothie leads other")
+        expect(other.first?.name, "레인보우 스무디", "story product uses approved name")
+        expect(other.first?.price, 6500, "story product uses approved price")
+
+        let coffeeIDs = Set(KioskMenuCatalog.items(for: .coffee).map(\.id))
+        let teaIDs = Set(KioskMenuCatalog.items(for: .tea).map(\.id))
+        guard coffeeIDs != teaIDs else {
+            fatalError("FAIL: category switching must change visible products")
+        }
+
+        print("KioskMenuCatalogTests: PASS")
+    }
+}
+```
+
+- [ ] **Step 2: Run the catalog test to verify RED**
+
+```bash
+xcrun swiftc \
+  "Barrier City/Interaction/KioskInteractionState.swift" \
+  "Barrier City/Interaction/KioskMenuCatalog.swift" \
+  Tests/KioskMenuCatalogTests.swift \
+  -o /tmp/kiosk-menu-catalog-tests
+/tmp/kiosk-menu-catalog-tests
+```
+
+Expected: compile failure because `KioskMenuCatalog.swift` and its types do not exist.
+
+- [ ] **Step 3: Define deterministic pure menu data**
+
+Create a Foundation-only catalog whose view-independent item type carries `id`, `name`, `price`, `symbol`, `tint`, and `categories`. The tint is a pure enum that SwiftUI maps to `Color`:
+
+```swift
+enum KioskMenuTint: Equatable {
+    case brown, orange, pink, green, cyan, purple, yellow, mint
+}
+
+struct KioskMenuItem: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let price: Int
+    let symbol: String
+    let tint: KioskMenuTint
+    let categories: Set<KioskCategory>
+}
+```
+
+Keep a fixed catalog. Its first other-category item is:
 
 ```swift
 .init(
@@ -300,9 +375,13 @@ Change `CafeMenuItem` to carry `price: Int` and `categories: Set<KioskCategory>`
     categories: [.other])
 ```
 
-Add strawberry, mango, chocolate frappe, cream frappe, mint-choco frappe, yogurt, blueberry, and banana smoothies. Use system symbols and SwiftUI colors; do not copy external product photography.
+Add strawberry, mango, chocolate frappe, cream frappe, mint-choco frappe, yogurt, blueberry, and banana smoothies. Add enough fixed coffee, tea, ade, non-coffee, and decaf products for every filter to return at least six items. `items(for:)` returns nine for `.best` and `.all`, otherwise filters by category. Use system-symbol names; do not copy external product photography.
 
-- [ ] **Step 2: Replace header and categories**
+- [ ] **Step 4: Run the catalog test to verify GREEN**
+
+Re-run Step 2. Expected: `KioskMenuCatalogTests: PASS`.
+
+- [ ] **Step 5: Replace header and categories**
 
 Use a warm yellow background, black home icon, centered `BARRIER CAFE`, and:
 
@@ -319,11 +398,11 @@ LazyVGrid(
 
 Map the exact Korean titles in a file-local `KioskCategory.title`. Selected tabs are black/white; unselected tabs are yellow with a 2-point black stroke.
 
-- [ ] **Step 3: Connect categories, cards, and summary**
+- [ ] **Step 6: Connect categories, cards, and summary**
 
 Category buttons call `im.selectKioskCategory(category)` inside a 0.20-second ease-out animation. Cards call `im.selectKioskMenu(id: item.id)`. A selected card gets a 3-point black outline and red `선택` badge. Summary shows selected name, `1개`, and price; otherwise `선택한 상품`, `0개`, `0원`. The black order button remains disabled because payment is out of scope.
 
-- [ ] **Step 4: Build the centered barrier**
+- [ ] **Step 7: Build the centered barrier**
 
 Dim the menu with black at 36% opacity. Use the approved title/description. Wire:
 
@@ -339,7 +418,7 @@ Button("직원에게 직접 주문하기") {
 
 Preserve the 0.22-second transition, input gating, hover effects, and accessibility labels.
 
-- [ ] **Step 5: Compile and verify the UI**
+- [ ] **Step 8: Compile and verify the UI**
 
 ```bash
 xcodebuild -quiet \
@@ -352,10 +431,12 @@ xcodebuild -quiet \
 
 Expected: exit code 0. Fix only in-scope interface or SwiftUI compile errors.
 
-- [ ] **Step 6: Commit the UI slice**
+- [ ] **Step 9: Commit the catalog and UI slice**
 
 ```bash
-git add "Barrier City/Interaction/KioskOrderView.swift"
+git add "Barrier City/Interaction/KioskMenuCatalog.swift" \
+  "Barrier City/Interaction/KioskOrderView.swift" \
+  Tests/KioskMenuCatalogTests.swift
 git commit -m "feat: redesign barrier cafe kiosk menu"
 ```
 
@@ -395,6 +476,9 @@ xcrun swiftc "Barrier City/Interaction/KioskReachAttemptDetector.swift" Tests/Ki
 xcrun swiftc "Barrier City/Interaction/KioskScreenLayout.swift" Tests/KioskScreenLayoutTests.swift -o /tmp/kiosk-screen-layout-tests
 /tmp/kiosk-screen-layout-tests
 
+xcrun swiftc "Barrier City/Interaction/KioskInteractionState.swift" "Barrier City/Interaction/KioskMenuCatalog.swift" Tests/KioskMenuCatalogTests.swift -o /tmp/kiosk-menu-catalog-tests
+/tmp/kiosk-menu-catalog-tests
+
 xcrun swiftc "Barrier City/ImmersiveSceneCatalog.swift" Tests/ImmersiveSceneCatalogTests.swift -o /tmp/immersive-scene-catalog-tests
 /tmp/immersive-scene-catalog-tests "Packages/RealityKitContent/Sources/RealityKitContent/RealityKitContent.rkassets"
 
@@ -418,7 +502,7 @@ xcrun swiftc \
 /tmp/interaction-flow-regression-tests
 ```
 
-Expected: all twelve executables exit 0 and print PASS.
+Expected: all thirteen executables exit 0 and print PASS.
 
 - [ ] **Step 2: Run DialogueKit**
 
