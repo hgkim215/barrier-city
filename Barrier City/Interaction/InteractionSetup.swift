@@ -166,22 +166,21 @@ enum InteractionSetup {
     private static func updatePanel(_ im: InteractionModel) {
         let trigger = im.activeTrigger
         showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
-                      trigger: trigger, forwardOffset: 0)
+                      trigger: trigger)
         if im.kioskUsesBillboardFallback {
             showBillboard(
                 im.kioskPanelEntity,
                 active: im.kioskMenuVisible && trigger?.kind == .kioskScreen,
-                trigger: trigger,
-                forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+                trigger: trigger)
         } else {
             im.kioskPanelEntity?.isEnabled = im.kioskMenuVisible
         }
     }
 
-    /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, forwardOffset만큼 사용자(세계 원점)
+    /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, 종류별 거리만큼 사용자(세계 원점)
     /// 쪽으로 당긴 뒤 사용자를 향하도록 yaw 빌보드. 빌보드라 접근 각도와 무관하게 정면으로 보인다.
     private static func showBillboard(_ panel: Entity?, active: Bool,
-                                      trigger: ProximityTrigger?, forwardOffset: Float) {
+                                      trigger: ProximityTrigger?) {
         guard let panel else { return }
         guard active, let t = trigger else {
             if panel.isEnabled { panel.isEnabled = false }
@@ -192,15 +191,12 @@ enum InteractionSetup {
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)
         var worldPos = panel.position(relativeTo: nil)
-        // 2) 사용자(세계 원점)를 향하는 수평 방향으로 forwardOffset만큼 당겨 표면 앞으로.
-        let horiz = SIMD2(worldPos.x, worldPos.z)
-        let dist = simd_length(horiz)
-        if forwardOffset > 0, dist > 0.001 {
-            let pulled = horiz - (horiz / dist) * forwardOffset   // 원점 쪽으로 당김
-            worldPos.x = pulled.x
-            worldPos.z = pulled.y
-            panel.setPosition(worldPos, relativeTo: nil)
-        }
+        // 2) 사용자(세계 원점)를 향하는 수평 방향으로 종류별 거리만큼 당겨 표면 앞으로.
+        worldPos = InteractionPanelPlacement.worldPosition(
+            worldPos,
+            toward: .zero,
+            kind: t.kind)
+        panel.setPosition(worldPos, relativeTo: nil)
         // 3) 사용자를 향하도록 yaw 빌보드.
         let yaw = atan2(-worldPos.x, -worldPos.z)
         panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)

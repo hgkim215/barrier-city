@@ -45,6 +45,20 @@ struct InteractionFlowRegressionTests {
             dismissedID: nil)
         expect(approachedVerdict.showID, "door.enter", "half-meter approach reaches the door trigger")
 
+        let doorPanelPosition = InteractionPanelPlacement.worldPosition(
+            SIMD3<Float>(0, 1.7, -6),
+            toward: .zero,
+            kind: .yesNoPrompt)
+        expectNear(doorPanelPosition.y, 1.7, "door prompt preserves panel height")
+        expectNear(doorPanelPosition.z, -5.4, "door prompt moves 0.6 m toward the viewer")
+
+        let kioskPanelPosition = InteractionPanelPlacement.worldPosition(
+            SIMD3<Float>(3, 1.7, 4),
+            toward: .zero,
+            kind: .kioskScreen)
+        expectNear(kioskPanelPosition.x, 2.52, "kiosk offset preserves its 0.8 m behavior on X")
+        expectNear(kioskPanelPosition.z, 3.36, "kiosk offset preserves its 0.8 m behavior on Z")
+
         let kiosk = ProximityTrigger(
             id: "kiosk.order",
             center: SIMD2<Float>(1, 1),

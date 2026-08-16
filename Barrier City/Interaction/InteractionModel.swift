@@ -69,6 +69,8 @@ enum InteractionTuning {
     nonisolated static let exitHysteresis: Float = 0.4
     /// 패널 표시 높이(m, 맵 좌표 y). 앉은 눈높이보다 살짝 위.
     static let panelHeight: Float = 1.7
+    /// 문 패널을 문 표면에서 사용자 쪽으로 당기는 거리(m).
+    nonisolated static let doorPanelForwardOffset: Float = 0.6
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
@@ -83,11 +85,39 @@ enum InteractionTuning {
     /// 키오스크 트리거 진입 반경(m). 휠체어로 접근할 때 스치듯 지나가지 않게 넉넉히.
     static let kioskTriggerRadius: Float = 3.0
     /// 키오스크 패널을 키오스크 표면에서 사용자 쪽으로 당기는 거리(m). 박스에 안 묻히게.
-    static let kioskPanelForwardOffset: Float = 0.8
+    nonisolated static let kioskPanelForwardOffset: Float = 0.8
     /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(Indoor 자산 기준).
     static let kioskFallbackCenter = SIMD2<Float>(0.85, 1.65)
     /// 키오스크 화면 타이틀 겸 트리거 prompt 값.
     static let kioskTitle = "주문하기"
+}
+
+/// 패널 종류별 표면 오프셋을 적용하는 순수 월드 좌표 계산.
+enum InteractionPanelPlacement {
+    nonisolated static func worldPosition(
+        _ worldPosition: SIMD3<Float>,
+        toward viewerPosition: SIMD3<Float>,
+        kind: TriggerKind
+    ) -> SIMD3<Float> {
+        let forwardOffset: Float
+        switch kind {
+        case .yesNoPrompt:
+            forwardOffset = InteractionTuning.doorPanelForwardOffset
+        case .kioskScreen:
+            forwardOffset = InteractionTuning.kioskPanelForwardOffset
+        }
+
+        var result = worldPosition
+        let towardViewer = SIMD2(
+            viewerPosition.x - worldPosition.x,
+            viewerPosition.z - worldPosition.z)
+        let distance = simd_length(towardViewer)
+        guard forwardOffset > 0, distance > 0.001 else { return result }
+        let displacement = towardViewer / distance * forwardOffset
+        result.x += displacement.x
+        result.z += displacement.y
+        return result
+    }
 }
 
 /// evaluate의 판정 결과.
