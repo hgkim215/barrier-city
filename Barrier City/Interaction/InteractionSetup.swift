@@ -52,13 +52,15 @@ enum InteractionSetup {
         im.transitionError = nil
         appModel.npcClerk.resetForOutdoor()
 
-        // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
+        // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.
+        if let panel = attachments.entity(for: "entryPrompt") {
+            panel.isEnabled = false
+            content.add(panel)
+            im.panelEntity = panel
+        }
+
+        // 키오스크와 NPC attachment는 기존대로 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
-            if let panel = attachments.entity(for: "entryPrompt") {
-                panel.isEnabled = false
-                worldRoot.addChild(panel)
-                im.panelEntity = panel
-            }
             if let kiosk = attachments.entity(for: "kioskScreen") {
                 kiosk.isEnabled = false
                 worldRoot.addChild(kiosk)
@@ -178,8 +180,8 @@ enum InteractionSetup {
         }
     }
 
-    /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, 종류별 거리만큼 사용자(세계 원점)
-    /// 쪽으로 당긴 뒤 사용자를 향하도록 yaw 빌보드. 빌보드라 접근 각도와 무관하게 정면으로 보인다.
+    /// 문 패널은 사용자 눈앞 고정 좌표, 키오스크 폴백은 트리거 앞에 배치한 뒤
+    /// 사용자를 향하도록 yaw 빌보드로 만든다.
     private static func showBillboard(_ panel: Entity?, active: Bool,
                                       trigger: ProximityTrigger?) {
         guard let panel else { return }
@@ -188,11 +190,11 @@ enum InteractionSetup {
             return
         }
         if !panel.isEnabled { panel.isEnabled = true }
-        // 1) 트리거 중심 위 눈높이(맵 로컬)에 놓고 월드 위치를 얻는다.
+        // 1) 트리거 중심 위 눈높이에 임시 배치하고 월드 위치를 얻는다.
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)
         var worldPos = panel.position(relativeTo: nil)
-        // 2) 사용자(세계 원점)를 향하는 수평 방향으로 종류별 거리만큼 당겨 표면 앞으로.
+        // 2) 문은 눈앞 고정 좌표, 키오스크는 표면 앞 월드 좌표로 변환한다.
         worldPos = InteractionPanelPlacement.worldPosition(
             worldPos,
             toward: .zero,

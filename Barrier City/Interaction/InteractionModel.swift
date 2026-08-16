@@ -68,10 +68,10 @@ enum InteractionTuning {
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
-    /// 패널 표시 높이(m, 맵 좌표 y). 앉은 눈높이보다 살짝 위.
+    /// 패널 표시 높이(m, 맵 좌표 y). 키오스크 빌보드 폴백에서 사용.
     static let panelHeight: Float = 1.7
-    /// 문 패널을 문 표면에서 사용자 쪽으로 당기는 거리(m).
-    nonisolated static let doorPanelForwardOffset: Float = 0.6
+    /// 문 선택 패널을 사용자 눈앞 정면에 두는 content-root 월드 좌표(m).
+    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.45, -1.2)
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
@@ -100,12 +100,11 @@ enum InteractionPanelPlacement {
         toward viewerPosition: SIMD3<Float>,
         kind: TriggerKind
     ) -> SIMD3<Float> {
-        let forwardOffset: Float
         switch kind {
         case .yesNoPrompt:
-            forwardOffset = InteractionTuning.doorPanelForwardOffset
+            return InteractionTuning.doorPromptEyeFrontPosition
         case .kioskScreen:
-            forwardOffset = InteractionTuning.kioskPanelForwardOffset
+            break
         }
 
         var result = worldPosition
@@ -113,8 +112,8 @@ enum InteractionPanelPlacement {
             viewerPosition.x - worldPosition.x,
             viewerPosition.z - worldPosition.z)
         let distance = simd_length(towardViewer)
-        guard forwardOffset > 0, distance > 0.001 else { return result }
-        let displacement = towardViewer / distance * forwardOffset
+        guard distance > 0.001 else { return result }
+        let displacement = towardViewer / distance * InteractionTuning.kioskPanelForwardOffset
         result.x += displacement.x
         result.z += displacement.y
         return result
@@ -150,7 +149,7 @@ final class InteractionModel {
     var transitionError: String?
 
     // MARK: - 엔티티·구독 참조(관찰 대상 아님)
-    /// 문 예/아니요 패널 attachment 엔티티(worldRoot 자식).
+    /// 문 예/아니요 패널 attachment 엔티티(content root 자식).
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?

@@ -194,7 +194,7 @@ struct ImmersiveView: View {
                              shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
-            // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
+            // [김현기] 사용자 눈앞 입장 패널(content-root 배치는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
                 EntryPromptView()
             }

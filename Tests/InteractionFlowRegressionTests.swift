@@ -46,12 +46,37 @@ struct InteractionFlowRegressionTests {
             dismissedID: nil)
         expect(approachedVerdict.showID, "door.enter", "half-meter approach reaches the door trigger")
 
+        let dismissedVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: "door.enter")
+        expect(dismissedVerdict.showID, nil, "dismissed door prompt stays hidden inside the trigger")
+
+        let leftVerdict = InteractionModel.evaluate(
+            playerX: doorCenter.x,
+            playerZ: doorCenter.y + 2,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: "door.enter")
+        expect(leftVerdict.clearDismissed, true, "leaving the door range clears dismissal")
+
+        let reenteredVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(reenteredVerdict.showID, "door.enter", "re-entering the door range shows the prompt again")
+
         let doorPanelPosition = InteractionPanelPlacement.worldPosition(
-            SIMD3<Float>(0, 1.7, -6),
-            toward: .zero,
+            SIMD3<Float>(8, 3, 9),
+            toward: SIMD3<Float>(4, 1, 2),
             kind: .yesNoPrompt)
-        expectNear(doorPanelPosition.y, 1.7, "door prompt preserves panel height")
-        expectNear(doorPanelPosition.z, -5.4, "door prompt moves 0.6 m toward the viewer")
+        expectNear(doorPanelPosition.x, 0, "door prompt stays horizontally centered on the user")
+        expectNear(doorPanelPosition.y, 1.45, "door prompt stays at the seated eye line")
+        expectNear(doorPanelPosition.z, -1.2, "door prompt stays at a comfortable eye-front distance")
 
         let kioskPanelPosition = InteractionPanelPlacement.worldPosition(
             SIMD3<Float>(3, 1.7, 4),

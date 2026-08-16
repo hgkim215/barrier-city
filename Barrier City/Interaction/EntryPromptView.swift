@@ -2,8 +2,8 @@
 //  EntryPromptView.swift
 //  Barrier City
 //
-//  근접 트리거가 활성화되면 문 앞 공간에 뜨는 예/아니요 패널.
-//  RealityView attachment로 렌더되어 worldRoot 자식 엔티티로 배치된다.
+//  근접 트리거가 활성화되면 사용자 눈앞에 뜨는 예/아니요 패널.
+//  RealityView attachment로 렌더되어 content root에 배치된다.
 //
 
 import SwiftUI
