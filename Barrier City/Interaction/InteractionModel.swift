@@ -60,16 +60,18 @@ struct ProximityTrigger: Identifiable, Equatable {
 enum InteractionTuning {
     /// 문 트리거 진입 반경(m)
     static let doorTriggerRadius: Float = 2.5
+    /// 카페 문에서 건물 바깥 방향으로 떨어진 Outdoor 시작 거리(m).
+    /// 현재 authored 외부 바닥 안에 휠체어 전체가 놓이는 값이다.
+    static let outdoorSpawnDistanceFromDoor: Float = 1.25
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
     /// 패널 표시 높이(m, 맵 좌표 y). 앉은 눈높이보다 살짝 위.
     static let panelHeight: Float = 1.7
-    /// DOOR1 프림을 못 찾을 때의 문 트리거 폴백 좌표(맵 좌표 x, z).
-    /// _coffee 건물이 (0, 0.3, 20)에 배치돼 있어 문은 그 앞쪽으로 추정. 수동 검증에서 확정.
-    static let doorFallbackCenter = SIMD2<Float>(0, 15)
+    /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
+    static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
-    /// 실제 포즈는 SceneSwitcher가 DOOR1→Kiosk 방향으로 동적으로 계산한다.
+    /// 실제 포즈는 SceneSwitcher가 Door→Kiosk 방향으로 동적으로 계산한다.
     static let indoorSpawnX: Float = 0
     static let indoorSpawnZ: Float = -4.5
     static let indoorSpawnHeading: Float = .pi

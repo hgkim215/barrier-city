@@ -25,6 +25,29 @@ private final class WheelchairState: OutdoorSessionResettable {
 @MainActor
 struct OutdoorSessionStartTests {
     static func main() {
+        let outside = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: SIMD2<Float>(0, -6),
+            cafeCenter: .zero,
+            fallbackDoorCenter: SIMD2<Float>(0, -6),
+            distanceFromDoor: 1.25)
+        expectNear(outside.x, 0, "outside spawn preserves centered door X")
+        expectNear(outside.y, -7.25, "outside spawn is beyond the cafe door")
+
+        let diagonalOutside = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: SIMD2<Float>(3, 4),
+            cafeCenter: .zero,
+            fallbackDoorCenter: SIMD2<Float>(0, -6),
+            distanceFromDoor: 2)
+        expectNear(diagonalOutside.x, 4.2, "diagonal outside spawn follows door direction on X")
+        expectNear(diagonalOutside.y, 5.6, "diagonal outside spawn follows door direction on Z")
+
+        let fallbackOutside = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: .zero,
+            cafeCenter: .zero,
+            fallbackDoorCenter: SIMD2<Float>(0, -6),
+            distanceFromDoor: 1)
+        expectNear(fallbackOutside.y, -1, "coincident cafe and door use authored fallback")
+
         let positiveZ = OutdoorSessionStart.pose(
             startPosition: .zero,
             doorCenter: SIMD2<Float>(0, 15),

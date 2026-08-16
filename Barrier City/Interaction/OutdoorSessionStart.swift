@@ -14,6 +14,23 @@ protocol OutdoorSessionResettable: AnyObject {
 }
 
 enum OutdoorSessionStart {
+    nonisolated static func positionOutsideCafe(
+        doorCenter: SIMD2<Float>,
+        cafeCenter: SIMD2<Float>,
+        fallbackDoorCenter: SIMD2<Float>,
+        distanceFromDoor: Float
+    ) -> SIMD2<Float> {
+        var outward = doorCenter - cafeCenter
+        if simd_length_squared(outward) < 0.000001 {
+            outward = fallbackDoorCenter - cafeCenter
+        }
+        if simd_length_squared(outward) < 0.000001 {
+            outward = SIMD2<Float>(0, -1)
+        }
+        return doorCenter
+            + simd_normalize(outward) * max(0, distanceFromDoor)
+    }
+
     nonisolated static func pose(
         startPosition: SIMD2<Float>,
         doorCenter: SIMD2<Float>,
