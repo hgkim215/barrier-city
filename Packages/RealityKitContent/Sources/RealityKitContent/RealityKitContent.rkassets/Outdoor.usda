@@ -48,7 +48,7 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        references = @Door.usdz@
+        references = @Furnitures/Door.usdz@
     )
     {
         rel material:binding = </Root/door> (
@@ -80,7 +80,7 @@ def Xform "Root"
         active = true
     )
     {
-        reorder nameChildren = ["OutdoorCollision", "Cube", "Cube_1"]
+        reorder nameChildren = ["Cube", "Cube_1"]
         def Cube "Cube" (
             active = true
             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -94,23 +94,6 @@ def Xform "Root"
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
 
-        def "OutdoorCollision" (
-            active = true
-            prepend apiSchemas = ["MaterialBindingAPI"]
-            customData = {
-                float3 rotationEulerHint = (-1.5707964, 0, 0)
-            }
-            references = @OutdoorCollision.usdz@
-        )
-        {
-            rel material:binding = </Root/building> (
-                bindMaterialAs = "weakerThanDescendants"
-            )
-            quatf xformOp:orient = (0.70710677, -0.7071067, 0, 0)
-            float3 xformOp:scale = (0.99999994, 0.99999994, 0.99999994)
-            float3 xformOp:translate = (0, 0.003, 0)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
     }
 
     def RealityKitTimeline "Timeline"
@@ -120,4 +103,3 @@ def Xform "Root"
         }
     }
 }
-
