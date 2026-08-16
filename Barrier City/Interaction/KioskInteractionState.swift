@@ -44,11 +44,6 @@ struct KioskInteractionState: Equatable {
         self.isGuideLocked = isGuideLocked
     }
 
-    @discardableResult
-    mutating func attempt(_ source: KioskAttemptSource) -> Bool {
-        attemptRestrictedCategory(source)
-    }
-
     mutating func selectCategory(
         _ category: KioskCategory,
         source: KioskAttemptSource

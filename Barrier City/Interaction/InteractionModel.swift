@@ -204,11 +204,6 @@ final class InteractionModel {
         }
     }
 
-    @discardableResult
-    func attemptKioskUse(_ source: KioskAttemptSource) -> Bool {
-        kioskState.attempt(source)
-    }
-
     func selectKioskCategory(
         _ category: KioskCategory,
         source: KioskAttemptSource = .gazePinch

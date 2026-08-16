@@ -129,7 +129,7 @@ struct KioskOrderView: View {
 
     private func menuCard(_ item: CafeMenuItem, interactionModel im: InteractionModel) -> some View {
         Button {
-            _ = im.attemptKioskUse(.gazePinch)
+            _ = im.selectKioskMenu(id: item.id)
         } label: {
             VStack(spacing: 8) {
                 ZStack(alignment: .topTrailing) {

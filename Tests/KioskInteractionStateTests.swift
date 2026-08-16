@@ -31,7 +31,7 @@ struct KioskInteractionStateTests {
             isGuideLocked: false)
         expect(state.menuVisible, true, "Indoor keeps menu visible while far")
         expect(state.inputEnabled, false, "far kiosk is display-only")
-        expect(state.attempt(.gazePinch), false, "far attempt ignored")
+        expect(state.attemptRestrictedCategory(.gazePinch), false, "far restricted-category attempt ignored")
 
         state.updateContext(
             isIndoor: true,
