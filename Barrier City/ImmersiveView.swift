@@ -1,6 +1,7 @@
 import SwiftUI
 import RealityKit
 import RealityKitContent
+import OSLog
 
 /// RealityView 클로저가 직접 갱신하는 렌더링 참조.
 /// SwiftUI 관찰 대상이 아닌 참조 타입에 보관해 view update 도중 @State를 변경하지 않는다.
@@ -21,6 +22,10 @@ private final class ImmersiveRuntimeState {
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "ImmersiveScene")
 
     @State private var runtime = ImmersiveRuntimeState()
     @State private var handTracker = HandTrackingManager()
@@ -54,24 +59,36 @@ struct ImmersiveView: View {
             let worldRoot = Entity()
             worldRoot.name = "worldRoot"
             worldRoot.components.set(WheelchairComponent())
-            if let cafeVisible = try? await Entity(named: "Map", in: realityKitContentBundle) {
+            do {
+                let cafeVisible = try await Entity(
+                    named: ImmersiveSceneCatalog.outdoor,
+                    in: realityKitContentBundle)
                 Self.stripPhysics(cafeVisible)    // USDA에 딸려온 RigidBody 제거(메시가 떨어지지 않게)
                 Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
                 worldRoot.addChild(cafeVisible)
                 InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
+            } catch {
+                Self.logger.error(
+                    "Visible outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
             }
             content.add(worldRoot)
             model.worldRoot = worldRoot
 
             // 시뮬 공간(고정·투명): 같은 카페의 콜리전 사본 + 캐릭터 캡슐.
             // 캡슐이 여기서 실제로 움직이며 벽·경사·턱에 부딪힌다. 시각은 worldRoot가 담당.
-            if let cafeCollision = try? await Entity(named: "Map", in: realityKitContentBundle) {
+            do {
+                let cafeCollision = try await Entity(
+                    named: ImmersiveSceneCatalog.outdoor,
+                    in: realityKitContentBundle)
                 Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
                 let n = await Self.addStaticCollision(cafeCollision)
                 model.motion.collisionShapeCount = n
                 Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
                 content.add(cafeCollision)
                 InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
+            } catch {
+                Self.logger.error(
+                    "Collision outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
             }
 
             // [디버그] 무조건 착지하는 단순 바닥 콜리전(컨트롤러 동작 확인용).
