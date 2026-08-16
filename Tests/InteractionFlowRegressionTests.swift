@@ -101,8 +101,12 @@ struct InteractionFlowRegressionTests {
             isGuideLocked: false)
         expect(interactions.kioskMenuVisible, true, "Indoor menu remains visible")
         expect(interactions.kioskInputEnabled, true, "Mission 2 proximity enables input")
-        expect(interactions.attemptKioskUse(.gazePinch), true, "first kiosk attempt accepted")
-        expect(interactions.kioskBarrierVisible, true, "attempt opens accessibility barrier")
+        expect(interactions.selectKioskCategory(.coffee), .selected, "general category switches")
+        expect(interactions.kioskSelectedCategory, .coffee, "coffee remains selected")
+        expect(interactions.kioskBarrierVisible, false, "general category stays usable")
+        expect(interactions.selectKioskCategory(.other), .blocked, "other exposes barrier")
+        expect(interactions.kioskSelectedCategory, .coffee, "blocked tab does not select")
+        expect(interactions.kioskBarrierVisible, true, "other opens barrier")
 
         expect(interactions.requestKioskStaffHelp(), true, "first help request accepted")
         expect(interactions.requestKioskStaffHelp(), false, "help request is idempotent")
@@ -125,6 +129,9 @@ struct InteractionFlowRegressionTests {
         interactions.resetKioskSession()
         expect(interactions.kioskMenuVisible, false, "session reset clears kiosk visibility")
         expect(interactions.kioskBarrierVisible, false, "session reset clears barrier state")
+        expect(interactions.kioskSelectedCategory, .best, "session reset restores the best category")
+        expect(interactions.kioskSelectedMenuID, nil, "session reset clears selected menu")
 
+        print("InteractionFlowRegressionTests: PASS")
     }
 }

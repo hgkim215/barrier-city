@@ -185,6 +185,8 @@ final class InteractionModel {
     var kioskMenuVisible: Bool { kioskState.menuVisible }
     var kioskInputEnabled: Bool { kioskState.inputEnabled }
     var kioskBarrierVisible: Bool { kioskState.barrierVisible }
+    var kioskSelectedCategory: KioskCategory { kioskState.selectedCategory }
+    var kioskSelectedMenuID: String? { kioskState.selectedMenuID }
 
     func updateKioskContext(
         isIndoor: Bool,
@@ -205,6 +207,28 @@ final class InteractionModel {
     @discardableResult
     func attemptKioskUse(_ source: KioskAttemptSource) -> Bool {
         kioskState.attempt(source)
+    }
+
+    func selectKioskCategory(
+        _ category: KioskCategory,
+        source: KioskAttemptSource = .gazePinch
+    ) -> KioskCategorySelectionResult {
+        kioskState.selectCategory(category, source: source)
+    }
+
+    @discardableResult
+    func selectKioskMenu(id: String) -> Bool {
+        kioskState.selectMenu(id: id)
+    }
+
+    @discardableResult
+    func attemptRestrictedKioskCategory(_ source: KioskAttemptSource) -> Bool {
+        kioskState.attemptRestrictedCategory(source)
+    }
+
+    @discardableResult
+    func dismissKioskBarrier() -> Bool {
+        kioskState.dismissBarrier()
     }
 
     @discardableResult
@@ -251,7 +275,7 @@ final class InteractionModel {
             halfWidth: halfWidth,
             halfHeight: halfHeight)
         if attempted {
-            _ = attemptKioskUse(.handReach)
+            _ = attemptRestrictedKioskCategory(.handReach)
         }
     }
 

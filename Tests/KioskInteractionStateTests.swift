@@ -10,7 +10,9 @@ private func expect<T: Equatable>(_ actual: T, _ expected: T, _ message: String)
 struct KioskInteractionStateTests {
     static func main() {
         menuIsVisibleThroughoutIndoorButInputIsGated()
-        bothAttemptSourcesConvergeAndDeduplicate()
+        generalCategoriesSwitchAndMenusSelect()
+        otherCategoryBlocksWithoutSelecting()
+        dismissKeepsMissionRetryable()
         helpRequestLocksInputAndEmitsOnce()
         sessionResetClearsAllKioskState()
 
@@ -54,23 +56,37 @@ struct KioskInteractionStateTests {
         expect(state.inputEnabled, true, "near unlocked Mission 2 enables input")
     }
 
-    private static func bothAttemptSourcesConvergeAndDeduplicate() {
-        var gaze = enabledState()
-        expect(gaze.attempt(.gazePinch), true, "first gaze attempt accepted")
-        expect(gaze.barrierVisible, true, "gaze attempt opens barrier")
-        expect(gaze.inputEnabled, false, "open barrier debounces input")
-        expect(gaze.attempt(.handReach), false, "hand attempt deduplicates after gaze")
+    private static func generalCategoriesSwitchAndMenusSelect() {
+        var state = enabledState()
+        expect(state.selectedCategory, .best, "best is selected initially")
+        expect(state.selectCategory(.coffee, source: .gazePinch), .selected, "coffee switches")
+        expect(state.selectedCategory, .coffee, "coffee remains selected")
+        expect(state.barrierVisible, false, "general category stays usable")
+        expect(state.selectMenu(id: "cafe-latte"), true, "menu can be selected")
+        expect(state.selectedMenuID, "cafe-latte", "menu id is stored")
+    }
 
-        var hand = enabledState()
-        expect(hand.attempt(.handReach), true, "first hand attempt accepted")
-        expect(hand.barrierVisible, true, "hand attempt opens same barrier")
-        expect(hand.attempt(.gazePinch), false, "gaze attempt deduplicates after hand")
+    private static func otherCategoryBlocksWithoutSelecting() {
+        var state = enabledState()
+        _ = state.selectCategory(.coffee, source: .gazePinch)
+        expect(state.selectCategory(.other, source: .gazePinch), .blocked, "other is blocked")
+        expect(state.selectedCategory, .coffee, "previous category remains")
+        expect(state.barrierVisible, true, "barrier opens")
+        expect(state.attemptRestrictedCategory(.handReach), false, "second source deduplicates")
+    }
+
+    private static func dismissKeepsMissionRetryable() {
+        var state = enabledState()
+        _ = state.selectCategory(.other, source: .gazePinch)
+        expect(state.dismissBarrier(), true, "barrier closes")
+        expect(state.helpRequested, false, "dismiss does not request help")
+        expect(state.inputEnabled, true, "retry is enabled")
     }
 
     private static func helpRequestLocksInputAndEmitsOnce() {
         var state = enabledState()
         expect(state.requestStaffHelp(), false, "help cannot emit before a barrier attempt")
-        _ = state.attempt(.gazePinch)
+        _ = state.selectCategory(.other, source: .gazePinch)
         expect(state.requestStaffHelp(), true, "first help request emits")
         expect(state.barrierVisible, false, "help closes barrier card")
         expect(state.helpRequested, true, "help locks this immersive session")
@@ -92,7 +108,9 @@ struct KioskInteractionStateTests {
 
     private static func sessionResetClearsAllKioskState() {
         var state = enabledState()
-        _ = state.attempt(.handReach)
+        _ = state.selectCategory(.coffee, source: .gazePinch)
+        _ = state.selectMenu(id: "cafe-latte")
+        _ = state.selectCategory(.other, source: .handReach)
         _ = state.requestStaffHelp()
 
         state.reset()
@@ -101,6 +119,8 @@ struct KioskInteractionStateTests {
         expect(state.inputEnabled, false, "reset disables input")
         expect(state.barrierVisible, false, "reset closes barrier")
         expect(state.helpRequested, false, "reset clears session help lock")
+        expect(state.selectedCategory, .best, "reset restores the best category")
+        expect(state.selectedMenuID, nil, "reset clears selected menu")
     }
 
     private static func enabledState() -> KioskInteractionState {
