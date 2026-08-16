@@ -6,10 +6,45 @@ private func expect<T: Equatable>(_ actual: T, _ expected: T, _ message: String)
     }
 }
 
+private func expectNear(_ actual: Float, _ expected: Float, _ message: String) {
+    guard abs(actual - expected) < 0.0001 else {
+        fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
+    }
+}
+
 @main
 @MainActor
 struct InteractionFlowRegressionTests {
     static func main() {
+        let doorCenter = SIMD2<Float>(0, -6)
+        let outdoorStart = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: doorCenter,
+            cafeCenter: .zero,
+            fallbackDoorCenter: doorCenter,
+            distanceFromDoor: InteractionTuning.outdoorSpawnDistanceFromDoor)
+        expectNear(outdoorStart.y, -9, "outdoor spawn remains 3 m beyond the door")
+
+        let door = ProximityTrigger(
+            id: "door.enter",
+            center: doorCenter,
+            radius: InteractionTuning.doorTriggerRadius,
+            prompt: "안으로 입장하시겠습니까?")
+        let initialVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(initialVerdict.showID, nil, "door prompt stays hidden at the outdoor spawn")
+
+        let approachedVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(approachedVerdict.showID, "door.enter", "half-meter approach reaches the door trigger")
+
         let kiosk = ProximityTrigger(
             id: "kiosk.order",
             center: SIMD2<Float>(1, 1),

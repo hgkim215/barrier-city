@@ -62,8 +62,8 @@ enum InteractionTuning {
     /// 문 트리거 진입 반경(m)
     static let doorTriggerRadius: Float = 2.5
     /// 카페 문에서 건물 바깥 방향으로 떨어진 Outdoor 시작 거리(m).
-    /// 현재 authored 외부 바닥 안에 휠체어 전체가 놓이는 값이다.
-    static let outdoorSpawnDistanceFromDoor: Float = 1.25
+    /// 문 트리거 바깥에서 시작해 약 0.5m 접근한 뒤 알림이 활성화된다.
+    static let outdoorSpawnDistanceFromDoor: Float = 3.0
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
