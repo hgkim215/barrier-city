@@ -1,27 +1,13 @@
 {
   "pathsToIds" : {
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/GridMaterial.usda" : "CB766F92-EE55-4A63-9401-E7B8C009764D",
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Immersive.usda" : "65F6F990-A780-4474-B78B-572E0E4E273D",
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Scene.usda" : "0A9B4653-B11E-4D6A-850E-C6FCB621626C",
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Untitled Scene.usda" : "D560BB77-AAF3-4BDE-B7C4-989332A4688B",
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Untitled%20Scene.usda" : "6B7D26C6-B578-443A-A0BF-DD87961062E2",
-    "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/furniture\/Untitled%20Scene.usda" : "B0EE8096-E15B-4635-B950-5E6EE8EDE9F0",
-    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/GridMaterial.usda" : "66168B71-AB05-424E-8B6C-D33D6E61B08F",
-    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Immersive.usda" : "AF09ED6F-1707-48FD-8720-65B998362C09",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Indoor.usda" : "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Map.usda" : "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD",
-    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Outdoor.usda" : "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Scene.usda" : "D66134B1-3681-4A8E-AFE5-29F257229F3B",
-    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Untitled Scene.usda" : "F75F0145-E1EB-493B-9330-C42C06BD35D5"
+    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Outdoor.usda" : "7808C05B-485F-4339-ADE8-F7BA9133C11B"
   },
   "projectID" : 4815832620845530990,
   "uuidToIntID" : {
     "64AB2E87-1ACE-441D-A250-4AD0CA01E1BD" : 8903777739564549412,
-    "6B7D26C6-B578-443A-A0BF-DD87961062E2" : -4517864301600670885,
     "7808C05B-485F-4339-ADE8-F7BA9133C11B" : -735971796591842786,
-    "AF09ED6F-1707-48FD-8720-65B998362C09" : 5875154184719619959,
-    "B0EE8096-E15B-4635-B950-5E6EE8EDE9F0" : -5478950874968997704,
-    "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66" : 9177250681377678408,
-    "F75F0145-E1EB-493B-9330-C42C06BD35D5" : 8146331488205393762
+    "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66" : 9177250681377678408
   }
 }
