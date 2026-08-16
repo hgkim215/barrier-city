@@ -84,7 +84,10 @@ struct ImmersiveView: View {
 
             // authored 장면은 벽·장애물 충돌만 제공하므로 공통 바닥 충돌을 유지한다.
             // 윗면이 y=0.1(보이는 바닥)과 맞도록 두께 0.4 박스를 y=-0.1에 둔다.
-            let floorShape = ShapeResource.generateBox(width: 16, height: 0.4, depth: 16)
+            let floorShape = ShapeResource.generateBox(
+                width: InteractionTuning.outdoorGroundPlaneSize,
+                height: 0.4,
+                depth: InteractionTuning.outdoorGroundPlaneSize)
             let floorCol = Entity()
             floorCol.name = "groundPlaneCollision"
             floorCol.position = [0, -0.1, 0]

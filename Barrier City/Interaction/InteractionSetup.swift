@@ -86,7 +86,8 @@ enum InteractionSetup {
             doorCenter: center,
             cafeCenter: cafeCenter,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
-            distanceFromDoor: InteractionTuning.outdoorSpawnDistanceFromDoor)
+            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
         OutdoorSessionStart.reset(
             appModel,
             startPosition: startPosition,

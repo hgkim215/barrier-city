@@ -21,8 +21,9 @@ struct InteractionFlowRegressionTests {
             doorCenter: doorCenter,
             cafeCenter: .zero,
             fallbackDoorCenter: doorCenter,
-            distanceFromDoor: InteractionTuning.outdoorSpawnDistanceFromDoor)
-        expectNear(outdoorStart.y, -9, "outdoor spawn remains 3 m beyond the door")
+            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
+        expectNear(outdoorStart.y, -7.5, "outdoor spawn stays inside the supported floor edge")
 
         let door = ProximityTrigger(
             id: "door.enter",

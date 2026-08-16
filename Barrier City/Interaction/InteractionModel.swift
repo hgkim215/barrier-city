@@ -60,10 +60,11 @@ struct ProximityTrigger: Identifiable, Equatable {
 /// 인터랙션 튜닝 상수 단일 진실원(시뮬레이터에서 보고 조정).
 enum InteractionTuning {
     /// 문 트리거 진입 반경(m)
-    static let doorTriggerRadius: Float = 2.5
-    /// 카페 문에서 건물 바깥 방향으로 떨어진 Outdoor 시작 거리(m).
-    /// 문 트리거 바깥에서 시작해 약 0.5m 접근한 뒤 알림이 활성화된다.
-    static let outdoorSpawnDistanceFromDoor: Float = 3.0
+    static let doorTriggerRadius: Float = 1.1
+    /// Outdoor 공통 바닥 충돌체의 한 변 길이(m).
+    static let outdoorGroundPlaneSize: Float = 16
+    /// 휠체어 전체가 바닥에 지지되도록 리스폰 경계에서 안쪽으로 두는 여유(m).
+    static let outdoorSpawnSafetyMargin: Float = 0.5
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
