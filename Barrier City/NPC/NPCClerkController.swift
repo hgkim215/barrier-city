@@ -304,8 +304,8 @@ final class NPCClerkController {
 
         var home = NPCClerkTuning.fallbackStaffHome
         if let marker = indoorMap.findEntity(named: "Human") {
-            let center = marker.visualBounds(relativeTo: worldRoot).center
-            home = SIMD2(center.x, center.z)
+            let position = marker.position(relativeTo: worldRoot)
+            home = SIMD2(position.x, position.z)
         }
 
         var service = NPCClerkTuning.fallbackServicePoint
