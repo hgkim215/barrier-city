@@ -69,16 +69,27 @@ enum InteractionSetup {
             }
         }
 
-        // 2) 문 트리거 등록: 로드된 맵에서 DOOR1 프림의 맵 좌표를 찾고, 실패 시 폴백 상수.
+        // 2) 문 트리거 등록: 최신 Outdoor의 Door 프림 좌표를 찾고, 실패 시 authored 폴백 사용.
         var center = InteractionTuning.doorFallbackCenter
+        var cafeCenter = SIMD2<Float>.zero
         if let worldRoot = appModel.worldRoot,
-           let door = im.visibleMap?.findEntity(named: "DOOR1") {
+           let door = im.visibleMap?.findEntity(named: "Door") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
         }
+        if let worldRoot = appModel.worldRoot,
+           let cafe = im.visibleMap?.findEntity(named: "Outdoor") {
+            let bounds = cafe.visualBounds(relativeTo: worldRoot)
+            cafeCenter = SIMD2(bounds.center.x, bounds.center.z)
+        }
+        let startPosition = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: center,
+            cafeCenter: cafeCenter,
+            fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
+            distanceFromDoor: InteractionTuning.outdoorSpawnDistanceFromDoor)
         OutdoorSessionStart.reset(
             appModel,
-            startPosition: .zero,
+            startPosition: startPosition,
             doorCenter: center,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter)
         im.triggers = [ProximityTrigger(

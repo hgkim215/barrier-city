@@ -145,7 +145,7 @@ final class NPCClerkController {
         dialogue.reset()
     }
 
-    /// Indoor의 authoring marker(BarTable/Human/AreaK)로 동선과 계산대 위치를 구성한다.
+    /// Indoor의 authoring marker(BarTable/AreaK)로 동선과 계산대 위치를 구성한다.
     func enterIndoor(worldRoot: Entity,
                      indoorMap: Entity,
                      kioskCenter: SIMD2<Float>,
@@ -175,9 +175,6 @@ final class NPCClerkController {
         workAreaMax = placement.workAreaMax
         workTarget = nil
         workPauseRemaining = randomWorkPause()
-
-        // Indoor의 Human은 위치 마커로만 사용하고 중복 렌더링은 숨긴다.
-        indoorMap.findEntity(named: "Human")?.isEnabled = false
 
         // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle/Walk는
         // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
@@ -296,16 +293,12 @@ final class NPCClerkController {
                                kioskCenter: SIMD2<Float>) -> Placement {
         var areaMin = NPCClerkTuning.fallbackAreaMin
         var areaMax = NPCClerkTuning.fallbackAreaMax
+        var home = NPCClerkTuning.fallbackStaffHome
         if let area = indoorMap.findEntity(named: "AreaK") {
             let bounds = area.visualBounds(relativeTo: worldRoot)
             areaMin = SIMD2(bounds.min.x, bounds.min.z)
             areaMax = SIMD2(bounds.max.x, bounds.max.z)
-        }
-
-        var home = NPCClerkTuning.fallbackStaffHome
-        if let marker = indoorMap.findEntity(named: "Human") {
-            let center = marker.visualBounds(relativeTo: worldRoot).center
-            home = SIMD2(center.x, center.z)
+            home = SIMD2(bounds.center.x, bounds.center.z)
         }
 
         var service = NPCClerkTuning.fallbackServicePoint

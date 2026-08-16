@@ -59,43 +59,34 @@ struct ImmersiveView: View {
             let worldRoot = Entity()
             worldRoot.name = "worldRoot"
             worldRoot.components.set(WheelchairComponent())
-            do {
-                let cafeVisible = try await Entity(
-                    named: ImmersiveSceneCatalog.outdoor,
-                    in: realityKitContentBundle)
-                Self.stripPhysics(cafeVisible)    // USDA에 딸려온 RigidBody 제거(메시가 떨어지지 않게)
-                Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
-                worldRoot.addChild(cafeVisible)
-                InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
-            } catch {
-                Self.logger.error(
-                    "Visible outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
-            }
             content.add(worldRoot)
             model.worldRoot = worldRoot
 
-            // 시뮬 공간(고정·투명): 같은 카페의 콜리전 사본 + 캐릭터 캡슐.
-            // 캡슐이 여기서 실제로 움직이며 벽·경사·턱에 부딪힌다. 시각은 worldRoot가 담당.
             do {
-                let cafeCollision = try await Entity(
+                let outdoorVisible = try await Entity(
                     named: ImmersiveSceneCatalog.outdoor,
                     in: realityKitContentBundle)
-                Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
-                let n = await Self.addStaticCollision(cafeCollision)
+                let outdoorCollision = outdoorVisible.clone(recursive: true)
+
+                SceneEntityPreparation.prepareVisible(outdoorVisible)
+                worldRoot.addChild(outdoorVisible)
+                InteractionModel.shared.visibleMap = outdoorVisible
+
+                // 시뮬 공간(고정·투명): 동일한 Outdoor의 authored collision 사본.
+                let n = await SceneEntityPreparation.prepareCollision(outdoorCollision)
                 model.motion.collisionShapeCount = n
-                Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
-                content.add(cafeCollision)
-                InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
+                content.add(outdoorCollision)
+                InteractionModel.shared.collisionMap = outdoorCollision
             } catch {
                 Self.logger.error(
-                    "Collision outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
+                    "Outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
             }
 
-            // [디버그] 무조건 착지하는 단순 바닥 콜리전(컨트롤러 동작 확인용).
-            // 윗면이 y=0.1(보이는 바닥)과 맞게 두께 0.4 박스를 y=-0.1에.
+            // authored 장면은 벽·장애물 충돌만 제공하므로 공통 바닥 충돌을 유지한다.
+            // 윗면이 y=0.1(보이는 바닥)과 맞도록 두께 0.4 박스를 y=-0.1에 둔다.
             let floorShape = ShapeResource.generateBox(width: 16, height: 0.4, depth: 16)
             let floorCol = Entity()
-            floorCol.name = "debugFloorCollision"
+            floorCol.name = "groundPlaneCollision"
             floorCol.position = [0, -0.1, 0]
             var floorColC = CollisionComponent(shapes: [floorShape])
             floorColC.filter = CollisionFilter(group: AppModel.groundGroup, mask: .all)
@@ -284,167 +275,12 @@ struct ImmersiveView: View {
         e.components.set(comp)
     }
 
-    // MARK: - USDA 정적 콜리전(베이크용)
-
-    /// 이름에 "collision"이 들어간 엔티티(또는 그 하위)의 메시에만 정적 콜리전을 부여한다.
-    /// → 디테일 모델은 시각용, 단순 도형(이름에 collision)은 충돌용으로 분리. 부여 수 반환.
-    @discardableResult
-    static func addStaticCollision(_ entity: Entity, inherited: Bool = false) async -> Int {
-        let isCollider = inherited || entity.name.lowercased().contains("collision")
-        var count = 0
-        if isCollider,
-           let model = entity.components[ModelComponent.self],
-           let shape = try? await ShapeResource.generateStaticMesh(from: model.mesh) {
-            var col = CollisionComponent(shapes: [shape])
-            col.filter = CollisionFilter(group: AppModel.groundGroup, mask: .all)
-            entity.components.set(col)
-            count += 1
-        }
-        for child in entity.children {
-            count += await addStaticCollision(child, inherited: isCollider)
-        }
-        return count
-    }
-
-    /// USDA에 딸려온 물리(RigidBody)/콜리전을 제거 — 물리·충돌은 코드에서만 관리.
-    static func stripPhysics(_ entity: Entity) {
-        entity.components.remove(PhysicsBodyComponent.self)
-        entity.components.remove(PhysicsMotionComponent.self)
-        entity.components.remove(CollisionComponent.self)
-        for child in entity.children { stripPhysics(child) }
-    }
-
-    /// 시각 인스턴스에서 충돌용(이름에 collision) 도형의 렌더 컴포넌트를 제거한다.
-    /// Entity 자체를 비활성화하면 CollisionComponent도 꺼지므로 시각 요소만 제거해야 한다.
-    static func hideColliders(_ entity: Entity, inherited: Bool = false) {
-        let isCollider = inherited || entity.name.lowercased().contains("collision")
-        if isCollider {
-            entity.components.remove(ModelComponent.self)
-        }
-        for child in entity.children {
-            hideColliders(child, inherited: isCollider)
-        }
-    }
-
-    /// 충돌 전용 복제본에서 모든 렌더 컴포넌트를 제거한다.
-    /// addStaticCollision 이후 호출하면 생성된 충돌 형상과 transform 계층은 그대로 남는다.
-    static func stripRendering(_ entity: Entity) {
-        entity.components.remove(ModelComponent.self)
-        for child in entity.children { stripRendering(child) }
-    }
-
     /// 엔티티와 모든 하위 모델에 접지 그림자를 부여(바닥 그림자).
     private static func addGroundingShadow(_ entity: Entity) {
         entity.components.set(GroundingShadowComponent(castsShadow: true))
         for child in entity.children {
             addGroundingShadow(child)
         }
-    }
-
-    // MARK: - 휠체어 본체(앉아 있는 느낌)
-
-    /// 좌석·등받이·프레임·발받침·앞 캐스터·다리를 도형으로 조립.
-    /// 사용자가 -Z 방향을 바라보고 앉아 있다고 가정. (+Z=뒤, -Z=앞)
-    /// 좌표는 큰 바퀴(y≈0.45)에 맞춰 엉덩이/허벅지 높이를 기준으로 배치.
-    private static func makeWheelchairBody() -> Entity {
-        let root = Entity()
-        root.name = "wheelchairBody"
-
-        // 재질
-        let frameMat = SimpleMaterial(color: .init(white: 0.18, alpha: 1), isMetallic: true)
-        let seatMat  = SimpleMaterial(color: .init(red: 0.10, green: 0.10, blue: 0.12, alpha: 1), isMetallic: false)
-        let legMat   = SimpleMaterial(color: .init(red: 0.20, green: 0.28, blue: 0.45, alpha: 1), isMetallic: false) // 청바지색
-        let shoeMat  = SimpleMaterial(color: .init(white: 0.08, alpha: 1), isMetallic: false)
-        let tireMat  = SimpleMaterial(color: .init(white: 0.10, alpha: 1), isMetallic: false)
-
-        func box(_ w: Float, _ h: Float, _ d: Float, _ mat: SimpleMaterial, _ pos: SIMD3<Float>) -> ModelEntity {
-            let e = ModelEntity(mesh: .generateBox(width: w, height: h, depth: d, cornerRadius: 0.01), materials: [mat])
-            e.position = pos
-            return e
-        }
-        func cyl(_ r: Float, _ h: Float, _ mat: SimpleMaterial, _ pos: SIMD3<Float>, axis: SIMD3<Float> = [0,1,0]) -> ModelEntity {
-            let e = ModelEntity(mesh: .generateCylinder(height: h, radius: r), materials: [mat])
-            e.position = pos
-            if axis.x == 1 { e.orientation = simd_quatf(angle: .pi/2, axis: [0,0,1]) }      // 수평(좌우축)
-            else if axis.z == 1 { e.orientation = simd_quatf(angle: .pi/2, axis: [1,0,0]) } // 수평(앞뒤축)
-            return e
-        }
-
-        // 좌석(엉덩이 받침): 큰 바퀴 사이, 약간 아래.
-        root.addChild(box(0.46, 0.06, 0.44, seatMat, [0, 0.40, -0.05]))
-        // 등받이: 뒤쪽에 세움.
-        root.addChild(box(0.46, 0.5, 0.05, seatMat, [0, 0.63, 0.16]))
-        // 좌우 아래 프레임 봉
-        root.addChild(box(0.04, 0.04, 0.5, frameMat, [-0.30, 0.36, -0.05]))
-        root.addChild(box(0.04, 0.04, 0.5, frameMat, [ 0.30, 0.36, -0.05]))
-
-        // 팔걸이(좌우)
-        root.addChild(box(0.05, 0.04, 0.34, frameMat, [-0.32, 0.60, -0.06]))
-        root.addChild(box(0.05, 0.04, 0.34, frameMat, [ 0.32, 0.60, -0.06]))
-
-        // 앞 프레임(발받침으로 내려가는 봉)
-        root.addChild(box(0.04, 0.04, 0.45, frameMat, [-0.18, 0.22, -0.42]))
-        root.addChild(box(0.04, 0.04, 0.45, frameMat, [ 0.18, 0.22, -0.42]))
-
-        // 발받침판
-        root.addChild(box(0.34, 0.03, 0.18, frameMat, [0, 0.07, -0.58]))
-
-        // 앞 캐스터(작은 바퀴) 2개
-        root.addChild(cyl(0.07, 0.04, tireMat, [-0.18, 0.07, -0.55], axis: [1,0,0]))
-        root.addChild(cyl(0.07, 0.04, tireMat, [ 0.18, 0.07, -0.55], axis: [1,0,0]))
-
-        // 다리(허벅지 → 정강이 → 발). 좌우 두 개.
-        for side: Float in [-1, 1] {
-            let x = side * 0.13
-            // 허벅지: 엉덩이(z -0.1)에서 무릎(z -0.45)으로, 거의 수평.
-            let thigh = cyl(0.07, 0.38, legMat, [x, 0.41, -0.28], axis: [0,0,1])
-            root.addChild(thigh)
-            // 정강이: 무릎에서 발목으로 내려감(수직에 가깝게).
-            let shin = cyl(0.06, 0.34, legMat, [x, 0.24, -0.50])
-            root.addChild(shin)
-            // 발(신발)
-            root.addChild(box(0.11, 0.06, 0.22, shoeMat, [x, 0.10, -0.56]))
-        }
-
-        return root
-    }
-
-    /// 바퀴 메시 생성. 타이어(검정) + 대비되는 스포크(살)로 회전이 눈에 보이게.
-    /// 부모(타이어)를 회전시키면 자식 스포크도 함께 돌아 굴러가는 느낌을 준다.
-    private static func makeWheel() -> ModelEntity {
-        let radius: Float = AppModel.wheelRadius
-
-        // 타이어 본체
-        let tire = ModelEntity(
-            mesh: .generateCylinder(height: 0.08, radius: radius),
-            materials: [SimpleMaterial(color: .init(white: 0.12, alpha: 1), isMetallic: false)]
-        )
-
-        // 스포크 4개(국부 XZ 평면에 십자로). 한 쌍은 빨강, 다른 한 쌍은 흰색 → 회전 식별.
-        let spokeLen: Float = radius * 1.9
-        func spoke(color: UIColor, rotated: Bool) -> ModelEntity {
-            let s = ModelEntity(
-                mesh: .generateBox(width: rotated ? 0.03 : spokeLen,
-                                   height: 0.09,
-                                   depth: rotated ? spokeLen : 0.03),
-                materials: [SimpleMaterial(color: color, isMetallic: false)]
-            )
-            return s
-        }
-        tire.addChild(spoke(color: .systemRed, rotated: false))   // 가로 살(빨강)
-        tire.addChild(spoke(color: .white, rotated: true))        // 세로 살(흰색)
-
-        // 허브(가운데 노랑)
-        let hub = ModelEntity(
-            mesh: .generateCylinder(height: 0.1, radius: radius * 0.18),
-            materials: [SimpleMaterial(color: .systemYellow, isMetallic: false)]
-        )
-        tire.addChild(hub)
-
-        // 원기둥은 기본축이 Y. Z축으로 90도 돌려 바퀴처럼 세운다.
-        tire.orientation = simd_quatf(angle: .pi / 2, axis: [0, 0, 1])
-        tire.generateCollisionShapes(recursive: false)
-        return tire
     }
 
 }
