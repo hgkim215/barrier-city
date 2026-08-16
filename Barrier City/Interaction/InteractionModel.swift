@@ -178,6 +178,11 @@ final class InteractionModel {
     @discardableResult
     func requestKioskStaffHelp() -> Bool {
         guard kioskState.requestStaffHelp() else { return false }
+        dismissActive()
+        resetKioskReachDetectors()
+        return true
+    }
+
     /// 몰입 공간 종료 시 이전 RealityKit 장면과 구독을 더 이상 붙잡지 않는다.
     /// 다음 진입은 `InteractionSetup.install`이 완전히 새로운 참조로 다시 구성한다.
     func tearDown() {
@@ -192,15 +197,7 @@ final class InteractionModel {
         activeTrigger = nil
         dismissedTriggerID = nil
         transitionError = nil
-        kioskTooHighShown = false
         scene = .outdoor
-    }
-
-    /// 키오스크 장벽 확인과 근접 트리거 억제를 한 상태 변경으로 처리한다.
-    func acknowledgeKioskBarrier() {
-        dismissActive()
-        resetKioskReachDetectors()
-        return true
     }
 
     func processKioskLocalHandSample(

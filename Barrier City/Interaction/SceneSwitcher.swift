@@ -107,9 +107,24 @@ enum SceneSwitcher {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
-        im.kioskPanelEntity?.isEnabled = false
+        im.updateKioskContext(
+            isIndoor: true,
+            isNear: false,
+            isMissionTwoActive: false,
+            isGuideLocked: GuideFlowModel.shared.isInteractionLocked)
+
+        if let kioskPanel = im.kioskPanelEntity {
+            let placement = KioskScreenPresenter.install(
+                attachment: kioskPanel,
+                in: prepared.visible,
+                worldRoot: worldRoot)
+            im.applyKioskScreenPlacement(placement)
+            kioskPanel.isEnabled = !im.kioskUsesBillboardFallback
+        } else {
+            im.applyKioskScreenPlacement(.billboardFallback)
+            print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
+        }
 
         oldVisible.isEnabled = false
         oldCollision.isEnabled = false
@@ -166,52 +181,6 @@ enum SceneSwitcher {
                 heading = atan2(-towardCafe.x, -towardCafe.y)
             }
         }
-        app.restart()
-        app.posX = spawn.x
-        app.posZ = spawn.y
-        app.heading = heading
-
-        // 6) 인터랙션 상태 전환: 실내에는 키오스크 트리거를 등록한다.
-        im.scene = .indoor
-        im.triggers = [ProximityTrigger(
-            id: "kiosk.order",
-            center: kioskCenter,
-            radius: InteractionTuning.kioskTriggerRadius,
-            kind: .kioskScreen,
-            prompt: InteractionTuning.kioskTitle)]
-        im.activeTrigger = nil
-        im.dismissedTriggerID = nil
-        im.transitionError = nil
-        im.panelEntity?.isEnabled = false
-        im.updateKioskContext(
-            isIndoor: true,
-            isNear: false,
-            isMissionTwoActive: false,
-            isGuideLocked: GuideFlowModel.shared.isInteractionLocked)
-
-        if let kioskPanel = im.kioskPanelEntity {
-            let placement = KioskScreenPresenter.install(
-                attachment: kioskPanel,
-                in: indoorVisible,
-                worldRoot: worldRoot)
-            im.applyKioskScreenPlacement(placement)
-            kioskPanel.isEnabled = !im.kioskUsesBillboardFallback
-        } else {
-            im.applyKioskScreenPlacement(.billboardFallback)
-            print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
-        }
-
-        // 7) 점원 프로토타입 배치: Human/AreaK/BarTable marker와 애니메이션 씬을 연결한다.
-        await app.npcClerk.enterIndoor(worldRoot: worldRoot,
-                                       indoorMap: indoorVisible,
-                                       kioskCenter: kioskCenter,
-                                       isTransitionCurrent: {
-                                           im.isCurrentTransition(token)
-                                       })
-        guard im.isCurrentTransition(token) else { return }
-
-        // [김현기] 퀘스트: 실내(카페) 진입 완료 → 다음 단계로.
-        GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)
         return IndoorLayout(kioskCenter: kioskCenter, spawn: spawn, heading: heading)
     }
 
