@@ -6,13 +6,8 @@
 //  같은 몰입 공간을 유지한 채 ① worldRoot의 시각 맵 교체 ② 씬 원점의 투명 콜리전
 //  사본 교체 ③ Door→Kiosk 방향으로 실내 문 안쪽 포즈를 계산한다.
 //
-//  stripPhysics/addStaticCollision은 이윤서 ImmersiveView의 검증된 로더 유틸을
-//  그대로 호출한다(중복 구현 방지, Task 5에서 private 제거).
-//
-
 import RealityKit
 import RealityKitContent
-import SwiftUI
 import simd
 
 @MainActor
@@ -125,19 +120,13 @@ enum SceneSwitcher {
     private static func prepareIndoorScene() async throws -> PreparedIndoorScene {
         let visible = try await Entity(named: "Indoor", in: realityKitContentBundle)
         try Task.checkCancellation()
-        ImmersiveView.stripPhysics(visible)
-        ImmersiveView.hideColliders(visible)
-        brighten(visible)
-
-        let collision = try await Entity(named: "Indoor", in: realityKitContentBundle)
+        let collision = visible.clone(recursive: true)
+        SceneEntityPreparation.prepareVisible(visible)
+        let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)
         try Task.checkCancellation()
-        ImmersiveView.stripPhysics(collision)
-        let collisionShapeCount = await ImmersiveView.addStaticCollision(collision)
-        try Task.checkCancellation()
-        ImmersiveView.stripRendering(collision)
 
         // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
-        // debugFloorCollision이 바닥을 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
+        // 공통 바닥 충돌이 접지를 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
         return PreparedIndoorScene(visible: visible,
                                    collision: collision,
                                    collisionShapeCount: collisionShapeCount)
@@ -167,33 +156,5 @@ enum SceneSwitcher {
             }
         }
         return IndoorLayout(kioskCenter: kioskCenter, spawn: spawn, heading: heading)
-    }
-
-    /// Indoor 프로토타입의 검정 벽 임시 보정: 모든 메시를 밝은 단색으로 덮어쓴다.
-    /// (wall 머티리얼에 diffuseColor가 없어 검정으로 렌더되는 이슈 — 텍스처링은
-    ///  김선환 일정의 몫이므로 코드에서 임시 처리)
-    /// 조상 이름을 물려받아 바닥/바/키오스크만 다른 톤을 준다.
-    private static func brighten(_ entity: Entity, inheritedLabel: String = "") {
-        let label = (inheritedLabel + " " + entity.name).lowercased()
-        // 완성형 캐릭터의 PBR 머티리얼은 그대로 둔다. 이전의 `contains("bar")`는
-        // Barista까지 바 가구로 오인해 캐릭터 전체를 나무색으로 덮어썼다.
-        if label.contains("barista") { return }
-        if var model = entity.components[ModelComponent.self] {
-            let color: UIColor
-            if label.contains("floor") {
-                color = UIColor(white: 0.55, alpha: 1)          // 바닥: 중간 회색
-            } else if label.contains("kiosk") {
-                color = UIColor(white: 0.25, alpha: 1)          // 키오스크: 짙은 회색
-            } else if label.contains("bartable") {
-                color = UIColor(red: 0.45, green: 0.30, blue: 0.18, alpha: 1)  // 바: 나무톤
-            } else {
-                color = UIColor(white: 0.85, alpha: 1)          // 벽·천장: 밝은 회색
-            }
-            model.materials = [SimpleMaterial(color: color, isMetallic: false)]
-            entity.components.set(model)
-        }
-        for child in entity.children {
-            brighten(child, inheritedLabel: label)
-        }
     }
 }
