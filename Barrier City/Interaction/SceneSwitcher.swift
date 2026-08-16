@@ -2,7 +2,7 @@
 //  SceneSwitcher.swift
 //  Barrier City
 //
-//  Outdoor("Map") → Indoor("Indoor") 배경 전환.
+//  Outdoor("Outdoor") → Indoor("Indoor") 배경 전환.
 //  같은 몰입 공간을 유지한 채 ① worldRoot의 시각 맵 교체 ② 씬 원점의 투명 콜리전
 //  사본 교체 ③ DOOR1→Kiosk 방향으로 실내 문 안쪽 포즈를 계산한다.
 //

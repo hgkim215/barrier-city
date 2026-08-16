@@ -26,6 +26,8 @@ struct ImmersiveView: View {
     @State private var handTracker = HandTrackingManager()
     @State private var immersiveSessionGeneration: Int?
 
+    private static let outdoorSceneName = "Outdoor"
+
     // 휠체어 모델 배치(보고 조정할 튜닝값)
     private static let chairScale: Float = 0.95                  // 전체(몸체 기준) 크기
     private static let wheelScale: Float = 1.45                  // 뒷바퀴에만 추가 배율(>1 키움, <1 줄임)
@@ -54,24 +56,28 @@ struct ImmersiveView: View {
             let worldRoot = Entity()
             worldRoot.name = "worldRoot"
             worldRoot.components.set(WheelchairComponent())
-            if let cafeVisible = try? await Entity(named: "Map", in: realityKitContentBundle) {
-                Self.stripPhysics(cafeVisible)    // USDA에 딸려온 RigidBody 제거(메시가 떨어지지 않게)
-                Self.hideColliders(cafeVisible)   // 충돌용 단순 도형은 시각에서 숨김
-                worldRoot.addChild(cafeVisible)
-                InteractionModel.shared.visibleMap = cafeVisible   // [김현기] 씬 전환용 참조
-            }
             content.add(worldRoot)
             model.worldRoot = worldRoot
 
-            // 시뮬 공간(고정·투명): 같은 카페의 콜리전 사본 + 캐릭터 캡슐.
-            // 캡슐이 여기서 실제로 움직이며 벽·경사·턱에 부딪힌다. 시각은 worldRoot가 담당.
-            if let cafeCollision = try? await Entity(named: "Map", in: realityKitContentBundle) {
-                Self.stripPhysics(cafeCollision)   // USDA RigidBody 제거(우리가 콜리전만 따로 부여)
-                let n = await Self.addStaticCollision(cafeCollision)
+            do {
+                let outdoorVisible = try await Entity(named: Self.outdoorSceneName,
+                                                      in: realityKitContentBundle)
+                let outdoorCollision = outdoorVisible.clone(recursive: true)
+
+                Self.stripPhysics(outdoorVisible)
+                Self.hideColliders(outdoorVisible)
+                worldRoot.addChild(outdoorVisible)
+                InteractionModel.shared.visibleMap = outdoorVisible
+
+                // 시뮬 공간(고정·투명): 동일한 Outdoor의 authored collision 사본.
+                Self.stripPhysics(outdoorCollision)
+                let n = await Self.addStaticCollision(outdoorCollision)
                 model.motion.collisionShapeCount = n
-                Self.stripRendering(cafeCollision) // 렌더 컴포넌트 없이 충돌만 유지
-                content.add(cafeCollision)
-                InteractionModel.shared.collisionMap = cafeCollision   // [김현기] 씬 전환용 참조
+                Self.stripRendering(outdoorCollision)
+                content.add(outdoorCollision)
+                InteractionModel.shared.collisionMap = outdoorCollision
+            } catch {
+                assertionFailure("Failed to load \(Self.outdoorSceneName): \(error)")
             }
 
             // [디버그] 무조건 착지하는 단순 바닥 콜리전(컨트롤러 동작 확인용).
