@@ -6,6 +6,12 @@ private func expectNear(_ actual: Float?, _ expected: Float, _ message: String) 
     }
 }
 
+private func expectNear(_ actual: Float, _ expected: Float, _ message: String) {
+    guard abs(actual - expected) < 0.0001 else {
+        fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
+    }
+}
+
 private func expectNil(_ actual: Float?, _ message: String) {
     guard actual == nil else {
         fatalError("FAIL: \(message) — expected nil, got \(actual!)")
@@ -15,6 +21,11 @@ private func expectNil(_ actual: Float?, _ message: String) {
 @main
 struct KioskScreenLayoutTests {
     static func main() {
+        let rotation = KioskScreenLayout.faceRotationRadians
+        expectNear(rotation, .pi, "screen correction is a half turn")
+        expectNear(cosf(rotation), -1, "half turn reverses local X and Y")
+        expectNear(sinf(rotation), 0, "half turn adds no quarter-turn skew")
+
         expectNear(
             KioskScreenLayout.uniformScale(
                 planeSize: [0.30, 0.52],

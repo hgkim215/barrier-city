@@ -9,7 +9,9 @@ enum KioskScreenPlacement {
 enum KioskScreenTuning {
     static let fill: Float = 0.98
     static let surfaceOffset: Float = 0.002
-    static let faceRotation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+    static let faceRotation = simd_quatf(
+        angle: KioskScreenLayout.faceRotationRadians,
+        axis: SIMD3<Float>(0, 0, 1))
 }
 
 @MainActor

@@ -1,4 +1,6 @@
 enum KioskScreenLayout {
+    static let faceRotationRadians: Float = .pi
+
     static func uniformScale(
         planeSize: SIMD2<Float>,
         attachmentSize: SIMD2<Float>,
