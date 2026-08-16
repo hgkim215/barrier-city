@@ -403,7 +403,7 @@ def Xform "Root"
         references = @Indoor.usdz@
     )
     {
-        reorder nameChildren = ["Edge", "wall3", "BarTable", "_floor", "CupBoard2", "ceiling", "CupBoard1", "wall2", "AreaK", "Human", "wall4", "wall1", "BathWall1", "_Shelf", "AreaB", "BathWall2", "Cube", "env_light", "Furnitures"]
+        reorder nameChildren = ["Edge", "wall3", "BarTable", "_floor", "CupBoard2", "ceiling", "CupBoard1", "wall2", "AreaK", "wall4", "wall1", "BathWall1", "_Shelf", "AreaB", "BathWall2", "Cube", "env_light", "Furnitures"]
         rel material:binding = </Root/wall> (
             bindMaterialAs = "weakerThanDescendants"
         )
@@ -411,12 +411,6 @@ def Xform "Root"
         float3 xformOp:scale = (1, 1, 1)
         float3 xformOp:translate = (0.077858925, 0.0030006468, 0.05167961)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def Xform "Human"
-        {
-            float3 xformOp:translate = (-0.077858925, -4.3483205, -0.0030006468)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
 
         over "_floor" (
             prepend apiSchemas = ["MaterialBindingAPI"]
