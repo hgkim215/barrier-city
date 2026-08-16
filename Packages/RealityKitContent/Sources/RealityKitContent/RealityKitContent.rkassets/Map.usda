@@ -374,7 +374,7 @@ def Material "stair"
     token cullMode = "unspecified" (
         allowedTokens = ["unspecified", "none", "front", "back"]
     )
-    token inputs:frame:stPrimvarName = "st" (
+    string inputs:frame:stPrimvarName = "st" (
         customData = {
             dictionary realitykit = {
                 bool hide = 1
@@ -406,30 +406,30 @@ def Material "stair"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/roughness.png@
-        float2 inputs:st.connect = </stair/roughness/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </stair/roughnessTexCoordReader.outputs:result>
         float outputs:r
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
-            float2 outputs:result
-        }
+    def Shader "roughnessTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
+        float2 outputs:result
     }
 
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/ALbedo.png@
-        float2 inputs:st.connect = </stair/diffuseColor/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </stair/diffuseColorTexCoordReader.outputs:result>
         color3f outputs:rgb
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
-            float2 outputs:result
-        }
+    def Shader "diffuseColorTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname.connect = </stair.inputs:frame:stPrimvarName>
+        float2 outputs:result
     }
 
     def Shader "PreviewSurface" (
@@ -476,7 +476,7 @@ def Material "ramp"
     token cullMode = "unspecified" (
         allowedTokens = ["unspecified", "none", "front", "back"]
     )
-    token inputs:frame:stPrimvarName = "st" (
+    string inputs:frame:stPrimvarName = "st" (
         customData = {
             dictionary realitykit = {
                 bool hide = 1
@@ -506,30 +506,30 @@ def Material "ramp"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/roughness.png@
-        float2 inputs:st.connect = </ramp/roughness/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </ramp/roughnessTexCoordReader.outputs:result>
         float outputs:r
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
-            float2 outputs:result
-        }
+    def Shader "roughnessTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
+        float2 outputs:result
     }
 
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/ALbedo.png@
-        float2 inputs:st.connect = </ramp/diffuseColor/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </ramp/diffuseColorTexCoordReader.outputs:result>
         color3f outputs:rgb
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
-            float2 outputs:result
-        }
+    def Shader "diffuseColorTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname.connect = </ramp.inputs:frame:stPrimvarName>
+        float2 outputs:result
     }
 
     def Shader "PreviewSurface" (
@@ -672,7 +672,7 @@ def Material "base"
     token cullMode = "unspecified" (
         allowedTokens = ["unspecified", "none", "front", "back"]
     )
-    token inputs:frame:stPrimvarName = "st" (
+    string inputs:frame:stPrimvarName = "st" (
         customData = {
             dictionary realitykit = {
                 bool hide = 1
@@ -704,30 +704,30 @@ def Material "base"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/roughness.png@
-        float2 inputs:st.connect = </base/roughness/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </base/roughnessTexCoordReader.outputs:result>
         float outputs:r
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = None
-            float2 outputs:result
-        }
+    def Shader "roughnessTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname = "st"
+        float2 outputs:result
     }
 
     def Shader "diffuseColor"
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/New Folder/ALbedo.png@
-        float2 inputs:st.connect = </base/diffuseColor/TexCoordReader.outputs:result>
+        float2 inputs:st.connect = </base/diffuseColorTexCoordReader.outputs:result>
         color3f outputs:rgb
+    }
 
-        def Shader "TexCoordReader"
-        {
-            uniform token info:id = "UsdPrimvarReader_float2"
-            token inputs:varname.connect = None
-            float2 outputs:result
-        }
+    def Shader "diffuseColorTexCoordReader"
+    {
+        uniform token info:id = "UsdPrimvarReader_float2"
+        string inputs:varname = "st"
+        float2 outputs:result
     }
 
     def Shader "PreviewSurface" (
