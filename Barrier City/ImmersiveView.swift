@@ -1,6 +1,7 @@
 import SwiftUI
 import RealityKit
 import RealityKitContent
+import OSLog
 
 /// RealityView 클로저가 직접 갱신하는 렌더링 참조.
 /// SwiftUI 관찰 대상이 아닌 참조 타입에 보관해 view update 도중 @State를 변경하지 않는다.
@@ -22,11 +23,13 @@ struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
 
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "ImmersiveScene")
+
     @State private var runtime = ImmersiveRuntimeState()
     @State private var handTracker = HandTrackingManager()
     @State private var immersiveSessionGeneration: Int?
-
-    private static let outdoorSceneName = "Outdoor"
 
     // 휠체어 모델 배치(보고 조정할 튜닝값)
     private static let chairScale: Float = 0.95                  // 전체(몸체 기준) 크기
@@ -60,8 +63,9 @@ struct ImmersiveView: View {
             model.worldRoot = worldRoot
 
             do {
-                let outdoorVisible = try await Entity(named: Self.outdoorSceneName,
-                                                      in: realityKitContentBundle)
+                let outdoorVisible = try await Entity(
+                    named: ImmersiveSceneCatalog.outdoor,
+                    in: realityKitContentBundle)
                 let outdoorCollision = outdoorVisible.clone(recursive: true)
 
                 SceneEntityPreparation.prepareVisible(outdoorVisible)
@@ -74,12 +78,16 @@ struct ImmersiveView: View {
                 content.add(outdoorCollision)
                 InteractionModel.shared.collisionMap = outdoorCollision
             } catch {
-                assertionFailure("Failed to load \(Self.outdoorSceneName): \(error)")
+                Self.logger.error(
+                    "Outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
             }
 
             // authored 장면은 벽·장애물 충돌만 제공하므로 공통 바닥 충돌을 유지한다.
             // 윗면이 y=0.1(보이는 바닥)과 맞도록 두께 0.4 박스를 y=-0.1에 둔다.
-            let floorShape = ShapeResource.generateBox(width: 16, height: 0.4, depth: 16)
+            let floorShape = ShapeResource.generateBox(
+                width: InteractionTuning.outdoorGroundPlaneSize,
+                height: 0.4,
+                depth: InteractionTuning.outdoorGroundPlaneSize)
             let floorCol = Entity()
             floorCol.name = "groundPlaneCollision"
             floorCol.position = [0, -0.1, 0]
@@ -186,7 +194,7 @@ struct ImmersiveView: View {
                              shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
-            // [김현기] 문 앞 입장 패널(공간 고정 + 빌보드는 InteractionSetup이 처리)
+            // [김현기] 사용자 눈앞 입장 패널(content-root 배치는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
                 EntryPromptView()
             }

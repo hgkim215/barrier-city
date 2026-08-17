@@ -7,12 +7,13 @@
 //  생기면 바로 단위 테스트를 붙일 수 있게 한다.
 //
 
+import Foundation
 import RealityKit
 import simd
 import Observation
 
 /// 현재 배경 씬.
-enum GameScene {
+enum GameScene: Equatable {
     case outdoor
     case indoor
 }
@@ -59,15 +60,18 @@ struct ProximityTrigger: Identifiable, Equatable {
 /// 인터랙션 튜닝 상수 단일 진실원(시뮬레이터에서 보고 조정).
 enum InteractionTuning {
     /// 문 트리거 진입 반경(m)
-    static let doorTriggerRadius: Float = 2.5
-    /// 카페 문에서 건물 바깥 방향으로 떨어진 Outdoor 시작 거리(m).
-    /// 현재 authored 외부 바닥 안에 휠체어 전체가 놓이는 값이다.
-    static let outdoorSpawnDistanceFromDoor: Float = 1.25
+    static let doorTriggerRadius: Float = 1.1
+    /// Outdoor 공통 바닥 충돌체의 한 변 길이(m).
+    static let outdoorGroundPlaneSize: Float = 16
+    /// 휠체어 전체가 바닥에 지지되도록 리스폰 경계에서 안쪽으로 두는 여유(m).
+    static let outdoorSpawnSafetyMargin: Float = 0.5
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
-    /// 패널 표시 높이(m, 맵 좌표 y). 앉은 눈높이보다 살짝 위.
+    /// 패널 표시 높이(m, 맵 좌표 y). 키오스크 빌보드 폴백에서 사용.
     static let panelHeight: Float = 1.7
+    /// 문 선택 패널을 사용자 눈앞 정면에 두는 content-root 월드 좌표(m).
+    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.45, -1.2)
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
@@ -82,11 +86,38 @@ enum InteractionTuning {
     /// 키오스크 트리거 진입 반경(m). 휠체어로 접근할 때 스치듯 지나가지 않게 넉넉히.
     static let kioskTriggerRadius: Float = 3.0
     /// 키오스크 패널을 키오스크 표면에서 사용자 쪽으로 당기는 거리(m). 박스에 안 묻히게.
-    static let kioskPanelForwardOffset: Float = 0.8
+    nonisolated static let kioskPanelForwardOffset: Float = 0.8
     /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(Indoor 자산 기준).
     static let kioskFallbackCenter = SIMD2<Float>(0.85, 1.65)
     /// 키오스크 화면 타이틀 겸 트리거 prompt 값.
     static let kioskTitle = "주문하기"
+}
+
+/// 패널 종류별 표면 오프셋을 적용하는 순수 월드 좌표 계산.
+enum InteractionPanelPlacement {
+    nonisolated static func worldPosition(
+        _ worldPosition: SIMD3<Float>,
+        toward viewerPosition: SIMD3<Float>,
+        kind: TriggerKind
+    ) -> SIMD3<Float> {
+        switch kind {
+        case .yesNoPrompt:
+            return InteractionTuning.doorPromptEyeFrontPosition
+        case .kioskScreen:
+            break
+        }
+
+        var result = worldPosition
+        let towardViewer = SIMD2(
+            viewerPosition.x - worldPosition.x,
+            viewerPosition.z - worldPosition.z)
+        let distance = simd_length(towardViewer)
+        guard distance > 0.001 else { return result }
+        let displacement = towardViewer / distance * InteractionTuning.kioskPanelForwardOffset
+        result.x += displacement.x
+        result.z += displacement.y
+        return result
+    }
 }
 
 /// evaluate의 판정 결과.
@@ -95,6 +126,22 @@ struct ProximityVerdict {
     let showID: String?
     /// true면 dismissedTriggerID를 해제(범위 이탈 → 재접근 시 재표시)
     let clearDismissed: Bool
+}
+
+/// Coordinates the kiosk barrier's primary action with its quest event sink.
+/// `requestKioskStaffHelp()` owns one-shot session state; this boundary ensures
+/// the accepted action and `.kioskFailed` delivery cannot drift apart in UI code.
+@MainActor
+enum KioskPrimaryActionCoordinator {
+    @discardableResult
+    static func activate(
+        interactionModel: InteractionModel,
+        eventSink: (QuestEvent) -> Void
+    ) -> Bool {
+        guard interactionModel.requestKioskStaffHelp() else { return false }
+        eventSink(.kioskFailed)
+        return true
+    }
 }
 
 /// 공간 인터랙션 전역 상태. System이 아닌 SceneEvents.Update 구독(tick)이 읽고 쓴다.
@@ -118,13 +165,24 @@ final class InteractionModel {
     var transitionError: String?
 
     // MARK: - 엔티티·구독 참조(관찰 대상 아님)
-    /// 문 예/아니요 패널 attachment 엔티티(worldRoot 자식).
+    /// 문 예/아니요 패널 attachment 엔티티(content root 자식).
     @ObservationIgnored var panelEntity: Entity?
     /// 키오스크 주문 화면 attachment 엔티티(worldRoot 자식).
     @ObservationIgnored var kioskPanelEntity: Entity?
-    /// 키오스크 "사용하기"를 눌러 '너무 높아 사용 불가' 안내가 뜬 상태.
-    /// 트리거 이탈/재진입 시 리셋.
-    var kioskTooHighShown = false
+    /// 실제 Screen 배치 성공 시 손 위치를 변환할 기준 Plane.
+    @ObservationIgnored var kioskScreenPlane: Entity?
+    /// Screen Plane의 로컬 반너비·반높이.
+    @ObservationIgnored var kioskScreenHalfSize = SIMD2<Float>.zero
+    /// Screen Plane 표면 중심의 로컬 좌표.
+    @ObservationIgnored var kioskScreenSurfaceCenter = SIMD3<Float>.zero
+    /// true면 Screen 배치 실패로 기존 월드 빌보드 배치를 사용한다.
+    @ObservationIgnored var kioskUsesBillboardFallback = true
+    /// 키오스크 메뉴 표시·입력·장벽·도움 요청 상태.
+    private var kioskState = KioskInteractionState()
+    /// 왼손과 오른손의 이동 이력을 섞지 않도록 손별 detector를 유지한다.
+    @ObservationIgnored private var kioskReachDetectors: [KioskHandSide: KioskReachAttemptDetector] = [:]
+    /// attachment가 없을 때 Mission 2를 한 번만 fail-open하기 위한 세션 플래그.
+    @ObservationIgnored var kioskFailOpenSent = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.
@@ -138,6 +196,60 @@ final class InteractionModel {
     func dismissActive() {
         dismissedTriggerID = activeTrigger?.id
         activeTrigger = nil
+    }
+
+    // MARK: - 키오스크 상태
+
+    var kioskMenuVisible: Bool { kioskState.menuVisible }
+    var kioskInputEnabled: Bool { kioskState.inputEnabled }
+    var kioskBarrierVisible: Bool { kioskState.barrierVisible }
+    var kioskSelectedCategory: KioskCategory { kioskState.selectedCategory }
+    var kioskSelectedMenuID: String? { kioskState.selectedMenuID }
+
+    func updateKioskContext(
+        isIndoor: Bool,
+        isNear: Bool,
+        isMissionTwoActive: Bool,
+        isGuideLocked: Bool
+    ) {
+        kioskState.updateContext(
+            isIndoor: isIndoor,
+            isNear: isNear,
+            isMissionTwoActive: isMissionTwoActive,
+            isGuideLocked: isGuideLocked)
+        if !kioskState.inputEnabled {
+            resetKioskReachDetectors()
+        }
+    }
+
+    func selectKioskCategory(
+        _ category: KioskCategory,
+        source: KioskAttemptSource = .gazePinch
+    ) -> KioskCategorySelectionResult {
+        kioskState.selectCategory(category, source: source)
+    }
+
+    @discardableResult
+    func selectKioskMenu(id: String) -> Bool {
+        kioskState.selectMenu(id: id)
+    }
+
+    @discardableResult
+    func attemptRestrictedKioskCategory(_ source: KioskAttemptSource) -> Bool {
+        kioskState.attemptRestrictedCategory(source)
+    }
+
+    @discardableResult
+    func dismissKioskBarrier() -> Bool {
+        kioskState.dismissBarrier()
+    }
+
+    @discardableResult
+    func requestKioskStaffHelp() -> Bool {
+        guard kioskState.requestStaffHelp() else { return false }
+        dismissActive()
+        resetKioskReachDetectors()
+        return true
     }
 
     /// 몰입 공간 종료 시 이전 RealityKit 장면과 구독을 더 이상 붙잡지 않는다.
@@ -154,15 +266,87 @@ final class InteractionModel {
         activeTrigger = nil
         dismissedTriggerID = nil
         transitionError = nil
-        kioskTooHighShown = false
         scene = .outdoor
     }
 
-    /// 키오스크 장벽 확인과 근접 트리거 억제를 한 상태 변경으로 처리한다.
-    func acknowledgeKioskBarrier() {
-        dismissActive()
-        kioskTooHighShown = false
-        kioskPanelEntity?.isEnabled = false
+    func processKioskScreenHandSample(
+        side: KioskHandSide,
+        screenPosition: SIMD3<Float>,
+        timestamp: TimeInterval,
+        isTracked: Bool,
+        halfWidth: Float,
+        halfHeight: Float
+    ) {
+        guard kioskState.inputEnabled else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        let attempted = kioskReachDetectors[side, default: KioskReachAttemptDetector()].sample(
+            position: screenPosition,
+            timestamp: timestamp,
+            isTracked: isTracked,
+            halfWidth: halfWidth,
+            halfHeight: halfHeight)
+        if attempted {
+            _ = attemptRestrictedKioskCategory(.handReach)
+        }
+    }
+
+    func processKioskHandSample(
+        side: KioskHandSide,
+        worldPosition: SIMD3<Float>,
+        timestamp: TimeInterval,
+        isTracked: Bool
+    ) {
+        guard let plane = kioskScreenPlane else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        guard let screenFrame = KioskScreenCoordinateFrame(
+            planeWorldTransform: plane.transformMatrix(relativeTo: nil),
+            localSurfaceCenter: kioskScreenSurfaceCenter,
+            localHalfSize: kioskScreenHalfSize,
+            faceRotationRadians: KioskScreenLayout.faceRotationRadians) else {
+            kioskReachDetectors[side]?.reset()
+            return
+        }
+        processKioskScreenHandSample(
+            side: side,
+            screenPosition: screenFrame.screenPosition(for: worldPosition),
+            timestamp: timestamp,
+            isTracked: isTracked,
+            halfWidth: screenFrame.halfSizeMeters.x,
+            halfHeight: screenFrame.halfSizeMeters.y)
+    }
+
+    func applyKioskScreenPlacement(_ placement: KioskScreenPlacement) {
+        switch placement {
+        case .attached(let plane, let localSurfaceCenter, let localHalfSize):
+            kioskScreenPlane = plane
+            kioskScreenSurfaceCenter = localSurfaceCenter
+            kioskScreenHalfSize = localHalfSize
+            kioskUsesBillboardFallback = false
+        case .billboardFallback:
+            kioskScreenPlane = nil
+            kioskScreenSurfaceCenter = .zero
+            kioskScreenHalfSize = .zero
+            kioskUsesBillboardFallback = true
+        }
+        resetKioskReachDetectors()
+    }
+
+    func resetKioskSession() {
+        kioskState.reset()
+        kioskFailOpenSent = false
+        kioskScreenPlane = nil
+        kioskScreenSurfaceCenter = .zero
+        kioskScreenHalfSize = .zero
+        kioskUsesBillboardFallback = true
+        resetKioskReachDetectors()
+    }
+
+    private func resetKioskReachDetectors() {
+        kioskReachDetectors.removeAll(keepingCapacity: true)
     }
 
     // MARK: - 씬 전환 수명주기
@@ -171,12 +355,14 @@ final class InteractionModel {
         transitionTask?.cancel()
         transitionTask = nil
         transitionSession.beginSession()
+        resetKioskSession()
     }
 
     func endImmersiveSession() {
         transitionTask?.cancel()
         transitionTask = nil
         transitionSession.endSession()
+        resetKioskSession()
     }
 
     func startSceneTransition(

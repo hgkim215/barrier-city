@@ -6,10 +6,85 @@ private func expect<T: Equatable>(_ actual: T, _ expected: T, _ message: String)
     }
 }
 
+private func expectNear(_ actual: Float, _ expected: Float, _ message: String) {
+    guard abs(actual - expected) < 0.0001 else {
+        fatalError("FAIL: \(message) — expected \(expected), got \(actual)")
+    }
+}
+
 @main
 @MainActor
 struct InteractionFlowRegressionTests {
     static func main() {
+        let doorCenter = SIMD2<Float>(0, -6)
+        let outdoorStart = OutdoorSessionStart.positionOutsideCafe(
+            doorCenter: doorCenter,
+            cafeCenter: .zero,
+            fallbackDoorCenter: doorCenter,
+            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
+        expectNear(outdoorStart.y, -7.5, "outdoor spawn stays inside the supported floor edge")
+
+        let door = ProximityTrigger(
+            id: "door.enter",
+            center: doorCenter,
+            radius: InteractionTuning.doorTriggerRadius,
+            prompt: "안으로 입장하시겠습니까?")
+        let initialVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(initialVerdict.showID, nil, "door prompt stays hidden at the outdoor spawn")
+
+        let approachedVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(approachedVerdict.showID, "door.enter", "half-meter approach reaches the door trigger")
+
+        let dismissedVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: "door.enter")
+        expect(dismissedVerdict.showID, nil, "dismissed door prompt stays hidden inside the trigger")
+
+        let leftVerdict = InteractionModel.evaluate(
+            playerX: doorCenter.x,
+            playerZ: doorCenter.y + 2,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: "door.enter")
+        expect(leftVerdict.clearDismissed, true, "leaving the door range clears dismissal")
+
+        let reenteredVerdict = InteractionModel.evaluate(
+            playerX: outdoorStart.x,
+            playerZ: outdoorStart.y + 0.5,
+            triggers: [door],
+            activeID: nil,
+            dismissedID: nil)
+        expect(reenteredVerdict.showID, "door.enter", "re-entering the door range shows the prompt again")
+
+        let doorPanelPosition = InteractionPanelPlacement.worldPosition(
+            SIMD3<Float>(8, 3, 9),
+            toward: SIMD3<Float>(4, 1, 2),
+            kind: .yesNoPrompt)
+        expectNear(doorPanelPosition.x, 0, "door prompt stays horizontally centered on the user")
+        expectNear(doorPanelPosition.y, 1.45, "door prompt stays at the seated eye line")
+        expectNear(doorPanelPosition.z, -1.2, "door prompt stays at a comfortable eye-front distance")
+
+        let kioskPanelPosition = InteractionPanelPlacement.worldPosition(
+            SIMD3<Float>(3, 1.7, 4),
+            toward: .zero,
+            kind: .kioskScreen)
+        expectNear(kioskPanelPosition.x, 2.52, "kiosk offset preserves its 0.8 m behavior on X")
+        expectNear(kioskPanelPosition.z, 3.36, "kiosk offset preserves its 0.8 m behavior on Z")
+
         let kiosk = ProximityTrigger(
             id: "kiosk.order",
             center: SIMD2<Float>(1, 1),
@@ -19,12 +94,52 @@ struct InteractionFlowRegressionTests {
         let interactions = InteractionModel()
         interactions.triggers = [kiosk]
         interactions.activeTrigger = kiosk
-        interactions.kioskTooHighShown = true
+        interactions.updateKioskContext(
+            isIndoor: true,
+            isNear: true,
+            isMissionTwoActive: true,
+            isGuideLocked: false)
+        expect(interactions.kioskMenuVisible, true, "Indoor menu remains visible")
+        expect(interactions.kioskInputEnabled, true, "Mission 2 proximity enables input")
+        expect(interactions.selectKioskCategory(.coffee), .selected, "general category switches")
+        expect(interactions.kioskSelectedCategory, .coffee, "coffee remains selected")
+        expect(interactions.kioskBarrierVisible, false, "general category stays usable")
+        expect(interactions.selectKioskCategory(.other), .blocked, "other exposes barrier")
+        expect(interactions.kioskSelectedCategory, .coffee, "blocked tab does not select")
+        expect(interactions.kioskBarrierVisible, true, "other opens barrier")
 
-        interactions.acknowledgeKioskBarrier()
-
+        let quest = QuestModel()
+        _ = quest.advance(on: .enteredIndoor)
         var guide = GuideFlowState(phase: .missionActive(index: 1))
-        guide.send(.questAdvanced(nextIndex: 2))
+        var forwardedEvents: [QuestEvent] = []
+        var missionThreeTransitions = 0
+        let eventSink: (QuestEvent) -> Void = { event in
+            forwardedEvents.append(event)
+            guard case .advanced = quest.advance(on: event) else { return }
+            let previousPhase = guide.phase
+            guide.send(.questAdvanced(nextIndex: quest.currentIndex))
+            if previousPhase != guide.phase,
+               guide.phase == .missionAnnouncement(index: 2) {
+                missionThreeTransitions += 1
+            }
+        }
+
+        expect(
+            KioskPrimaryActionCoordinator.activate(
+                interactionModel: interactions,
+                eventSink: eventSink),
+            true,
+            "first primary action is accepted")
+        expect(
+            KioskPrimaryActionCoordinator.activate(
+                interactionModel: interactions,
+                eventSink: eventSink),
+            false,
+            "repeated primary action is rejected")
+        expect(forwardedEvents, [.kioskFailed], "primary action forwards kioskFailed exactly once")
+        expect(missionThreeTransitions, 1, "primary action produces one Mission 3 transition")
+        expect(guide.phase, .missionAnnouncement(index: 2), "event sink reaches Mission 3 announcement")
+
         guide.send(.confirmMission)
         expect(guide.phase, .missionActive(index: 2), "Mission 3 confirmation unlocks interaction")
 
@@ -35,7 +150,15 @@ struct InteractionFlowRegressionTests {
             activeID: interactions.activeTrigger?.id,
             dismissedID: interactions.dismissedTriggerID)
         expect(verdict.showID, nil, "acknowledged kiosk stays dismissed while still in radius")
-        expect(interactions.kioskTooHighShown, false, "acknowledgement clears the barrier detail state")
+        expect(interactions.kioskBarrierVisible, false, "help closes barrier detail state")
+        expect(interactions.kioskInputEnabled, false, "help locks kiosk input for the session")
 
+        interactions.resetKioskSession()
+        expect(interactions.kioskMenuVisible, false, "session reset clears kiosk visibility")
+        expect(interactions.kioskBarrierVisible, false, "session reset clears barrier state")
+        expect(interactions.kioskSelectedCategory, .best, "session reset restores the best category")
+        expect(interactions.kioskSelectedMenuID, nil, "session reset clears selected menu")
+
+        print("InteractionFlowRegressionTests: PASS")
     }
 }

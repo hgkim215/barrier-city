@@ -102,9 +102,24 @@ enum SceneSwitcher {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.kioskTooHighShown = false
         im.panelEntity?.isEnabled = false
-        im.kioskPanelEntity?.isEnabled = false
+        im.updateKioskContext(
+            isIndoor: true,
+            isNear: false,
+            isMissionTwoActive: false,
+            isGuideLocked: GuideFlowModel.shared.isInteractionLocked)
+
+        if let kioskPanel = im.kioskPanelEntity {
+            let placement = KioskScreenPresenter.install(
+                attachment: kioskPanel,
+                in: prepared.visible,
+                worldRoot: worldRoot)
+            im.applyKioskScreenPlacement(placement)
+            kioskPanel.isEnabled = !im.kioskUsesBillboardFallback
+        } else {
+            im.applyKioskScreenPlacement(.billboardFallback)
+            print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
+        }
 
         oldVisible.isEnabled = false
         oldCollision.isEnabled = false
