@@ -50,16 +50,17 @@ enum InteractionSetup {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
-        im.kioskTooHighShown = false
         appModel.npcClerk.resetForOutdoor()
 
-        // 1) 패널 attachment들을 worldRoot 아래에 배치(초기 숨김) — 맵과 함께 움직인다.
+        // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.
+        if let panel = attachments.entity(for: "entryPrompt") {
+            panel.isEnabled = false
+            content.add(panel)
+            im.panelEntity = panel
+        }
+
+        // 키오스크와 NPC attachment는 기존대로 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
-            if let panel = attachments.entity(for: "entryPrompt") {
-                panel.isEnabled = false
-                worldRoot.addChild(panel)
-                im.panelEntity = panel
-            }
             if let kiosk = attachments.entity(for: "kioskScreen") {
                 kiosk.isEnabled = false
                 worldRoot.addChild(kiosk)
@@ -87,7 +88,8 @@ enum InteractionSetup {
             doorCenter: center,
             cafeCenter: cafeCenter,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
-            distanceFromDoor: InteractionTuning.outdoorSpawnDistanceFromDoor)
+            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
         OutdoorSessionStart.reset(
             appModel,
             startPosition: startPosition,
@@ -114,10 +116,19 @@ enum InteractionSetup {
     private static func tick(deltaTime: Float) {
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
-        if GuideFlowModel.shared.isInteractionLocked {
+        let guide = GuideFlowModel.shared
+        let isIndoor = im.scene == .indoor
+        let isMissionTwoActive = guide.phase == .missionActive(index: 1)
+
+        if guide.isInteractionLocked {
             im.activeTrigger = nil
             im.panelEntity?.isEnabled = false
-            im.kioskPanelEntity?.isEnabled = false
+            im.updateKioskContext(
+                isIndoor: isIndoor,
+                isNear: false,
+                isMissionTwoActive: false,
+                isGuideLocked: true)
+            updatePanel(im)
             app.npcClerk.setGuideInteractionLocked(true)
             return
         }
@@ -134,7 +145,20 @@ enum InteractionSetup {
         if im.activeTrigger?.id != verdict.showID {
             im.activeTrigger = verdict.showID.flatMap { id in im.triggers.first { $0.id == id } }
             if im.activeTrigger == nil { im.transitionError = nil }   // 닫힐 때 안내 문구도 정리
-            im.kioskTooHighShown = false   // 트리거가 바뀌면(이탈 포함) 키오스크 안내 리셋
+        }
+        let isNearKiosk = im.activeTrigger?.kind == .kioskScreen
+        im.updateKioskContext(
+            isIndoor: isIndoor,
+            isNear: isNearKiosk,
+            isMissionTwoActive: isMissionTwoActive,
+            isGuideLocked: false)
+
+        if isIndoor,
+           im.kioskPanelEntity == nil,
+           isMissionTwoActive,
+           !im.kioskFailOpenSent {
+            im.kioskFailOpenSent = true
+            guide.handleQuestEvent(.kioskFailed)
         }
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
@@ -145,34 +169,37 @@ enum InteractionSetup {
     private static func updatePanel(_ im: InteractionModel) {
         let trigger = im.activeTrigger
         showBillboard(im.panelEntity, active: trigger?.kind == .yesNoPrompt,
-                      trigger: trigger, forwardOffset: 0)
-        showBillboard(im.kioskPanelEntity, active: trigger?.kind == .kioskScreen,
-                      trigger: trigger, forwardOffset: InteractionTuning.kioskPanelForwardOffset)
+                      trigger: trigger)
+        if im.kioskUsesBillboardFallback {
+            showBillboard(
+                im.kioskPanelEntity,
+                active: im.kioskMenuVisible && trigger?.kind == .kioskScreen,
+                trigger: trigger)
+        } else {
+            im.kioskPanelEntity?.isEnabled = im.kioskMenuVisible
+        }
     }
 
-    /// 패널을 트리거 중심 위 눈높이(panelHeight)에 놓되, forwardOffset만큼 사용자(세계 원점)
-    /// 쪽으로 당긴 뒤 사용자를 향하도록 yaw 빌보드. 빌보드라 접근 각도와 무관하게 정면으로 보인다.
+    /// 문 패널은 사용자 눈앞 고정 좌표, 키오스크 폴백은 트리거 앞에 배치한 뒤
+    /// 사용자를 향하도록 yaw 빌보드로 만든다.
     private static func showBillboard(_ panel: Entity?, active: Bool,
-                                      trigger: ProximityTrigger?, forwardOffset: Float) {
+                                      trigger: ProximityTrigger?) {
         guard let panel else { return }
         guard active, let t = trigger else {
             if panel.isEnabled { panel.isEnabled = false }
             return
         }
         if !panel.isEnabled { panel.isEnabled = true }
-        // 1) 트리거 중심 위 눈높이(맵 로컬)에 놓고 월드 위치를 얻는다.
+        // 1) 트리거 중심 위 눈높이에 임시 배치하고 월드 위치를 얻는다.
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)
         var worldPos = panel.position(relativeTo: nil)
-        // 2) 사용자(세계 원점)를 향하는 수평 방향으로 forwardOffset만큼 당겨 표면 앞으로.
-        let horiz = SIMD2(worldPos.x, worldPos.z)
-        let dist = simd_length(horiz)
-        if forwardOffset > 0, dist > 0.001 {
-            let pulled = horiz - (horiz / dist) * forwardOffset   // 원점 쪽으로 당김
-            worldPos.x = pulled.x
-            worldPos.z = pulled.y
-            panel.setPosition(worldPos, relativeTo: nil)
-        }
+        // 2) 문은 눈앞 고정 좌표, 키오스크는 표면 앞 월드 좌표로 변환한다.
+        worldPos = InteractionPanelPlacement.worldPosition(
+            worldPos,
+            toward: .zero,
+            kind: t.kind)
+        panel.setPosition(worldPos, relativeTo: nil)
         // 3) 사용자를 향하도록 yaw 빌보드.
         let yaw = atan2(-worldPos.x, -worldPos.z)
         panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)

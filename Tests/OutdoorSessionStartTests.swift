@@ -29,24 +29,27 @@ struct OutdoorSessionStartTests {
             doorCenter: SIMD2<Float>(0, -6),
             cafeCenter: .zero,
             fallbackDoorCenter: SIMD2<Float>(0, -6),
-            distanceFromDoor: 1.25)
-        expectNear(outside.x, 0, "outside spawn preserves centered door X")
-        expectNear(outside.y, -7.25, "outside spawn is beyond the cafe door")
+            groundHalfExtent: 8,
+            safetyMargin: 0.5)
+        expectNear(outside.x, 0, "safe spawn preserves centered door X")
+        expectNear(outside.y, -7.5, "safe spawn stops inside the negative-Z floor edge")
 
         let diagonalOutside = OutdoorSessionStart.positionOutsideCafe(
             doorCenter: SIMD2<Float>(3, 4),
             cafeCenter: .zero,
             fallbackDoorCenter: SIMD2<Float>(0, -6),
-            distanceFromDoor: 2)
-        expectNear(diagonalOutside.x, 4.2, "diagonal outside spawn follows door direction on X")
-        expectNear(diagonalOutside.y, 5.6, "diagonal outside spawn follows door direction on Z")
+            groundHalfExtent: 8,
+            safetyMargin: 0.5)
+        expectNear(diagonalOutside.x, 5.625, "diagonal spawn follows the door ray on X")
+        expectNear(diagonalOutside.y, 7.5, "diagonal spawn reaches the inset floor edge on Z")
 
         let fallbackOutside = OutdoorSessionStart.positionOutsideCafe(
             doorCenter: .zero,
             cafeCenter: .zero,
             fallbackDoorCenter: SIMD2<Float>(0, -6),
-            distanceFromDoor: 1)
-        expectNear(fallbackOutside.y, -1, "coincident cafe and door use authored fallback")
+            groundHalfExtent: 8,
+            safetyMargin: 0.5)
+        expectNear(fallbackOutside.y, -7.5, "coincident cafe and door use the fallback ray")
 
         let positiveZ = OutdoorSessionStart.pose(
             startPosition: .zero,
