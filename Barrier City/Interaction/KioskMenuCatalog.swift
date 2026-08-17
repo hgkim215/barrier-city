@@ -23,7 +23,7 @@ enum KioskMenuCatalog {
         "cafe-mocha",
         "green-tea",
         "grapefruit-ade",
-        "rainbow-smoothie",
+        "cold-brew",
     ]
 
     private static let catalog: [KioskMenuItem] = [

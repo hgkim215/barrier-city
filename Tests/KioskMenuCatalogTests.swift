@@ -25,9 +25,15 @@ struct KioskMenuCatalogTests {
                 "cafe-mocha",
                 "green-tea",
                 "grapefruit-ade",
-                "rainbow-smoothie",
+                "cold-brew",
             ],
             "all uses the deterministic mixed-category grid")
+        guard !allIDs.contains("rainbow-smoothie") else {
+            fatalError("FAIL: all must not expose rainbow smoothie")
+        }
+        guard KioskMenuCatalog.items(for: .all).allSatisfy({ !$0.categories.contains(.other) }) else {
+            fatalError("FAIL: all must not expose other-category products")
+        }
         guard Set(allIDs) != Set(bestIDs) else {
             fatalError("FAIL: all must contain at least one non-Best product")
         }
