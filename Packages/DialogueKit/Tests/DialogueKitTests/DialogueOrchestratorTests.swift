@@ -121,6 +121,34 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertNil(result.event)
     }
 
+    func test_failedFulfillment_doesNotExposeCompletedModelSentenceBeforeThrow() async {
+        final class SentenceBox: @unchecked Sendable {
+            var values: [String] = []
+        }
+
+        let exposedSentences = SentenceBox()
+        let sut = makeSUT(MockLLM([
+            .token("레인보우 스무디가 준비됐어요."),
+            .token("노출되면 안 돼요."),
+        ], throwAfter: 1))
+
+        let result = await sut.handle(
+            utterance: "제 레인보우 스무디 준비됐나요?",
+            history: [],
+            fulfillmentContext: .failed,
+            onSentence: { exposedSentences.values.append($0) }
+        )
+
+        XCTAssertEqual(
+            result.spokenSentences,
+            ["죄송하지만 현재 레인보우 스무디를 제공해 드리기 어려워요."])
+        XCTAssertTrue(result.usedFallback)
+        XCTAssertNil(result.event)
+        XCTAssertTrue(
+            exposedSentences.values.isEmpty,
+            "failed fulfillment must not stream a potentially false model sentence")
+    }
+
     func test_ableistStaff_refusesTwice_thenReluctantlyAcceptsThirdOrderRequest() async {
         let sut = DialogueOrchestrator(
             persona: NPCPersona(id: "staff", role: "cafe staff", englishSystemBase: "You are staff.",
