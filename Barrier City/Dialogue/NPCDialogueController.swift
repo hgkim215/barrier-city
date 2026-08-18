@@ -81,6 +81,7 @@ final class NPCDialogueController {
 
     private let speech = SpeechInput()
     private let voice: VoiceOutput
+    private let realtimeFailureConfirmationVoice: VoiceOutput
     private let orderSession: CafeOrderSession
     private let accessibilityAttitude: AccessibilityAttitude
     private let clerkPersonality: ClerkPersonality
@@ -105,8 +106,10 @@ final class NPCDialogueController {
     private var realtimeCanAcceptInput = false
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
-    /// 로컬 주문 판정 직후 퀘스트 이벤트는 발행했지만 최종 음성 응답은 아직 끝나지 않은 상태.
+    /// 로컬 주문 판정은 끝났지만 최종 음성 응답 뒤까지 발행을 보류한 이벤트.
     private var realtimeTerminalEvent: MissionEvent?
+    private var realtimeFailureConfirmationGeneration = 0
+    private let realtimeFailureConfirmation = RealtimeFailureOrderConfirmationCoordinator()
     private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
 
     private var fulfillmentContext: RainbowSmoothieFulfillmentContext {
@@ -142,6 +145,9 @@ final class NPCDialogueController {
 #else
         voice = VoiceOutput(config: AppConfig.proxy, mode: .lowLatency)
 #endif
+        realtimeFailureConfirmationVoice = VoiceOutput(
+            config: AppConfig.proxy,
+            mode: .lowLatency)
         orchestrator = Self.makeOrchestrator(
             accessibilityAttitude: accessibilityAttitude,
             clerkPersonality: self.clerkPersonality
@@ -165,7 +171,7 @@ final class NPCDialogueController {
                 .timeout: CannedLine(text: "죄송해요, 다시 한 번 말씀해 주시겠어요?", audioKey: "timeout"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked"),
                 .orderConfirm: CannedLine(
-                    text: "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요.",
+                    text: RealtimeFailureOrderConfirmationContent.line,
                     audioKey: "order-confirm"
                 ),
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
@@ -316,6 +322,10 @@ final class NPCDialogueController {
     /// 거리 이탈·씬 종료처럼 공간 상태가 대화를 끝낼 때 호출한다.
     /// 마이크를 즉시 닫고 진행 중인 자동 턴을 취소하되, 호감도와 미션 결과는 보존한다.
     func cancelEncounter() {
+        cancelEncounter(preservingRealtimeFailureConfirmation: false)
+    }
+
+    private func cancelEncounter(preservingRealtimeFailureConfirmation: Bool) {
 #if DEBUG
         Self.lifecycleLogger.debug(
             "[CONVERSATION_LIFECYCLE] cancel active=\(self.isEncounterActive, privacy: .public) realtime=\(self.realtimeSession != nil, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public) status=\(self.status.rawValue, privacy: .public)"
@@ -323,6 +333,10 @@ final class NPCDialogueController {
 #endif
         isEncounterActive = false
         voice.stop()
+        if !preservingRealtimeFailureConfirmation {
+            realtimeFailureConfirmation.cancel()
+            realtimeFailureConfirmationVoice.stop()
+        }
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
         realtimeCommandTask?.cancel()
@@ -570,6 +584,8 @@ final class NPCDialogueController {
         await finishPendingCleanup()
         guard !Task.isCancelled else { return }
         guard !isEncounterActive else { return }
+        realtimeFailureConfirmationVoice.stop()
+        realtimeFailureConfirmationGeneration = realtimeFailureConfirmation.beginEncounter()
         automaticConversationTask?.cancel()
         automaticConversationTask = nil
         if speech.isRecording { _ = await speech.stop() }
@@ -611,6 +627,8 @@ final class NPCDialogueController {
         } catch {
             await session.stop()
             realtimeSession = nil
+            realtimeFailureConfirmation.cancel()
+            realtimeFailureConfirmationVoice.stop()
             isEncounterActive = false
             npcSubtitle = "실시간 음성 연결이 어려워 기존 음성 모드로 전환합니다."
             status = .idle
@@ -766,14 +784,31 @@ final class NPCDialogueController {
         case .failure(let message):
             let completedOrder = realtimeTerminalEvent == .orderPlaced
                 || realtimeMission.takeCompletedEvent() == .orderPlaced
-            cancelEncounter()
-            status = .idle
+            let confirmationGeneration = realtimeFailureConfirmationGeneration
+            cancelEncounter(preservingRealtimeFailureConfirmation: completedOrder)
             if completedOrder {
-                // 주문 슬롯은 이미 앱에서 확정됐다. 최종 생성 연결이 끊겨도 퀘스트와
-                // 대화 종료 상태가 서로 어긋나지 않도록 완료를 우선한다.
-                npcSubtitle = "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요."
-                publishMissionEvent(.orderPlaced)
+                // 주문 슬롯은 이미 앱에서 확정됐다. Realtime 연결 대신 온디바이스 음성으로
+                // 같은 확인 문구를 끝까지 전달한 뒤에만 퀘스트 이벤트를 발행한다.
+                _ = realtimeFailureConfirmation.recoverCompletedOrder(
+                    encounterGeneration: confirmationGeneration,
+                    present: { [weak self] line in
+                        self?.npcSubtitle = line
+                        self?.status = .speaking
+                    },
+                    speak: { [weak self] line in
+                        guard let self else { return }
+                        await self.realtimeFailureConfirmationVoice.speak(line) { [weak self] _ in
+                            self?.npcSubtitle = RealtimeFailureOrderConfirmationContent.line
+                        }
+                    },
+                    publish: { [weak self] in
+                        self?.publishMissionEvent(.orderPlaced)
+                    },
+                    finish: { [weak self] in
+                        self?.status = .idle
+                    })
             } else {
+                status = .idle
                 npcSubtitle = "음성 연결 오류: \(message)"
                 publishMissionEvent(.exited)
             }
