@@ -6,7 +6,6 @@ const MAX_BODY_BYTES = 48 * 1024;
 const MAX_CHAT_MESSAGES = 16;
 const MAX_CHAT_MESSAGE_CHARS = 8_000;
 const MAX_CHAT_TOTAL_CHARS = 32_000;
-const MAX_TTS_CHARS = 800;
 const MAX_EMBEDDING_INPUTS = 32;
 const MAX_EMBEDDING_ITEM_CHARS = 2_000;
 const MAX_EMBEDDING_TOTAL_CHARS = 24_000;
@@ -17,11 +16,6 @@ const ROUTES = {
     upstreamPath: "/v1/chat/completions",
     rateLimiter: "CHAT_RATE_LIMITER",
     sanitize: sanitizeChat,
-  },
-  "/tts": {
-    upstreamPath: "/v1/audio/speech",
-    rateLimiter: "TTS_RATE_LIMITER",
-    sanitize: sanitizeTTS,
   },
   "/embeddings": {
     upstreamPath: "/v1/embeddings",
@@ -102,27 +96,6 @@ function sanitizeChat(payload) {
     sanitized.response_format = { type: "json_object" };
   }
   return sanitized;
-}
-
-function sanitizeTTS(payload) {
-  if (!isRecord(payload) || payload.model !== "gpt-4o-mini-tts") {
-    throw new RequestError("model_not_allowed", "Model not allowed");
-  }
-  if (payload.voice !== "alloy") {
-    throw new RequestError("voice_not_allowed", "Voice not allowed");
-  }
-  if (typeof payload.input !== "string" || payload.input.length === 0 || payload.input.length > MAX_TTS_CHARS) {
-    throw new RequestError("invalid_tts_input", `TTS input must contain 1-${MAX_TTS_CHARS} characters`);
-  }
-  if (payload.response_format !== undefined && payload.response_format !== "wav") {
-    throw new RequestError("format_not_allowed", "Only WAV output is allowed");
-  }
-  return {
-    model: "gpt-4o-mini-tts",
-    voice: "alloy",
-    input: payload.input,
-    response_format: "wav",
-  };
 }
 
 function sanitizeEmbeddings(payload) {
@@ -230,7 +203,7 @@ function proxyUpstreamResponse(upstream, requestId) {
   });
 }
 
-export { parseJSONBody, sanitizeChat, sanitizeEmbeddings, sanitizeTTS };
+export { parseJSONBody, sanitizeChat, sanitizeEmbeddings };
 
 export default {
   async fetch(request, env) {
