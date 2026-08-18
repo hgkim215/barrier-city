@@ -81,6 +81,7 @@ final class NPCDialogueController {
 
     private let speech = SpeechInput()
     private let voice: VoiceOutput
+    private let orderSession: CafeOrderSession
     private let accessibilityAttitude: AccessibilityAttitude
     private let clerkPersonality: ClerkPersonality
     private var orchestrator: DialogueOrchestrator
@@ -94,6 +95,7 @@ final class NPCDialogueController {
     private var realtimeResponseTimeoutTask: Task<Void, Never>?
     private var realtimeGenerationTimeoutTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
+    private var orderReadyAnnouncementTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
     private var realtimeMission = RealtimeMissionCoordinator()
@@ -105,11 +107,24 @@ final class NPCDialogueController {
     private var realtimeSuppressesCurrentInputTurn = false
     /// 로컬 주문 판정 직후 퀘스트 이벤트는 발행했지만 최종 음성 응답은 아직 끝나지 않은 상태.
     private var realtimeTerminalEvent: MissionEvent?
+    private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
+
+    private static let orderReadyLine = "주문하신 레인보우 스무디 나왔습니다. 카운터에서 가져가 주세요."
+
+    private var fulfillmentContext: RainbowSmoothieFulfillmentContext {
+        orderSession.phase.dialogueFulfillmentContext
+    }
+
+    var blocksConversationForOrderReadyAnnouncement: Bool {
+        orderReadyAnnouncementTask != nil || orderReadyAnnouncementGate.hasPendingAnnouncement
+    }
 
     init(
+        orderSession: CafeOrderSession = CafeOrderSession(),
         accessibilityAttitude: AccessibilityAttitude = .ableist,
         clerkPersonality: ClerkPersonality? = nil
     ) {
+        self.orderSession = orderSession
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = clerkPersonality ?? .random()
         realtimeMission = RealtimeMissionCoordinator(personality: self.clerkPersonality)
@@ -167,6 +182,9 @@ final class NPCDialogueController {
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
     func reset() {
+        orderReadyAnnouncementTask?.cancel()
+        orderReadyAnnouncementTask = nil
+        orderReadyAnnouncementGate.reset()
         cancelEncounter()
         status = .idle
         userText = ""
@@ -190,6 +208,37 @@ final class NPCDialogueController {
             accessibilityAttitude: accessibilityAttitude,
             clerkPersonality: clerkPersonality
         )
+    }
+
+    func requestOrderReadyAnnouncement() {
+        let busy = isEncounterActive || status != .idle || orderReadyAnnouncementTask != nil
+        switch orderReadyAnnouncementGate.request(isChannelBusy: busy) {
+        case .speakNow:
+            startOrderReadyAnnouncement()
+        case .queued, .ignored:
+            break
+        }
+    }
+
+    func deliverPendingOrderReadyAnnouncementIfPossible() {
+        let busy = isEncounterActive || status != .idle || orderReadyAnnouncementTask != nil
+        guard orderReadyAnnouncementGate.takePendingIfAvailable(isChannelBusy: busy) else { return }
+        startOrderReadyAnnouncement()
+    }
+
+    private func startOrderReadyAnnouncement() {
+        guard orderReadyAnnouncementTask == nil else { return }
+        orderReadyAnnouncementTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.status = .speaking
+            self.npcSubtitle = Self.orderReadyLine
+            await self.voice.speak(Self.orderReadyLine) { [weak self] line in
+                self?.npcSubtitle = line
+            }
+            guard !Task.isCancelled else { return }
+            self.status = .idle
+            self.orderReadyAnnouncementTask = nil
+        }
     }
 
     /// 점원이 계산대에 도착했을 때 먼저 인사한 뒤 자동 음성 대화를 시작한다.
@@ -338,6 +387,7 @@ final class NPCDialogueController {
         let result = await orchestrator.handle(
             utterance: utterance,
             history: history,
+            fulfillmentContext: fulfillmentContext,
             onSentence: { pair.continuation.yield($0) })
         guard !Task.isCancelled else {
             pair.continuation.finish()
@@ -598,7 +648,12 @@ final class NPCDialogueController {
                 if realtimeCanAcceptInput { armRealtimeResponseTimeout() }
                 return
             }
-            let orderDecision = realtimeMission.observe(userTranscript: transcript)
+            let orderDecision: RainbowSmoothieOrderDecision
+            if fulfillmentContext.allowsOrderCompletion {
+                orderDecision = realtimeMission.observe(userTranscript: transcript)
+            } else {
+                orderDecision = .continueConversation
+            }
 #if DEBUG
             Self.lifecycleLogger.debug(
                 "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: orderDecision), privacy: .public) terminal=\(orderDecision.endsConversationAfterResponse, privacy: .public)"
@@ -718,7 +773,8 @@ final class NPCDialogueController {
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
-            climate: climate
+            climate: climate,
+            fulfillmentContext: fulfillmentContext
         ))
 
         # App-owned order state for this response
