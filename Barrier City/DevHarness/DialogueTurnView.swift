@@ -1,4 +1,5 @@
 import SwiftUI
+import DialogueKit
 
 /// 실제 NPC Realtime 대화의 상태와 양쪽 transcript를 보여주는 개발용 창.
 /// 대화 시작·입력은 공간 NPC와 동일한 WebRTC 세션이 담당한다.
@@ -55,7 +56,8 @@ struct DialogueTurnView: View {
                 .clipShape(Capsule())
         }
         .padding(24)
-        .frame(width: 520, minHeight: 360)
+        .frame(width: 520)
+        .frame(minHeight: 360)
     }
 
     private func transcriptCard(

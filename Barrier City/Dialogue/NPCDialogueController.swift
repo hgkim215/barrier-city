@@ -83,12 +83,14 @@ final class NPCDialogueController {
         accessibilityAttitude: AccessibilityAttitude = .ableist,
         clerkPersonality: ClerkPersonality? = nil
     ) {
+        let resolvedPersonality = clerkPersonality ?? .random()
+        let initialClimate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
         self.accessibilityAttitude = accessibilityAttitude
-        self.clerkPersonality = clerkPersonality ?? .random()
-        realtimeMission = RealtimeMissionCoordinator(personality: self.clerkPersonality)
-        climate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
-        rapport = climate.rapport
-        tone = climate.tone
+        self.clerkPersonality = resolvedPersonality
+        realtimeMission = RealtimeMissionCoordinator(personality: resolvedPersonality)
+        climate = initialClimate
+        rapport = initialClimate.rapport
+        tone = initialClimate.tone
     }
 
     private static func makePersona(

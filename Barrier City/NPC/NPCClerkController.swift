@@ -98,6 +98,8 @@ final class NPCClerkController {
     private var hasPlayedGreetingAnimation = false
     /// 주문 접수 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
     private var pendingOrderConversationEnd = false
+    /// 개발 패널에서 시작한 세션은 사용자가 NPC 반경 밖에 있어도 종료하지 않는다.
+    private var isRemoteDevelopmentConversation = false
 
     init(dialogue: NPCDialogueController) {
         self.dialogue = dialogue
@@ -142,6 +144,7 @@ final class NPCClerkController {
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
         pendingOrderConversationEnd = false
+        isRemoteDevelopmentConversation = false
         dialogue.reset()
     }
 
@@ -160,6 +163,7 @@ final class NPCClerkController {
         handledMissionSequence = 0
         hasPlayedGreetingAnimation = false
         pendingOrderConversationEnd = false
+        isRemoteDevelopmentConversation = false
         conversationAnchor = nil
         isInteractionBubbleVisible = false
         isTalkAvailable = false
@@ -231,7 +235,8 @@ final class NPCClerkController {
         // 비동기 음성 세션이 greeting/conversing 사이를 오가는 동안 업무 동선이 끼어들어
         // 점원이 사용자를 두고 걸어가는 현상을 방지하고, 회전만 사용자 쪽으로 허용한다.
         if let anchor = conversationAnchor {
-            if playerDistance > NPCClerkTuning.conversationExitRadius {
+            if !isRemoteDevelopmentConversation,
+               playerDistance > NPCClerkTuning.conversationExitRadius {
                 endEncounterForDeparture()
                 return
             }
@@ -270,7 +275,14 @@ final class NPCClerkController {
     /// 선택으로만 대화를 시작해 NPC가 갑자기 말을 거는 느낌을 없앤다.
     func startConversation() {
         guard isTalkAvailable else { return }
-        beginGreeting()
+        _ = beginGreeting(isRemoteDevelopmentConversation: false)
+    }
+
+    /// ControlPanel의 대화 테스트에서 근접 조건만 우회하고 실제 대화 상태 머신을 시작한다.
+    /// 카페 씬과 세 번째 미션 활성화 조건은 그대로 요구한다.
+    @discardableResult
+    func startConversationForDevelopment() -> Bool {
+        beginGreeting(isRemoteDevelopmentConversation: true)
     }
 
     /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
@@ -460,10 +472,12 @@ final class NPCClerkController {
         root.orientation = simd_slerp(root.orientation, target, amount)
     }
 
-    private func beginGreeting() {
+    @discardableResult
+    private func beginGreeting(isRemoteDevelopmentConversation: Bool) -> Bool {
         guard phase == .working || phase == .orderAccepted,
-              GuideFlowModel.shared.allowsNPCOrderConversation else { return }
+              GuideFlowModel.shared.allowsNPCOrderConversation else { return false }
         // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
+        self.isRemoteDevelopmentConversation = isRemoteDevelopmentConversation
         conversationAnchor = currentClerkPosition
         phase = .greeting
         isTalkAvailable = false
@@ -484,12 +498,14 @@ final class NPCClerkController {
             if self.dialogue.isEncounterActive {
                 self.phase = .conversing
             } else {
+                self.isRemoteDevelopmentConversation = false
                 self.conversationAnchor = nil
                 self.phase = .working
                 self.workTarget = nil
                 self.workPauseRemaining = self.randomWorkPause()
             }
         }
+        return true
     }
 
     private func handleDialogueSignals() {
@@ -508,6 +524,7 @@ final class NPCClerkController {
             finishAcceptedOrderPresentationIfReady()
         case .exited:
             pendingOrderConversationEnd = false
+            isRemoteDevelopmentConversation = false
             conversationAnchor = nil
             greetingTask?.cancel()
             greetingTask = nil
@@ -526,6 +543,7 @@ final class NPCClerkController {
     private func finishAcceptedOrderPresentationIfReady() {
         guard pendingOrderConversationEnd, !dialogue.isEncounterActive else { return }
         pendingOrderConversationEnd = false
+        isRemoteDevelopmentConversation = false
         conversationAnchor = nil
         phase = .orderAccepted
         workTarget = nil
@@ -535,6 +553,7 @@ final class NPCClerkController {
 
     /// 대화 중 사용자가 멀어지면 즉시 마이크를 닫고 말 걸기 상태로 돌아간다.
     private func endEncounterForDeparture() {
+        isRemoteDevelopmentConversation = false
         conversationAnchor = nil
         greetingTask?.cancel()
         greetingTask = nil
