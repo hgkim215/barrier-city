@@ -187,7 +187,7 @@ public actor DialogueOrchestrator {
             return true
         }
         let value = utterance.lowercased()
-        return ["주문", "스무디", "음료", "준비", "나왔", "언제", "상태", "카운터"]
+        return ["주문", "스무디", "음료"]
             .contains(where: value.contains)
     }
 

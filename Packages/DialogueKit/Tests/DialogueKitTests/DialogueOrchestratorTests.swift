@@ -121,6 +121,30 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertNil(result.event)
     }
 
+    func test_failedFulfillment_unrelatedClosingTimeQuestionUsesNormalModelResponse() async {
+        final class SentenceBox: @unchecked Sendable {
+            var values: [String] = []
+        }
+
+        let exposedSentences = SentenceBox()
+        let sut = makeSUT(MockLLM([
+            .token("카페는 오후 8시에 문을 닫아요."),
+            .done,
+        ]))
+
+        let result = await sut.handle(
+            utterance: "카페는 언제 문을 닫아요?",
+            history: [],
+            fulfillmentContext: .failed,
+            onSentence: { exposedSentences.values.append($0) }
+        )
+
+        XCTAssertEqual(result.spokenSentences, ["카페는 오후 8시에 문을 닫아요."])
+        XCTAssertEqual(exposedSentences.values, result.spokenSentences)
+        XCTAssertFalse(result.usedFallback)
+        XCTAssertNil(result.event)
+    }
+
     func test_failedFulfillment_doesNotExposeCompletedModelSentenceBeforeThrow() async {
         final class SentenceBox: @unchecked Sendable {
             var values: [String] = []
