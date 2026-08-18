@@ -17,25 +17,45 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
             return false
         }
 
-        let barBounds = barTable.visualBounds(relativeTo: barTable)
+        let barBounds = barTable.visualBounds(relativeTo: indoorMap)
+        guard let anchorPosition = RainbowSmoothiePlacement.counterPosition(
+            minimum: barBounds.min,
+            maximum: barBounds.max) else {
+            return false
+        }
         let anchor = Entity()
         anchor.name = "BarTableServingAnchor"
-        anchor.position = RainbowSmoothiePlacement.counterPosition(
-            minimum: barBounds.min,
-            maximum: barBounds.max)
         barTable.addChild(anchor)
+        anchor.setTransformMatrix(matrix_identity_float4x4, relativeTo: indoorMap)
+        anchor.setPosition(anchorPosition, relativeTo: indoorMap)
 
-        let authoredBounds = smoothie.visualBounds(relativeTo: smoothie)
-        let scale = RainbowSmoothiePlacement.uniformScale(
-            assetHeight: authoredBounds.extents.y)
-        smoothie.scale = SIMD3(repeating: scale)
-        anchor.addChild(smoothie)
-        let scaledBounds = smoothie.visualBounds(relativeTo: anchor)
-        smoothie.position.y -= scaledBounds.min.y
         smoothie.isEnabled = false
-
+        anchor.addChild(smoothie)
         servingAnchor = anchor
         smoothieEntity = smoothie
+
+        let authoredBounds = smoothie.visualBounds(relativeTo: indoorMap)
+        guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(
+            minimum: authoredBounds.min,
+            maximum: authoredBounds.max) else {
+            reset()
+            return false
+        }
+        let scale = RainbowSmoothiePlacement.uniformScale(
+            assetHeight: authoredBounds.extents.y)
+        smoothie.scale *= SIMD3(repeating: scale)
+
+        let scaledBounds = smoothie.visualBounds(relativeTo: indoorMap)
+        guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(
+            minimum: scaledBounds.min,
+            maximum: scaledBounds.max) else {
+            reset()
+            return false
+        }
+        var smoothiePosition = smoothie.position(relativeTo: indoorMap)
+        smoothiePosition.y += anchorPosition.y - scaledBounds.min.y
+        smoothie.setPosition(smoothiePosition, relativeTo: indoorMap)
+
         return true
     }
 
