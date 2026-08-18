@@ -278,7 +278,12 @@ final class NPCClerkController {
     /// Barista 위의 공간 버튼에서 호출한다. 자동 근접 인사 대신 사용자의 명시적인
     /// 선택으로만 대화를 시작해 NPC가 갑자기 말을 거는 느낌을 없앤다.
     func startConversation() {
-        guard isTalkAvailable else { return }
+        guard isTalkAvailable,
+              !dialogue.isBusy,
+              !dialogue.blocksConversationForOrderReadyAnnouncement else {
+            isTalkAvailable = false
+            return
+        }
         beginGreeting()
     }
 
