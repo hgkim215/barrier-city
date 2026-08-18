@@ -481,7 +481,14 @@ final class NPCClerkController {
             guard let self else { return }
             await self.dialogue.startEncounter()
             guard !Task.isCancelled, self.phase == .greeting else { return }
-            self.phase = .conversing
+            if self.dialogue.isEncounterActive {
+                self.phase = .conversing
+            } else {
+                self.conversationAnchor = nil
+                self.phase = .working
+                self.workTarget = nil
+                self.workPauseRemaining = self.randomWorkPause()
+            }
         }
     }
 
