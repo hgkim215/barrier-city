@@ -109,14 +109,19 @@ final class NPCDialogueController {
     private var realtimeTerminalEvent: MissionEvent?
     private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
 
-    private static let orderReadyLine = "주문하신 레인보우 스무디 나왔습니다. 카운터에서 가져가 주세요."
-
     private var fulfillmentContext: RainbowSmoothieFulfillmentContext {
         orderSession.phase.dialogueFulfillmentContext
     }
 
+    var orderReadyAnnouncementPresentation: OrderReadyAnnouncementPresentationState {
+        OrderReadyAnnouncementPresentationState(
+            hasPendingAnnouncement: orderReadyAnnouncementGate.hasPendingAnnouncement,
+            hasActiveTask: orderReadyAnnouncementTask != nil
+        )
+    }
+
     var blocksConversationForOrderReadyAnnouncement: Bool {
-        orderReadyAnnouncementTask != nil || orderReadyAnnouncementGate.hasPendingAnnouncement
+        orderReadyAnnouncementPresentation.isPresented
     }
 
     init(
@@ -230,14 +235,24 @@ final class NPCDialogueController {
         guard orderReadyAnnouncementTask == nil else { return }
         orderReadyAnnouncementTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            guard OrderReadyAnnouncementExecutionGate.performIfNotCancelled({
-                self.status = .speaking
-                self.npcSubtitle = Self.orderReadyLine
-            }) else { return }
-            await self.voice.speak(Self.orderReadyLine) { [weak self] line in
-                self?.npcSubtitle = line
-            }
-            guard !Task.isCancelled else { return }
+            let didComplete = await OrderReadyAnnouncementPresentationTiming.perform(
+                present: {
+                    self.status = .speaking
+                    self.npcSubtitle = OrderReadyAnnouncementContent.line
+                },
+                speak: { [weak self] in
+                    guard let self else { return }
+                    await self.voice.speak(OrderReadyAnnouncementContent.line) { [weak self] _ in
+                        self?.npcSubtitle = OrderReadyAnnouncementContent.line
+                    }
+                },
+                waitForMinimumVisibility: {
+                    try await Task.sleep(
+                        for: OrderReadyAnnouncementPresentationTiming.minimumVisibleDuration
+                    )
+                }
+            )
+            guard didComplete else { return }
             self.status = .idle
             self.orderReadyAnnouncementTask = nil
         }

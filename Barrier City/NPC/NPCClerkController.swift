@@ -119,9 +119,12 @@ final class NPCClerkController {
 
     func setGuideInteractionLocked(_ locked: Bool) {
         isGuideInteractionLocked = locked
-        interactionBubble?.isEnabled = isInteractionBubbleVisible
-            && !locked
-            && GuideFlowModel.shared.allowsNPCOrderConversation
+        interactionBubble?.isEnabled = dialogue.orderReadyAnnouncementPresentation
+            .interactionAttachmentIsVisible(
+                isNormallyVisible: isInteractionBubbleVisible,
+                isGuideLocked: locked,
+                allowsConversation: GuideFlowModel.shared.allowsNPCOrderConversation
+            )
         if locked { isTalkAvailable = false }
     }
 
@@ -585,9 +588,12 @@ final class NPCClerkController {
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible
-        interactionBubble?.isEnabled = visible
-            && !isGuideInteractionLocked
-            && GuideFlowModel.shared.allowsNPCOrderConversation
+        interactionBubble?.isEnabled = dialogue.orderReadyAnnouncementPresentation
+            .interactionAttachmentIsVisible(
+                isNormallyVisible: visible,
+                isGuideLocked: isGuideInteractionLocked,
+                allowsConversation: GuideFlowModel.shared.allowsNPCOrderConversation
+            )
     }
 
 }
