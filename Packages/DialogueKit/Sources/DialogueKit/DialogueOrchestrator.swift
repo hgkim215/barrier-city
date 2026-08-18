@@ -71,6 +71,8 @@ public actor DialogueOrchestrator {
         observePlayerTurn(utterance)
         turnCount += 1
         let intent = router.infer(from: utterance)
+        let usesUnavailableFallback = fulfillmentContext == .failed
+            && isFulfillmentRequest(intent: intent, utterance: utterance)
         let acceptedBeforeTurn = orderProgress.acceptsCounterOrder
         let orderCollectionDecision: RainbowSmoothieOrderDecision
         if fulfillmentContext.allowsOrderCompletion {
@@ -117,7 +119,9 @@ public actor DialogueOrchestrator {
             // 이미 완성된 문장을 보여줬다면 그것을 유지하고, 그렇지 않을 때만 폴백한다.
             if sentences.isEmpty {
                 return fallback(
-                    orderCollectionDecision.endsConversationAfterResponse ? .orderConfirm : .timeout,
+                    fallbackSituation(
+                        usesUnavailableFallback: usesUnavailableFallback,
+                        orderCollectionDecision: orderCollectionDecision),
                     event: resolvedMissionEvent
                 )
             }
@@ -131,7 +135,9 @@ public actor DialogueOrchestrator {
         }
         if sentences.isEmpty {
             return fallback(
-                orderCollectionDecision.endsConversationAfterResponse ? .orderConfirm : .timeout,
+                fallbackSituation(
+                    usesUnavailableFallback: usesUnavailableFallback,
+                    orderCollectionDecision: orderCollectionDecision),
                 event: resolvedMissionEvent
             )
         }
@@ -169,6 +175,26 @@ public actor DialogueOrchestrator {
         case .leave: return .exited
         case .orderRequest, .orderComplete, .smalltalk, .unknown: return nil
         }
+    }
+
+    private func isFulfillmentRequest(
+        intent: DialogueIntent,
+        utterance: String
+    ) -> Bool {
+        if intent.kind == .orderRequest || intent.kind == .orderComplete {
+            return true
+        }
+        let value = utterance.lowercased()
+        return ["주문", "스무디", "음료", "준비", "나왔", "언제", "상태", "카운터"]
+            .contains(where: value.contains)
+    }
+
+    private func fallbackSituation(
+        usesUnavailableFallback: Bool,
+        orderCollectionDecision: RainbowSmoothieOrderDecision
+    ) -> Situation {
+        if usesUnavailableFallback { return .fulfillmentUnavailable }
+        return orderCollectionDecision.endsConversationAfterResponse ? .orderConfirm : .timeout
     }
 
     private func fallback(_ situation: Situation, event: MissionEvent? = nil) -> TurnResult {

@@ -1,6 +1,8 @@
 import Foundation
 
 public enum RainbowSmoothieFulfillmentContext: String, Equatable, Sendable {
+    public static let unavailableLine = "죄송하지만 현재 레인보우 스무디를 제공해 드리기 어려워요."
+
     case orderingAllowed
     case preparing
     case readyAtCounter

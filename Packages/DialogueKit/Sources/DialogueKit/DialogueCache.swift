@@ -1,7 +1,14 @@
 import Foundation
 
 /// ⑨ 시연 결정론·오프라인·폴백용 사전 작성 대사. audioKey는 사전 생성 음성 파일 키(앱 레이어에서 사용).
-public enum Situation: String, Sendable { case greeting, timeout, blockedContent, orderConfirm, turnLimitReached }
+public enum Situation: String, Sendable {
+    case greeting
+    case timeout
+    case blockedContent
+    case orderConfirm
+    case fulfillmentUnavailable
+    case turnLimitReached
+}
 
 public struct CannedLine: Equatable, Sendable {
     public let text: String

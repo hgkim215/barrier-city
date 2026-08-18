@@ -174,6 +174,10 @@ final class NPCDialogueController {
                     text: RealtimeFailureOrderConfirmationContent.line,
                     audioKey: "order-confirm"
                 ),
+                .fulfillmentUnavailable: CannedLine(
+                    text: RainbowSmoothieFulfillmentContext.unavailableLine,
+                    audioKey: "fulfillment-unavailable"
+                ),
                 .turnLimitReached: CannedLine(text: "이만 다음 손님을 받을게요. 좋은 하루 되세요.", audioKey: "turnlimit"),
             ]),
             turnLimit: AutomaticConversationTuning.maximumTurns)

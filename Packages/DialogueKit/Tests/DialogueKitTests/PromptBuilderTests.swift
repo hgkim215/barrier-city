@@ -159,6 +159,12 @@ final class PromptBuilderTests: XCTestCase {
             XCTAssertTrue(realtime.contains(requiredFact))
             XCTAssertTrue(legacy.contains(context.promptGuide))
             XCTAssertTrue(realtime.contains(context.promptGuide))
+            if context == .failed {
+                XCTAssertTrue(legacy.contains("currently unavailable"))
+                XCTAssertTrue(realtime.contains("currently unavailable"))
+                XCTAssertTrue(legacy.contains("never claim an order was placed"))
+                XCTAssertTrue(realtime.contains("never claim an order was placed"))
+            }
         }
     }
 

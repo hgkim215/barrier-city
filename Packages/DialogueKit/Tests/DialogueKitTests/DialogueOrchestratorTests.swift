@@ -28,6 +28,9 @@ final class DialogueOrchestratorTests: XCTestCase {
                 .timeout: CannedLine(text: "잠시만요…", audioKey: "timeout_ko"),
                 .blockedContent: CannedLine(text: "주문을 도와드릴게요.", audioKey: "blocked_ko"),
                 .orderConfirm: CannedLine(text: "한 잔 주문됐어요.", audioKey: "order-confirm_ko"),
+                .fulfillmentUnavailable: CannedLine(
+                    text: "죄송하지만 현재 레인보우 스무디를 제공해 드리기 어려워요.",
+                    audioKey: "fulfillment-unavailable_ko"),
             ]),
             turnLimit: turnLimit)
     }
@@ -84,6 +87,38 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertEqual(result.event, .orderPlaced)
         XCTAssertEqual(result.spokenSentences, ["한 잔 주문됐어요."])
         XCTAssertTrue(result.usedFallback)
+    }
+
+    func test_failedFulfillment_orderAttemptUsesUnavailableFallbackWhenGenerationThrows() async {
+        let sut = makeSUT(MockLLM([.token("생성되지 않음")], throwAfter: 0))
+
+        let result = await sut.handle(
+            utterance: "레인보우 스무디 한 잔 다시 주문할게요",
+            history: [],
+            fulfillmentContext: .failed
+        )
+
+        XCTAssertEqual(
+            result.spokenSentences,
+            ["죄송하지만 현재 레인보우 스무디를 제공해 드리기 어려워요."])
+        XCTAssertTrue(result.usedFallback)
+        XCTAssertNil(result.event)
+    }
+
+    func test_failedFulfillment_statusAttemptUsesUnavailableFallbackForEmptyOutput() async {
+        let sut = makeSUT(MockLLM([.done]))
+
+        let result = await sut.handle(
+            utterance: "제 스무디 준비 상태가 어떻게 됐어요?",
+            history: [],
+            fulfillmentContext: .failed
+        )
+
+        XCTAssertEqual(
+            result.spokenSentences,
+            ["죄송하지만 현재 레인보우 스무디를 제공해 드리기 어려워요."])
+        XCTAssertTrue(result.usedFallback)
+        XCTAssertNil(result.event)
     }
 
     func test_ableistStaff_refusesTwice_thenReluctantlyAcceptsThirdOrderRequest() async {
