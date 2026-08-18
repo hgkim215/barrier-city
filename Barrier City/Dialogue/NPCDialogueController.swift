@@ -230,8 +230,10 @@ final class NPCDialogueController {
         guard orderReadyAnnouncementTask == nil else { return }
         orderReadyAnnouncementTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            self.status = .speaking
-            self.npcSubtitle = Self.orderReadyLine
+            guard OrderReadyAnnouncementExecutionGate.performIfNotCancelled({
+                self.status = .speaking
+                self.npcSubtitle = Self.orderReadyLine
+            }) else { return }
             await self.voice.speak(Self.orderReadyLine) { [weak self] line in
                 self?.npcSubtitle = line
             }

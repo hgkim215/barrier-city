@@ -1,3 +1,12 @@
+enum OrderReadyAnnouncementExecutionGate {
+    @discardableResult
+    static func performIfNotCancelled(_ operation: () -> Void) -> Bool {
+        guard !Task.isCancelled else { return false }
+        operation()
+        return true
+    }
+}
+
 struct OrderReadyAnnouncementGate {
     enum RequestResult: Equatable {
         case speakNow
