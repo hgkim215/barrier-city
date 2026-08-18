@@ -26,7 +26,8 @@ public struct RealtimeConversationGuide: Sendable {
 
     public func instructions(
         persona: NPCPersona,
-        climate: SocialClimate
+        climate: SocialClimate,
+        fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed
     ) -> String {
         """
         # Role and scene
@@ -74,6 +75,9 @@ public struct RealtimeConversationGuide: Sendable {
         The wheelchair and high kiosk are private scene context, not information the visitor has stated.
         Do not acknowledge the access barrier or infer that help is needed until the visitor explicitly
         says the kiosk, screen, payment control, or reach is physically inaccessible to them.
+
+        # App-owned fulfillment state
+        \(fulfillmentContext.promptGuide)
 
         # Required conversation flow
         ## 1. Kiosk-first opening

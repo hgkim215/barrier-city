@@ -57,6 +57,7 @@ public actor DialogueOrchestrator {
     }
 
     public func handle(utterance: String, history: [Message],
+                       fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed,
                        onSentence: @Sendable (String) -> Void = { _ in }) async -> TurnResult {
         // 1) 입력 가드
         if case .block = guardian.screen(utterance) {
@@ -71,24 +72,30 @@ public actor DialogueOrchestrator {
         turnCount += 1
         let intent = router.infer(from: utterance)
         let acceptedBeforeTurn = orderProgress.acceptsCounterOrder
-        let orderCollectionDecision = orderProgress.observe(
-            userTranscript: utterance
-        )
-        let orderDecision = orderServiceDecision(
-            for: intent,
-            utterance: utterance,
-            acceptedBeforeTurn: acceptedBeforeTurn
-        )
-        let resolvedMissionEvent = missionEvent(
-            for: intent,
-            orderCollectionDecision: orderCollectionDecision
-        )
+        let orderCollectionDecision: RainbowSmoothieOrderDecision
+        if fulfillmentContext.allowsOrderCompletion {
+            orderCollectionDecision = orderProgress.observe(userTranscript: utterance)
+        } else {
+            orderCollectionDecision = .continueConversation
+        }
+        let orderDecision = fulfillmentContext.allowsOrderCompletion
+            ? orderServiceDecision(
+                for: intent,
+                utterance: utterance,
+                acceptedBeforeTurn: acceptedBeforeTurn)
+            : .notApplicable
+        let resolvedMissionEvent = fulfillmentContext.allowsOrderCompletion
+            ? missionEvent(
+                for: intent,
+                orderCollectionDecision: orderCollectionDecision)
+            : nil
 
         // 3) 프롬프트 조립(③)
         let messages = promptBuilder.build(persona: persona, climate: climate,
             history: history, userUtterance: utterance, turnLimit: turnLimit,
             orderDecision: orderDecision,
-            orderCollectionDecision: orderCollectionDecision)
+            orderCollectionDecision: orderCollectionDecision,
+            fulfillmentContext: fulfillmentContext)
 
         // 4) LLM 스트림 → 완성되는 문장부터 즉시 UI/음성 큐로 전달
         var chunker = SentenceChunker()

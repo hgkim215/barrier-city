@@ -135,6 +135,43 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(realtime.contains("레인보우 마카롱 스무디"))
     }
 
+    func test_fulfillmentContext_isIdenticalInLegacyAndRealtimeGuidance() {
+        for (context, requiredFact) in [
+            (RainbowSmoothieFulfillmentContext.preparing, "FULFILLMENT=preparing"),
+            (.readyAtCounter, "FULFILLMENT=readyAtCounter"),
+            (.failed, "FULFILLMENT=failed"),
+        ] {
+            let legacy = PromptBuilder().build(
+                persona: persona,
+                climate: SocialClimate(),
+                history: [],
+                userUtterance: "제 스무디 어떻게 됐어요?",
+                turnLimit: 8,
+                fulfillmentContext: context
+            ).first!.content
+            let realtime = RealtimeConversationGuide().instructions(
+                persona: persona,
+                climate: SocialClimate(),
+                fulfillmentContext: context
+            )
+
+            XCTAssertTrue(legacy.contains(requiredFact))
+            XCTAssertTrue(realtime.contains(requiredFact))
+            XCTAssertTrue(legacy.contains(context.promptGuide))
+            XCTAssertTrue(realtime.contains(context.promptGuide))
+        }
+    }
+
+    func test_orderedContexts_forbidASecondOrderCompletion() {
+        for context in [
+            RainbowSmoothieFulfillmentContext.preparing,
+            .readyAtCounter,
+            .failed,
+        ] {
+            XCTAssertFalse(context.allowsOrderCompletion)
+        }
+    }
+
     func test_clerkPersonality_isExplicitInLegacyAndRealtimePrompts() {
         let chatty = NPCPersona(
             id: "staff",

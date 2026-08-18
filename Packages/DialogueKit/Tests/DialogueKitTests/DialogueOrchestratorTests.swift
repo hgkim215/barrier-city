@@ -60,6 +60,19 @@ final class DialogueOrchestratorTests: XCTestCase {
         XCTAssertFalse(r.usedFallback)
     }
 
+    func test_preparingFulfillment_cannotPublishAnotherOrderPlacedEvent() async {
+        let sut = makeSUT(MockLLM([.token("이미 주문 상태를 확인해 드릴게요."), .done]))
+
+        let result = await sut.handle(
+            utterance: "레인보우 스무디 한 잔 더 주문할게요",
+            history: [],
+            fulfillmentContext: .preparing
+        )
+
+        XCTAssertNil(result.event)
+        XCTAssertFalse(result.usedFallback)
+    }
+
     func test_completedOrder_preservesEventWhenGenerationFails() async {
         let sut = makeSUT(MockLLM([.token("생성되지 않음")], throwAfter: 0))
 

@@ -8,7 +8,8 @@ public struct PromptBuilder: Sendable {
     public func build(persona: NPCPersona, climate: SocialClimate,
                       history: [Message], userUtterance: String, turnLimit: Int,
                       orderDecision: OrderServiceDecision = .notApplicable,
-                      orderCollectionDecision: RainbowSmoothieOrderDecision = .continueConversation) -> [Message] {
+                      orderCollectionDecision: RainbowSmoothieOrderDecision = .continueConversation,
+                      fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed) -> [Message] {
         let system = """
         \(persona.englishSystemBase)
         You play the role of: \(persona.role).
@@ -24,6 +25,8 @@ public struct PromptBuilder: Sendable {
         # App-owned order state for this turn
         Decision: \(orderCollectionDecision).
         \(orderCollectionDecision.promptGuide)
+        # App-owned fulfillment state
+        \(fulfillmentContext.promptGuide)
         Mission objective: The visitor's intended purchase is exactly one Rainbow Smoothie. Treat "레인보우 스무디" and "레인보우 마카롱 스무디" as the same menu item. Do not reveal or order it on the visitor's behalf before they say what they want. Do not mark a different menu item as the mission order. \
         Conversation flow: The encounter already opened with a mandatory kiosk direction. Treat the wheelchair and high kiosk as private scene context until the visitor explicitly explains the physical reach barrier. Follow the personality rule's acceptance timing even when relationship score is warm. Barrier explanation only opens counter ordering and never completes an order. Before the current order decision accepts verbal service, do not ask for an item or pretend to take an order. Once verbal service is accepted, never send the visitor back to the kiosk. Collect item and quantity separately: if the item is known but quantity is missing, ask only how many cups; if item and one cup are supplied together, confirm completion immediately. \
         Let both the accessibility stance and clerk personality remain clearly recognizable through word choice, pacing, hesitation, and reactions, but never announce or explain either trait. Always follow the app-owned order state guide. \
