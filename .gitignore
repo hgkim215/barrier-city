@@ -24,3 +24,6 @@ node_modules/
 
 # Local isolated development worktrees
 .worktrees/
+
+# Current-branch-only NPC dialogue troubleshooting notes
+/docs/trouble-shooting-npc/
