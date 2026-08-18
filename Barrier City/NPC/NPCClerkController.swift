@@ -123,7 +123,7 @@ final class NPCClerkController {
             .interactionAttachmentIsVisible(
                 isNormallyVisible: isInteractionBubbleVisible,
                 isGuideLocked: locked,
-                allowsConversation: GuideFlowModel.shared.allowsNPCOrderConversation
+                allowsConversation: GuideFlowModel.shared.allowsNPCConversation
             )
         if locked { isTalkAvailable = false }
     }
@@ -251,11 +251,12 @@ final class NPCClerkController {
             return
         }
 
-        isTalkAvailable = (phase == .working || phase == .orderAccepted)
-            && playerDistance <= NPCClerkTuning.detectionRadius
-            && GuideFlowModel.shared.allowsNPCOrderConversation
-            && !dialogue.isBusy
-            && !dialogue.blocksConversationForOrderReadyAnnouncement
+        isTalkAvailable = NPCConversationAccessPolicy.canOfferTalk(
+            clerkPhaseAllowsConversation: phase == .working || phase == .orderAccepted,
+            isPlayerNear: playerDistance <= NPCClerkTuning.detectionRadius,
+            guideAllowsConversation: GuideFlowModel.shared.allowsNPCConversation,
+            isDialogueBusy: dialogue.isBusy,
+            isReadyAnnouncementBlocking: dialogue.blocksConversationForOrderReadyAnnouncement)
 
         switch phase {
         case .unavailable:
@@ -478,8 +479,9 @@ final class NPCClerkController {
     }
 
     private func beginGreeting() {
-        guard phase == .working || phase == .orderAccepted,
-              GuideFlowModel.shared.allowsNPCOrderConversation else { return }
+        guard NPCConversationAccessPolicy.canBeginGreeting(
+            clerkPhaseAllowsConversation: phase == .working || phase == .orderAccepted,
+            guideAllowsConversation: GuideFlowModel.shared.allowsNPCConversation) else { return }
         // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
         conversationAnchor = currentClerkPosition
         phase = .greeting
@@ -592,7 +594,7 @@ final class NPCClerkController {
             .interactionAttachmentIsVisible(
                 isNormallyVisible: visible,
                 isGuideLocked: isGuideInteractionLocked,
-                allowsConversation: GuideFlowModel.shared.allowsNPCOrderConversation
+                allowsConversation: GuideFlowModel.shared.allowsNPCConversation
             )
     }
 

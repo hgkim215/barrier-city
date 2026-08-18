@@ -56,7 +56,17 @@ struct GuideFlowState: Equatable {
         }
     }
 
-    /// NPC 주문 대화는 세 번째 미션이 실제 활성화된 동안에만 시작할 수 있다.
+    /// 주문 후 준비·수령 상태 질문은 같은 공간의 점원에게 계속 할 수 있다.
+    var allowsNPCConversation: Bool {
+        switch phase {
+        case .missionActive(index: 2), .postOrderPending:
+            true
+        default:
+            false
+        }
+    }
+
+    /// 새 주문 접수는 세 번째 미션이 실제 활성화된 동안에만 가능하다.
     var allowsNPCOrderConversation: Bool {
         phase == .missionActive(index: 2)
     }
