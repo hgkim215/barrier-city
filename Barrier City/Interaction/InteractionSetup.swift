@@ -50,6 +50,7 @@ enum InteractionSetup {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
+        appModel.rainbowSmoothieServing.resetForOutdoor()
         appModel.npcClerk.resetForOutdoor()
 
         // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.

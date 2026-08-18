@@ -113,6 +113,39 @@ private actor ControlledSleeper {
     }
 }
 
+private actor ReentrySleeper {
+    private var continuations: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var enteredCalls: Set<Int> = []
+    private var enteredWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var nextCall = 0
+
+    func sleep() async {
+        nextCall += 1
+        let call = nextCall
+        enteredCalls.insert(call)
+        enteredWaiters.removeValue(forKey: call)?.resume()
+        await withCheckedContinuation { continuation in
+            continuations[call] = continuation
+        }
+    }
+
+    func waitUntilEntered(_ call: Int) async {
+        if enteredCalls.contains(call) {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            enteredWaiters[call] = continuation
+        }
+    }
+
+    func finish(_ call: Int) {
+        guard let continuation = continuations.removeValue(forKey: call) else {
+            fatalError("FAIL: sleep call \(call) must be entered before finish")
+        }
+        continuation.resume()
+    }
+}
+
 @main
 @MainActor
 struct RainbowSmoothieServingControllerTests {
@@ -187,6 +220,44 @@ struct RainbowSmoothieServingControllerTests {
         expect(cancellationPresenter.revealCount == 0, "cancelled delay cannot reveal")
         expect(cancelledReadyCount == 0, "cancelled delay cannot announce")
         expect(cancellationSession.phase == .notOrdered, "cancelled delay cannot mutate reset session")
+
+        let reentrySession = CafeOrderSession()
+        let reentryPresenter = PresenterSpy()
+        let reentrySleeper = ReentrySleeper()
+        let reentryReadyStateRecorder = ControllerStateRecorder()
+        var reentryReadyCount = 0
+        let reentryController = RainbowSmoothieServingController(
+            session: reentrySession,
+            presenter: reentryPresenter,
+            sleep: { _ in await reentrySleeper.sleep() },
+            onReady: {
+                reentryReadyCount += 1
+                Task { @MainActor in
+                    await reentryReadyStateRecorder.record(reentrySession.phase)
+                }
+            })
+
+        reentryController.enterIndoor()
+        reentryController.acceptOrder()
+        await reentrySleeper.waitUntilEntered(1)
+        reentryController.resetForOutdoor()
+
+        reentryPresenter.isInstalled = true
+        reentryController.enterIndoor()
+        reentryController.acceptOrder()
+        await reentrySleeper.waitUntilEntered(2)
+
+        await reentrySleeper.finish(1)
+        await Task.yield()
+        expect(reentryPresenter.revealCount == 0, "stale sleeper cannot reveal in a fresh session")
+        expect(reentryReadyCount == 0, "stale sleeper cannot announce in a fresh session")
+        expect(reentrySession.phase == .preparing, "stale sleeper cannot mutate the new preparation")
+
+        await reentrySleeper.finish(2)
+        let reentryReadyState = await reentryReadyStateRecorder.waitForState()
+        expect(reentryReadyState == .readyAtCounter, "fresh sleeper completes the new session")
+        expect(reentryPresenter.revealCount == 1, "fresh session reveals exactly once")
+        expect(reentryReadyCount == 1, "fresh session announces exactly once")
         print("PASS: RainbowSmoothieServingControllerTests")
     }
 }
