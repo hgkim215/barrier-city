@@ -31,11 +31,6 @@
       "simple": { "limit": 30, "period": 60 }
     },
     {
-      "name": "TTS_RATE_LIMITER",
-      "namespace_id": "26081002",
-      "simple": { "limit": 20, "period": 60 }
-    },
-    {
       "name": "EMBEDDINGS_RATE_LIMITER",
       "namespace_id": "26081003",
       "simple": { "limit": 20, "period": 60 }

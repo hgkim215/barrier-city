@@ -1,6 +1,6 @@
 import Foundation
 
-/// 스트리밍 LLM 토큰을 모아 완성된 문장 단위로 방출 → ⑦ VoiceOutput이 첫 문장부터 TTS 시작(지연↓).
+/// 스트리밍 LLM 토큰을 모아 완성된 문장 단위로 방출한다.
 public struct SentenceChunker: Sendable {
     private var buffer = ""
     private static let terminators: Set<Character> = [".", "!", "?", "…", "。"]

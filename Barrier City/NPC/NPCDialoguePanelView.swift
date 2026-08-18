@@ -50,20 +50,16 @@ struct NPCDialoguePanelView: View {
                 .foregroundStyle(.secondary)
 
             if controller.status == .listening {
-                if controller.showsMicrophoneLevel {
-                    MicrophoneInputGauge(level: controller.microphoneLevel)
-                } else {
-                    Label(
-                        controller.realtimeSpeechDetected
-                            ? "WebRTC 음성 감지됨"
-                            : "WebRTC 음성 입력 대기",
-                        systemImage: controller.realtimeSpeechDetected
-                            ? "waveform"
-                            : "mic.fill"
-                    )
-                        .font(.caption)
-                        .foregroundStyle(controller.realtimeSpeechDetected ? .green : .secondary)
-                }
+                Label(
+                    controller.realtimeSpeechDetected
+                        ? "WebRTC 음성 감지됨"
+                        : "WebRTC 음성 입력 대기",
+                    systemImage: controller.realtimeSpeechDetected
+                        ? "waveform"
+                        : "mic.fill"
+                )
+                    .font(.caption)
+                    .foregroundStyle(controller.realtimeSpeechDetected ? .green : .secondary)
             }
 
             Text(displayedSubtitle)
@@ -149,43 +145,6 @@ struct NPCDialoguePanelView: View {
         case .thinking: "ellipsis.bubble.fill"
         case .idle: "bubble.left.fill"
         }
-    }
-}
-
-/// 실제 PCM 입력 크기를 보여줘 권한/연결 상태가 아닌 음성 유입 여부를 확인하게 한다.
-private struct MicrophoneInputGauge: View {
-    let level: Float
-
-    private var normalizedLevel: Double {
-        Double(max(0, min(1, level)))
-    }
-
-    private var levelDescription: String {
-        switch normalizedLevel {
-        case ..<0.08: "입력 없음"
-        case ..<0.28: "작게 들림"
-        default: "입력 확인"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "mic.fill")
-                .foregroundStyle(normalizedLevel >= 0.28 ? .green : .secondary)
-
-            ProgressView(value: normalizedLevel)
-                .progressViewStyle(.linear)
-                .tint(normalizedLevel >= 0.28 ? .green : .orange)
-                .frame(width: 150)
-
-            Text(levelDescription)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 64, alignment: .leading)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("마이크 입력 감도")
-        .accessibilityValue("\(Int((normalizedLevel * 100).rounded()))퍼센트, \(levelDescription)")
     }
 }
 
