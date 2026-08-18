@@ -153,13 +153,17 @@ struct RainbowSmoothieServingControllerTests {
         let session = CafeOrderSession()
         let presenter = PresenterSpy()
         let delayRecorder = DelayRecorder()
+        let successSleeper = ControlledSleeper()
         let readyStateRecorder = ControllerStateRecorder()
         var readyCount = 0
         let controller = RainbowSmoothieServingController(
             session: session,
             presenter: presenter,
             preparationDelay: .seconds(10),
-            sleep: { await delayRecorder.sleep(for: $0) },
+            sleep: {
+                await delayRecorder.sleep(for: $0)
+                await successSleeper.sleep()
+            },
             onReady: {
                 readyCount += 1
                 Task { @MainActor in
@@ -171,7 +175,12 @@ struct RainbowSmoothieServingControllerTests {
         controller.acceptOrder()
         controller.acceptOrder()
         let recordedDelay = await delayRecorder.waitForReceived()
+        await successSleeper.waitUntilSleepEntered()
         expect(recordedDelay == .seconds(10), "controller requests ten seconds")
+        expect(session.phase == .preparing, "order remains preparing before ten-second release")
+        expect(presenter.revealCount == 0, "smoothie stays hidden before ten-second release")
+        expect(readyCount == 0, "ready announcement waits for ten-second release")
+        await successSleeper.finish()
         let readyState = await readyStateRecorder.waitForState()
         expect(readyState == .readyAtCounter, "successful delay completes in the ready state")
         expect(session.phase == .readyAtCounter, "successful delay becomes ready")
@@ -186,18 +195,23 @@ struct RainbowSmoothieServingControllerTests {
                 await failedStateRecorder.record(session.phase)
             }
         }
-        controller.enterIndoor()
-        controller.acceptOrder()
+        let failureController = RainbowSmoothieServingController(
+            session: session,
+            presenter: presenter,
+            sleep: { _ in },
+            onReady: { readyCount += 1 })
+        failureController.enterIndoor()
+        failureController.acceptOrder()
         let failedState = await failedStateRecorder.waitForState()
         expect(failedState == .failed, "failed reveal completes in the failed state")
         expect(session.phase == .failed, "presenter failure is explicit")
         expect(readyCount == 1, "failed reveal has no ready callback")
 
         presenter.isInstalled = false
-        controller.enterIndoor()
+        failureController.enterIndoor()
         expect(session.phase == .failed, "missing installation fails before ordering")
 
-        controller.resetForOutdoor()
+        failureController.resetForOutdoor()
         expect(session.phase == .notOrdered, "reset restores order state")
         expect(presenter.resetCount == 1, "reset tears down presenter")
 
