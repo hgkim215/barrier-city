@@ -76,6 +76,7 @@ final class NPCClerkController {
     private(set) var isTalkAvailable = false
 
     let dialogue: NPCDialogueController
+    private let smoothieServing: RainbowSmoothieServingController
 
     @ObservationIgnored private var locomotionRoot: Entity?
     @ObservationIgnored private var baristaEntity: Entity?
@@ -99,8 +100,12 @@ final class NPCClerkController {
     /// 주문 접수 이벤트는 받았지만 NPC의 마지막 음성 세션이 아직 닫히지 않은 상태.
     private var pendingOrderConversationEnd = false
 
-    init(dialogue: NPCDialogueController) {
+    init(
+        dialogue: NPCDialogueController,
+        smoothieServing: RainbowSmoothieServingController
+    ) {
         self.dialogue = dialogue
+        self.smoothieServing = smoothieServing
     }
 
     /// ImmersiveView가 생성될 때 attachment를 맵 루트에 한 번 연결한다.
@@ -213,6 +218,8 @@ final class NPCClerkController {
     /// SceneEvents.Update에서 호출한다. Entity.move를 매 프레임 재시작하지 않고
     /// deltaTime 기반으로 직접 보간해 일정한 속도로 움직인다.
     func update(deltaTime rawDeltaTime: Float, appModel: AppModel) {
+        dialogue.deliverPendingOrderReadyAnnouncementIfPossible()
+
         guard phase != .unavailable, locomotionRoot != nil else {
             interactionBubble?.isEnabled = false
             isTalkAvailable = false
@@ -244,6 +251,8 @@ final class NPCClerkController {
         isTalkAvailable = (phase == .working || phase == .orderAccepted)
             && playerDistance <= NPCClerkTuning.detectionRadius
             && GuideFlowModel.shared.allowsNPCOrderConversation
+            && !dialogue.isBusy
+            && !dialogue.blocksConversationForOrderReadyAnnouncement
 
         switch phase {
         case .unavailable:
@@ -497,6 +506,7 @@ final class NPCClerkController {
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
             GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
+            smoothieServing.acceptOrder()
             pendingOrderConversationEnd = true
             finishAcceptedOrderPresentationIfReady()
         case .exited:

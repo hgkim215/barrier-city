@@ -22,8 +22,10 @@ final class AppModel {
     /// 보이는 카페 루트. 캡슐 위치의 역(inverse)으로 매 프레임 배치(world-inverse 시야).
     @ObservationIgnored var worldRoot: Entity?
 
-    /// 실내 점원 대화와 공간 상태는 앱 수명 동안 한 인스턴스를 공유한다.
-    /// 테스트 창과 몰입 공간이 서로 다른 호감도/대화를 갖는 문제를 방지한다.
+    /// 실내 주문·서빙·대화 상태는 앱 수명 동안 하나의 의존성 그래프를 공유한다.
+    let cafeOrderSession: CafeOrderSession
+    let rainbowSmoothiePresenter: RainbowSmoothiePresenter
+    let rainbowSmoothieServing: RainbowSmoothieServingController
     let npcDialogue: NPCDialogueController
     let npcClerk: NPCClerkController
     /// 주행 물리 상태는 입력·앱 수명 상태와 분리해 MovementSystem의 변경 범위를 제한한다.
@@ -42,9 +44,23 @@ final class AppModel {
     static let viewHeightOffset: Float = 0.0
 
     init() {
-        let dialogue = NPCDialogueController()
+        let orderSession = CafeOrderSession()
+        let presenter = RainbowSmoothiePresenter()
+        let dialogue = NPCDialogueController(orderSession: orderSession)
+        let serving = RainbowSmoothieServingController(
+            session: orderSession,
+            presenter: presenter,
+            onReady: { [weak dialogue] in
+                dialogue?.requestOrderReadyAnnouncement()
+            })
+
+        cafeOrderSession = orderSession
+        rainbowSmoothiePresenter = presenter
+        rainbowSmoothieServing = serving
         npcDialogue = dialogue
-        npcClerk = NPCClerkController(dialogue: dialogue)
+        npcClerk = NPCClerkController(
+            dialogue: dialogue,
+            smoothieServing: serving)
 
         // System/Component는 씬이 만들어지기 전, 앱 시작 시점에 등록해야 안전하다.
         // AppModel은 @State로 앱 시작 시 생성되므로 여기서 등록하면 타이밍이 이르다.

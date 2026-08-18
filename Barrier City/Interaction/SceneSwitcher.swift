@@ -17,6 +17,7 @@ enum SceneSwitcher {
         let visible: Entity
         let collision: Entity
         let collisionShapeCount: Int
+        let smoothie: Entity?
     }
 
     private struct IndoorLayout {
@@ -84,6 +85,10 @@ enum SceneSwitcher {
                                      im.isCurrentTransition(token)
                                  })
         guard im.isCurrentTransition(token) else { return }
+        app.rainbowSmoothiePresenter.install(
+            smoothie: prepared.smoothie,
+            in: prepared.visible)
+        app.rainbowSmoothieServing.enterIndoor()
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y
@@ -139,12 +144,17 @@ enum SceneSwitcher {
         SceneEntityPreparation.prepareVisible(visible)
         let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)
         try Task.checkCancellation()
+        let smoothie = try? await Entity(
+            named: ImmersiveSceneCatalog.rainbowSmoothie,
+            in: realityKitContentBundle)
+        try Task.checkCancellation()
 
         // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
         // 공통 바닥 충돌이 접지를 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
         return PreparedIndoorScene(visible: visible,
                                    collision: collision,
-                                   collisionShapeCount: collisionShapeCount)
+                                   collisionShapeCount: collisionShapeCount,
+                                   smoothie: smoothie)
     }
 
     /// 비활성 상태로 worldRoot에 연결된 Indoor 엔티티에서 트리거와 스폰 포즈를 계산한다.

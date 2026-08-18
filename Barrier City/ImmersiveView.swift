@@ -223,6 +223,7 @@ struct ImmersiveView: View {
                 return
             }
             QuestSetup.stop()
+            model.rainbowSmoothieServing.resetForOutdoor()
             model.npcClerk.resetForOutdoor()
             ImpactAudio.shared.stop()
             handTracker.clearModelInput(model: model)
