@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import worker, { sanitizeChat, sanitizeEmbeddings, sanitizeTTS } from "./worker.js";
+import worker, { sanitizeChat, sanitizeEmbeddings } from "./worker.js";
 
 function makeLimiter(success = true) {
   const keys = [];
@@ -18,7 +18,6 @@ function makeEnv({ limiter = makeLimiter(), apiKey = "test-openai-key" } = {}) {
   return {
     OPENAI_API_KEY: apiKey,
     CHAT_RATE_LIMITER: limiter,
-    TTS_RATE_LIMITER: limiter,
     EMBEDDINGS_RATE_LIMITER: limiter,
     REALTIME_RATE_LIMITER: limiter,
   };
@@ -72,10 +71,6 @@ test("route sanitizers reject unsupported or oversized input", () => {
     /messages must contain/,
   );
   assert.throws(
-    () => sanitizeTTS({ model: "gpt-4o-mini-tts", voice: "marin", input: "안녕" }),
-    /Voice not allowed/,
-  );
-  assert.throws(
     () => sanitizeEmbeddings({
       model: "text-embedding-3-small",
       input: Array.from({ length: 33 }, () => "chunk"),
@@ -84,11 +79,7 @@ test("route sanitizers reject unsupported or oversized input", () => {
   );
 });
 
-test("valid TTS and embeddings payloads are normalized", () => {
-  assert.deepEqual(
-    sanitizeTTS({ model: "gpt-4o-mini-tts", voice: "alloy", input: "안녕하세요" }),
-    { model: "gpt-4o-mini-tts", voice: "alloy", input: "안녕하세요", response_format: "wav" },
-  );
+test("valid embeddings payloads are normalized", () => {
   assert.deepEqual(
     sanitizeEmbeddings({ model: "text-embedding-3-small", input: "접근성" }),
     { model: "text-embedding-3-small", input: "접근성" },

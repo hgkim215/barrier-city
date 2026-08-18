@@ -82,7 +82,6 @@ final class OpenAILLMClientTests: XCTestCase {
         let config = ProxyConfig(base: URL(string: "https://proxy.test/root")!)
 
         XCTAssertEqual(config.chatURL.absoluteString, "https://proxy.test/root/chat")
-        XCTAssertEqual(config.ttsURL.absoluteString, "https://proxy.test/root/tts")
         XCTAssertEqual(config.realtimeTokenURL.absoluteString,
                        "https://proxy.test/root/realtime-token")
     }

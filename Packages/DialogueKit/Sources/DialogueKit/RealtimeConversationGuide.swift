@@ -3,9 +3,6 @@ import Foundation
 /// Realtime 음성 모델의 자유로운 대화 방식과 게임의 결정적 상태 전이를 분리한다.
 /// 말할 문장을 지정하지 않고 역할·장면·대화 단계·도구 호출 조건만 고정한다.
 public struct RealtimeConversationGuide: Sendable {
-    /// Legacy 모드에서 모델 연결 없이 시작해야 할 때만 사용하는 안전 폴백이다.
-    public static let legacyOpeningFallback = "안녕하세요. 주문은 키오스크에서 부탁드릴게요."
-
     public init() {}
 
     public static var openingInstructions: String {
