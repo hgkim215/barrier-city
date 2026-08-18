@@ -810,6 +810,10 @@ final class NPCDialogueController {
                     },
                     finish: { [weak self] in
                         self?.status = .idle
+                    },
+                    cancel: { [weak self] in
+                        self?.npcSubtitle = ""
+                        self?.status = .idle
                     })
             } else {
                 status = .idle

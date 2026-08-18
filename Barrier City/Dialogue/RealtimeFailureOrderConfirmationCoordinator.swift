@@ -13,11 +13,11 @@ final class RealtimeFailureOrderConfirmationCoordinator {
     private var generation = 0
     private var didHandleCurrentEncounter = false
     private var confirmationTask: Task<Void, Never>?
+    private var cancellationCleanup: Handler?
 
     @discardableResult
     func beginEncounter() -> Int {
-        confirmationTask?.cancel()
-        confirmationTask = nil
+        cancelActiveConfirmation()
         generation &+= 1
         didHandleCurrentEncounter = false
         return generation
@@ -29,7 +29,8 @@ final class RealtimeFailureOrderConfirmationCoordinator {
         present: @escaping Presenter,
         speak: @escaping Speaker,
         publish: @escaping Handler,
-        finish: @escaping Handler
+        finish: @escaping Handler,
+        cancel: @escaping Handler
     ) -> Task<Void, Never>? {
         guard encounterGeneration == generation,
               !didHandleCurrentEncounter,
@@ -37,12 +38,14 @@ final class RealtimeFailureOrderConfirmationCoordinator {
 
         didHandleCurrentEncounter = true
         present(RealtimeFailureOrderConfirmationContent.line)
+        cancellationCleanup = cancel
         let task = Task { @MainActor [weak self] in
             await speak(RealtimeFailureOrderConfirmationContent.line)
             guard let self,
                   !Task.isCancelled,
                   encounterGeneration == self.generation else { return }
             self.confirmationTask = nil
+            self.cancellationCleanup = nil
             publish()
             finish()
         }
@@ -51,9 +54,17 @@ final class RealtimeFailureOrderConfirmationCoordinator {
     }
 
     func cancel() {
-        confirmationTask?.cancel()
-        confirmationTask = nil
+        cancelActiveConfirmation()
         generation &+= 1
         didHandleCurrentEncounter = true
+    }
+
+    private func cancelActiveConfirmation() {
+        guard confirmationTask != nil else { return }
+        confirmationTask?.cancel()
+        confirmationTask = nil
+        let cleanup = cancellationCleanup
+        cancellationCleanup = nil
+        cleanup?()
     }
 }
