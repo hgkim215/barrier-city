@@ -12,6 +12,15 @@ import RealityKit
 import simd
 import Observation
 
+struct SceneGroundLayout: Equatable {
+    let minimum: SIMD2<Float>
+    let maximum: SIMD2<Float>
+    let height: Float
+
+    var center: SIMD2<Float> { (minimum + maximum) * 0.5 }
+    var size: SIMD2<Float> { maximum - minimum }
+}
+
 /// 현재 배경 씬.
 enum GameScene: Equatable {
     case outdoor
@@ -63,6 +72,8 @@ enum InteractionTuning {
     static let doorTriggerRadius: Float = 1.1
     /// Outdoor 공통 바닥 충돌체의 한 변 길이(m).
     static let outdoorGroundPlaneSize: Float = 16
+    /// 문에서 체험 시작 지점까지의 거리. 문 트리거 바깥에서 시작하도록 한다.
+    static let outdoorSpawnDistanceFromDoor: Float = 1.5
     /// 휠체어 전체가 바닥에 지지되도록 리스폰 경계에서 안쪽으로 두는 여유(m).
     static let outdoorSpawnSafetyMargin: Float = 0.5
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
@@ -187,6 +198,8 @@ final class InteractionModel {
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.
     @ObservationIgnored var collisionMap: Entity?
+    /// Outdoor authored ground의 실제 XZ 범위와 높이. 스폰과 초기 접지가 공유한다.
+    @ObservationIgnored var outdoorGroundLayout: SceneGroundLayout?
     /// SceneEvents.Update 구독(해제 방지용 보관).
     @ObservationIgnored var updateSubscription: EventSubscription?
     private var transitionSession = SceneTransitionSession()
@@ -262,6 +275,7 @@ final class InteractionModel {
         kioskPanelEntity = nil
         visibleMap = nil
         collisionMap = nil
+        outdoorGroundLayout = nil
         triggers = []
         activeTrigger = nil
         dismissedTriggerID = nil

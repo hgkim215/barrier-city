@@ -10,21 +10,57 @@ enum SceneEntityPreparation {
     }
 
     @discardableResult
-    static func prepareCollision(_ entity: Entity) async -> Int {
+    static func prepareCollision(
+        _ entity: Entity,
+        includeSceneGeometry: Bool = false
+    ) async -> Int {
         removePhysics(from: entity)
-        let shapeCount = await addStaticCollision(to: entity)
+        let shapeCount = await addStaticCollision(
+            to: entity,
+            includeSceneGeometry: includeSceneGeometry)
         removeRendering(from: entity)
         return shapeCount
     }
 
-    /// 이름에 "collision"이 들어간 엔티티와 하위 메시만 고정 충돌로 변환한다.
+    /// authored Collision/Cube_1의 실제 월드축 바닥 범위와 높이를 보존한다.
+    /// 스폰과 접지 fallback이 씬 에셋과 동일한 좌표를 사용하게 한다.
+    static func groundLayout(in entity: Entity) -> SceneGroundLayout? {
+        guard let collisionRoot = entity.findEntity(named: "Collision"),
+              let ground = collisionRoot.findEntity(named: "Cube_1") else { return nil }
+        let bounds = ground.visualBounds(relativeTo: entity)
+        guard bounds.max.x > bounds.min.x, bounds.max.z > bounds.min.z else { return nil }
+        return SceneGroundLayout(
+            minimum: SIMD2(bounds.min.x, bounds.min.z),
+            maximum: SIMD2(bounds.max.x, bounds.max.z),
+            height: bounds.max.y)
+    }
+
+    /// authored ground mesh 변환이 실패해도 접지가 사라지지 않도록 같은 bounds의 얇은
+    /// 런타임 바닥을 만든다. 경사로와 계단은 더 높은 실제 메시가 먼저 raycast된다.
+    static func makeGroundFallback(_ layout: SceneGroundLayout) -> Entity {
+        let thickness: Float = 0.1
+        let shape = ShapeResource.generateBox(
+            width: layout.size.x,
+            height: thickness,
+            depth: layout.size.y)
+        let ground = Entity()
+        ground.name = "authoredGroundFallback"
+        ground.position = [layout.center.x, layout.height - thickness * 0.5, layout.center.y]
+        var collision = CollisionComponent(shapes: [shape])
+        collision.filter = CollisionFilter(group: AppModel.groundGroup, mask: .all)
+        ground.components.set(collision)
+        return ground
+    }
+
+    /// 기본은 authored collision 트리만 사용하고, Outdoor에서는 보이는 지형까지 포함한다.
     private static func addStaticCollision(
         to entity: Entity,
+        includeSceneGeometry: Bool,
         inherited: Bool = false
     ) async -> Int {
         let isCollider = inherited || entity.name.lowercased().contains("collision")
         var count = 0
-        if isCollider,
+        if (isCollider || includeSceneGeometry),
            let model = entity.components[ModelComponent.self],
            let shape = try? await ShapeResource.generateStaticMesh(from: model.mesh) {
             var collision = CollisionComponent(shapes: [shape])
@@ -33,7 +69,10 @@ enum SceneEntityPreparation {
             count += 1
         }
         for child in entity.children {
-            count += await addStaticCollision(to: child, inherited: isCollider)
+            count += await addStaticCollision(
+                to: child,
+                includeSceneGeometry: includeSceneGeometry,
+                inherited: isCollider)
         }
         return count
     }

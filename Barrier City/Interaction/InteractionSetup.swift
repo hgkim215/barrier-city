@@ -84,17 +84,27 @@ enum InteractionSetup {
             let bounds = cafe.visualBounds(relativeTo: worldRoot)
             cafeCenter = SIMD2(bounds.center.x, bounds.center.z)
         }
+        let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
+        let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
+            minimum: SIMD2(repeating: -fallbackHalfExtent),
+            maximum: SIMD2(repeating: fallbackHalfExtent),
+            height: 0)
         let startPosition = OutdoorSessionStart.positionOutsideCafe(
             doorCenter: center,
             cafeCenter: cafeCenter,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
-            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            groundMinimum: groundLayout.minimum,
+            groundMaximum: groundLayout.maximum,
+            preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
             safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
         OutdoorSessionStart.reset(
             appModel,
             startPosition: startPosition,
             doorCenter: center,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter)
+        // 첫 raycast 전에도 휠체어와 보이는 지면이 정확히 맞도록 authored 높이로 시작한다.
+        appModel.motion.chairHeight = groundLayout.height
+        appModel.motion.groundHeight = groundLayout.height
         im.triggers = [ProximityTrigger(
             id: "door.enter",
             center: center,

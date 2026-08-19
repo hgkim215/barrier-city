@@ -67,13 +67,22 @@ struct ImmersiveView: View {
                     named: ImmersiveSceneCatalog.outdoor,
                     in: realityKitContentBundle)
                 let outdoorCollision = outdoorVisible.clone(recursive: true)
+                let groundLayout = SceneEntityPreparation.groundLayout(in: outdoorVisible)
+                InteractionModel.shared.outdoorGroundLayout = groundLayout
 
                 SceneEntityPreparation.prepareVisible(outdoorVisible)
                 worldRoot.addChild(outdoorVisible)
                 InteractionModel.shared.visibleMap = outdoorVisible
 
-                // 시뮬 공간(고정·투명): 동일한 Outdoor의 authored collision 사본.
-                let n = await SceneEntityPreparation.prepareCollision(outdoorCollision)
+                // 시뮬 공간(고정·투명): authored Collision뿐 아니라 계단·경사로·건물 등
+                // 실제 Outdoor 메시도 정적 충돌로 변환한다.
+                var n = await SceneEntityPreparation.prepareCollision(
+                    outdoorCollision,
+                    includeSceneGeometry: true)
+                if let groundLayout {
+                    content.add(SceneEntityPreparation.makeGroundFallback(groundLayout))
+                    n += 1
+                }
                 model.motion.collisionShapeCount = n
                 content.add(outdoorCollision)
                 InteractionModel.shared.collisionMap = outdoorCollision

@@ -21,7 +21,9 @@ struct InteractionFlowRegressionTests {
             doorCenter: doorCenter,
             cafeCenter: .zero,
             fallbackDoorCenter: doorCenter,
-            groundHalfExtent: InteractionTuning.outdoorGroundPlaneSize / 2,
+            groundMinimum: SIMD2(repeating: -InteractionTuning.outdoorGroundPlaneSize / 2),
+            groundMaximum: SIMD2(repeating: InteractionTuning.outdoorGroundPlaneSize / 2),
+            preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
             safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
         expectNear(outdoorStart.y, -7.5, "outdoor spawn stays inside the supported floor edge")
 
