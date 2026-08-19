@@ -35,7 +35,9 @@ enum NPCClerkTuning {
     static let detectionRadius: Float = 4.0
     /// 진입 반경보다 1m 넓혀 대화 중 경계에서 종료가 반복되지 않게 한다.
     static let conversationExitRadius: Float = detectionRadius + 1.0
-    static let moveSpeed: Float = 0.8
+    /// Walk 클립의 루트 이동(1.47m / 56frame @ 24fps)에 authored 1.5배 스케일을
+    /// 반영한 속도다. 재생 중인 발걸음과 wrapper의 position 이동을 일치시킨다.
+    static let moveSpeed: Float = 0.95
     static let turnResponse: Float = 7
     static let arrivalDistance: Float = 0.04
     /// 한 지점에 도착한 뒤 다음 행동을 시작하기까지 매번 달라지는 대기 시간.
@@ -195,7 +197,20 @@ final class NPCClerkController {
         locomotion.name = "NPCClerkLocomotionRoot"
         locomotion.position = [staffHome.x, NPCClerkTuning.baristaBaseY, staffHome.y]
         locomotion.scale = SIMD3(repeating: NPCClerkTuning.baristaScale)
-        locomotion.addChild(barista)
+
+        // 애니메이션 자산의 원점 대신 실제 모델의 발 중심을 position 좌표로 사용한다.
+        // 모델/애니메이션이 교체되어 원점이 달라져도 이동 경로가 옆으로 밀리거나
+        // 바닥 위아래로 뜨지 않도록 별도 alignment wrapper에서 보정한다.
+        let modelAlignment = Entity()
+        modelAlignment.name = "NPCClerkModelAlignment"
+        modelAlignment.addChild(barista)
+        locomotion.addChild(modelAlignment)
+        let modelBounds = barista.visualBounds(relativeTo: modelAlignment)
+        modelAlignment.position = [
+            -modelBounds.center.x,
+            -modelBounds.min.y,
+            -modelBounds.center.z,
+        ]
         if let bubble = interactionBubble {
             // 월드 좌표를 매 프레임 추종하지 않고 NPC 이동 wrapper에 직접 결합한다.
             // 위치와 회전이 동일한 transform 계층에서 갱신되므로 추종 지연이 없고,
