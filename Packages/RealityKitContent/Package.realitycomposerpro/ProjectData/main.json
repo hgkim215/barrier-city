@@ -6,6 +6,8 @@
     "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Untitled Scene.usda" : "D560BB77-AAF3-4BDE-B7C4-989332A4688B",
     "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Untitled%20Scene.usda" : "6B7D26C6-B578-443A-A0BF-DD87961062E2",
     "\/RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/furniture\/Untitled%20Scene.usda" : "B0EE8096-E15B-4635-B950-5E6EE8EDE9F0",
+    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Barista\/DefaultInPlace.usda" : "C7792139-C13F-4BCA-B7E4-78C3DF4C2C59",
+    "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Barista\/WalkInPlace.usda" : "F1C128F5-DD1E-4BDE-AF01-C0D71BEC3E9B",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/GridMaterial.usda" : "66168B71-AB05-424E-8B6C-D33D6E61B08F",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Immersive.usda" : "AF09ED6F-1707-48FD-8720-65B998362C09",
     "RealityKitContent\/Sources\/RealityKitContent\/RealityKitContent.rkassets\/Indoor.usda" : "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
@@ -21,7 +23,9 @@
     "7808C05B-485F-4339-ADE8-F7BA9133C11B" : -735971796591842786,
     "AF09ED6F-1707-48FD-8720-65B998362C09" : 5875154184719619959,
     "B0EE8096-E15B-4635-B950-5E6EE8EDE9F0" : -5478950874968997704,
+    "C7792139-C13F-4BCA-B7E4-78C3DF4C2C59" : 7034477728904267285,
     "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66" : 9177250681377678408,
+    "F1C128F5-DD1E-4BDE-AF01-C0D71BEC3E9B" : -8555503760092126955,
     "F75F0145-E1EB-493B-9330-C42C06BD35D5" : 8146331488205393762
   }
 }

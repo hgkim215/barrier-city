@@ -65,6 +65,9 @@ enum InteractionTuning {
     static let outdoorGroundPlaneSize: Float = 16
     /// 휠체어 전체가 바닥에 지지되도록 리스폰 경계에서 안쪽으로 두는 여유(m).
     static let outdoorSpawnSafetyMargin: Float = 0.5
+    /// Outdoor 스폰 위치(맵 좌표 x, z). 맵 작업 중이라 원점 고정으로 둔다.
+    /// 문 앞에서 시작하게 하려면 nil로 두고 OutdoorSessionStart.positionOutsideCafe를 쓴다.
+    static let outdoorSpawnPosition = SIMD2<Float>(0, 0)
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
     /// 나가야 닫힌다.
     nonisolated static let exitHysteresis: Float = 0.4
