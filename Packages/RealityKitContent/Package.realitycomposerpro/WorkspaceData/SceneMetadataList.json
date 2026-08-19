@@ -186,14 +186,6 @@
       },
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
         "Roads",
         "Road_7"
@@ -204,8 +196,7 @@
       },
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
-        "Collision"
+        "Root"
       ],
       {
         "isExpanded" : true,
@@ -216,6 +207,15 @@
         "Root",
         "Roads",
         "Road_5"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
+        "Root",
+        "Collision"
       ],
       {
         "isExpanded" : true,
@@ -253,6 +253,16 @@
         "Root",
         "Roads",
         "Road_8"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
+        "Root",
+        "Collision",
+        "Cube"
       ],
       {
         "isExpanded" : true,
