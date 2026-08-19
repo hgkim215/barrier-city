@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import DialogueKit
 import DialogueKitOpenAI
 
 enum AppConfig {

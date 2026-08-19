@@ -6,7 +6,7 @@ import DialogueKit
 
 /// Indoor.usda의 Barista AnimationLibrary에 연결된 코드 실행용 애니메이션 키.
 /// 같은 cue가 연속으로 와도 다시 재생할 수 있도록 요청에는 별도 sequence를 사용한다.
-enum NPCAnimationCue: String, CaseIterable {
+enum NPCAnimationCue: String {
     case idle = "Idle"
     case greet = "Greet"
     case walk = "Walk"
@@ -74,7 +74,6 @@ enum NPCClerkTuning {
 @MainActor
 final class NPCClerkController {
     private(set) var phase: NPCClerkPhase = .unavailable
-    private(set) var lastPlayedAnimation: String = ""
     private(set) var isInteractionBubbleVisible = false
     private(set) var isTalkAvailable = false
 
@@ -84,6 +83,7 @@ final class NPCClerkController {
     @ObservationIgnored private var baristaEntity: Entity?
     @ObservationIgnored private var interactionBubble: Entity?
     @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
+    @ObservationIgnored private var currentAnimationCue: NPCAnimationCue?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
     private var isGuideInteractionLocked = false
 
@@ -140,7 +140,7 @@ final class NPCClerkController {
         isTalkAvailable = false
         isGuideInteractionLocked = false
         phase = .unavailable
-        lastPlayedAnimation = ""
+        currentAnimationCue = nil
         conversationAnchor = nil
         workTarget = nil
         handledAnimationSequence = 0
@@ -300,11 +300,6 @@ final class NPCClerkController {
     @discardableResult
     func startConversationForDevelopment() -> Bool {
         beginGreeting(isRemoteDevelopmentConversation: true)
-    }
-
-    /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
-    func playForTesting(_ cue: NPCAnimationCue) {
-        playAnimation(cue, restart: true, allowsGreetingReplay: true)
     }
 
     // MARK: - Placement
@@ -583,18 +578,16 @@ final class NPCClerkController {
 
     // MARK: - Animation
 
-    private func playAnimation(_ cue: NPCAnimationCue,
-                               restart: Bool = false,
-                               allowsGreetingReplay: Bool = false) {
-        guard restart || lastPlayedAnimation != cue.rawValue else { return }
-        guard cue != .greet || !hasPlayedGreetingAnimation || allowsGreetingReplay else { return }
+    private func playAnimation(_ cue: NPCAnimationCue, restart: Bool = false) {
+        guard restart || currentAnimationCue != cue else { return }
+        guard cue != .greet || !hasPlayedGreetingAnimation else { return }
         guard let barista = baristaEntity,
               let match = findAnimation(named: cue.rawValue, in: barista) else { return }
         animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
-        if cue == .greet, !allowsGreetingReplay { hasPlayedGreetingAnimation = true }
-        lastPlayedAnimation = cue.rawValue
+        if cue == .greet { hasPlayedGreetingAnimation = true }
+        currentAnimationCue = cue
     }
 
     private func findAnimation(named name: String,
