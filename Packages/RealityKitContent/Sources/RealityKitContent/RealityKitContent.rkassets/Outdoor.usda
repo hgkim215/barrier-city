@@ -25,7 +25,7 @@ def Xform "Root" (
         active = true
     )
     {
-        reorder nameChildren = ["Ramp", "Stair", "Ground_1", "Cube"]
+        reorder nameChildren = ["Ramp", "Stair", "Ground_1", "Cube", "Cube_1", "Cube_2", "Cube_3", "Cube_4", "Cube_5", "Cube_6", "Cube_7"]
         float3 xformOp:translate = (0, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
@@ -84,6 +84,135 @@ def Xform "Root" (
             quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
             float3 xformOp:scale = (10, 0.99999976, 56)
             float3 xformOp:translate = (-0.1700144, 0.4, 10.74)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_1" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_1/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (56.948063, 239.7933)
+            int ui:nodegraph:node:stackingOrder = 1
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (10.9, 8, 7.9)
+            float3 xformOp:translate = (-6.552333, 0.117008574, 9.122)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_2" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_2/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (76.94806, 259.7933)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (18, 7.999999, 10)
+            float3 xformOp:translate = (6.253744, 0.11700882, 10.019404)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_3" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_3/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (96.94806, 279.7933)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (20, 7.999998, 9.999998)
+            float3 xformOp:translate = (8.1315775, 0.11700878, 6.221206)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_4" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_4/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (116.94806, 299.7933)
+            int ui:nodegraph:node:stackingOrder = 4
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (8, 7.999997, 120)
+            float3 xformOp:translate = (-4.81295, 0.117008634, 3.3582377)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_5" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_5/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (116.94806, 299.7933)
+            int ui:nodegraph:node:stackingOrder = 4
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (50, 7.999997, 9.999996)
+            float3 xformOp:translate = (-9.930526, 0.11700878, 8.920472)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_6" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            customData = {
+                float3 rotationEulerHint = (0, -1.5707963, 0)
+            }
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_6/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (136.94806, 319.7933)
+            int ui:nodegraph:node:stackingOrder = 5
+            quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+            float3 xformOp:scale = (7.999999, 10, 80)
+            float3 xformOp:translate = (-1.0175062, 1.2771505, 12.431067)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_7" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            reorder nameChildren = ["DefaultMaterial", "Light_8"]
+            rel material:binding = None (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (76.94806, 259.7933)
+            int ui:nodegraph:node:stackingOrder = 2
+            quatf xformOp:orient = (1, 1.8026592e-16, 2.0373449e-16, 2.2110641e-24)
+            float3 xformOp:scale = (2.9, 2.9, 2.9)
+            float3 xformOp:translate = (1.3777843, 0.782631, 11.255811)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "Cube_8" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            reorder nameChildren = ["DefaultMaterial", "Light_8"]
+            rel material:binding = None (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (96.94806, 279.7933)
+            int ui:nodegraph:node:stackingOrder = 3
+            quatf xformOp:orient = (1, 0, 4.214685e-8, 0)
+            float3 xformOp:scale = (2.8999994, 2.8999994, 2.8999994)
+            float3 xformOp:translate = (-1.2291847, 0.7826309, 11.255809)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
     }

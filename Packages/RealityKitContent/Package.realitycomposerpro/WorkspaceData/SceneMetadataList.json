@@ -309,6 +309,16 @@
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
+        "Outdoor",
+        "Cube_2"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
+        "Root",
         "Roads",
         "Road_2"
       ],
@@ -334,6 +344,16 @@
       {
         "disallowsFraming" : false,
         "isExpanded" : false,
+        "isLocked" : false
+      },
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
+        "Root",
+        "Collision",
+        "Cube_7"
+      ],
+      {
+        "isExpanded" : true,
         "isLocked" : false
       },
       [
@@ -389,6 +409,15 @@
         "Root",
         "Roads",
         "Road_10"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
+        "Root",
+        "Outdoor"
       ],
       {
         "isExpanded" : true,
