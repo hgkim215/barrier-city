@@ -33,46 +33,27 @@ def Xform "Root"
         references = @Outdoor.usdz@
     )
     {
+        reorder nameChildren = ["Door", "Stair", "WINDOW_007", "Cube_005", "Cube_003", "WINDOW_006", "WINDOW_002", "Cube_001", "Cube_002", "WINDOW_004", "WINDOW_001", "Ramp", "BaseFloor", "Floor", "WINDOW_005", "WINDOW_008", "Cube_004", "Cube_006", "FloweBed1", "WINDOW_003", "env_light"]
         rel material:binding = </Root/building> (
             bindMaterialAs = "weakerThanDescendants"
         )
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
         float3 xformOp:scale = (1, 1, 1)
-        float3 xformOp:translate = (0, 0.003, 0)
+        float3 xformOp:translate = (0, 0.003, 18.738884)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
 
-    def "Door" (
-        active = true
-        prepend apiSchemas = ["MaterialBindingAPI"]
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @Furnitures/Door.usdz@
-    )
-    {
-        rel material:binding = </Root/door> (
-            bindMaterialAs = "weakerThanDescendants"
+        def "Door" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (0, 0, 3.1415927)
+            }
+            prepend references = @Furnitures/Door.usdz@
         )
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (2.5, 2.5, 2.5)
-        float3 xformOp:translate = (-0.16957682, 3.585592e-7, -5.889111)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
-    def Material "door"
-    {
-        token outputs:mtlx:surface
-        token outputs:realitykit:vertex
-        token outputs:surface.connect = </Root/door/UsdPreviewSurface.outputs:surface>
-
-        def Shader "UsdPreviewSurface"
         {
-            uniform token info:id = "UsdPreviewSurface"
-            color3f inputs:diffuseColor = (0, 0, 0) (
-                colorSpace = "srgb_displayp3"
-            )
-            token outputs:surface
+            quatf xformOp:orient = (-4.371139e-8, 0, 0, 1)
+            float3 xformOp:scale = (2, 2, 2)
+            float3 xformOp:translate = (-1.8626453e-8, 6.067553, -1.39698395e-8)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
     }
 
@@ -81,6 +62,9 @@ def Xform "Root"
     )
     {
         reorder nameChildren = ["Cube", "Cube_1"]
+        float3 xformOp:translate = (0, 0, 18.738884)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
         def Cube "Cube" (
             active = true
             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -94,6 +78,20 @@ def Xform "Root"
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
 
+        def Cube "Cube_1" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Collision/Cube_1/DefaultMaterial>
+            double size = 0.2
+            float2 ui:nodegraph:node:pos = (20, 20)
+            int ui:nodegraph:node:stackingOrder = 1
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (100, 1, 100)
+            float3 xformOp:translate = (0, -0.28807914, -16.417803)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
     }
 
     def RealityKitTimeline "Timeline"
@@ -102,4 +100,18 @@ def Xform "Root"
         {
         }
     }
+
+    def Cube "Cube" (
+        active = true
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding = </Root/Cube/DefaultMaterial>
+        double size = 0.2
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (100, 1, 100)
+        float3 xformOp:translate = (0, -0.28807914, 2.3210807)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
 }
+

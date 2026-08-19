@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Door", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "DoorWall", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -101,7 +101,7 @@ def Xform "Root"
                 )
                 quatf xformOp:orient = (-6.123234e-17, 0, 1, 0)
                 float3 xformOp:scale = (1, 1, 1)
-                double3 xformOp:translate = (1.6391278734317893e-7, -4.0978196835794733e-8, -0.03858089819550514)
+                double3 xformOp:translate = (1.6391278734317893e-7, -4.0978196835794733e-8, 0)
                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
             }
         }
@@ -354,42 +354,6 @@ def Xform "Root"
                     float inputs:roughness = 0.75
                     token outputs:surface
                 }
-            }
-        }
-    }
-
-    def "Barista" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @Barista/Default.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Idle"
-            {
-                uniform asset file = @Barista/DefaultInPlace.usda@
-                uniform string name = "Idle"
-            }
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @Barista/WalkInPlace.usda@
-                uniform string name = "Walk"
-            }
-
-            def RealityKitAnimationFile "Greet"
-            {
-                uniform asset file = @Barista/Greet.usdz@
-                uniform string name = "Greet"
             }
         }
     }
@@ -4904,4 +4868,42 @@ def Xform "Root"
             }
         }
     }
+
+    def "Barista" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @Barista/Default.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        float3 xformOp:translate = (-1.5221168, 0, 0.3811481)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "Greet"
+            {
+                uniform asset file = @Barista/Greet.usdz@
+                uniform string name = "Greet"
+            }
+
+            def RealityKitAnimationFile "Walk"
+            {
+                uniform asset file = @Barista/Walk.usdz@
+                uniform string name = "Walk"
+            }
+
+            def RealityKitAnimationFile "angry"
+            {
+                uniform asset file = @Barista/angry.usdz@
+                uniform string name = "angry"
+            }
+        }
+    }
 }
+

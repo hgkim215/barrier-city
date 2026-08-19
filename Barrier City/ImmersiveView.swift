@@ -82,20 +82,10 @@ struct ImmersiveView: View {
                     "Outdoor scene \(ImmersiveSceneCatalog.outdoor, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
             }
 
-            // authored 장면은 벽·장애물 충돌만 제공하므로 공통 바닥 충돌을 유지한다.
-            // 윗면이 y=0.1(보이는 바닥)과 맞도록 두께 0.4 박스를 y=-0.1에 둔다.
-            let floorShape = ShapeResource.generateBox(
-                width: InteractionTuning.outdoorGroundPlaneSize,
-                height: 0.4,
-                depth: InteractionTuning.outdoorGroundPlaneSize)
-            let floorCol = Entity()
-            floorCol.name = "groundPlaneCollision"
-            floorCol.position = [0, -0.1, 0]
-            var floorColC = CollisionComponent(shapes: [floorShape])
-            floorColC.filter = CollisionFilter(group: AppModel.groundGroup, mask: .all)
-            floorCol.components.set(floorColC)
-            floorCol.components.set(PhysicsBodyComponent(shapes: [floorShape], mass: 0, mode: .static))
-            content.add(floorCol)
+            // 바닥 충돌은 각 씬의 authored collision(Outdoor: /Root/Collision,
+            // Indoor: /Root/collision)이 제공한다. 예전에는 여기서 16x16 박스를
+            // y=-0.1(윗면 +0.1)에 깔았지만, 맵마다 바닥 높이가 달라(실외 -0.188,
+            // 실내 +0.003) 휠체어가 떠 보이는 원인이 되어 제거했다.
 
             // (캐릭터 캡슐 없음) 위치/자세는 System이 직접 적분하고, 충돌은 광선으로 메시를 읽는다.
 
