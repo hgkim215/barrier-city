@@ -213,8 +213,9 @@ final class NPCClerkController {
         workTarget = nil
         workPauseRemaining = randomWorkPause()
 
-        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle/Walk는
-        // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
+        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle(Default.usdz의
+        // 기본 서브트리 애니메이션)과 Walk 모두 원본 클립의 루트 이동을 제거한 in-place
+        // 리소스라 wrapper 이동과 중복되지 않는다.
         guard let barista = indoorMap.findEntity(named: "Barista") else {
             phase = .unavailable
             return
@@ -629,8 +630,23 @@ final class NPCClerkController {
     private func playAnimation(_ cue: NPCAnimationCue, restart: Bool = false) {
         guard restart || currentAnimationCue != cue else { return }
         guard cue != .greet || !hasPlayedGreetingAnimation else { return }
-        guard let barista = baristaEntity,
-              let match = findAnimation(named: cue.rawValue, in: barista) else { return }
+        guard let barista = baristaEntity else { return }
+
+        // Idle은 AnimationLibrary에 이름으로 등록되어 있지 않다. Default.usdz 자체에
+        // baked된 기본 서브트리 애니메이션(멈춰 있을 때의 숨쉬기 등 idle 루프)을 그대로 쓴다.
+        let match = cue == .idle
+            ? findDefaultSubtreeAnimation(in: barista)
+            : findAnimation(named: cue.rawValue, in: barista)
+
+        guard let match else {
+            if cue == .idle {
+                // 내장 idle 애니메이션을 찾지 못하면 최소한 걷기가 멈춘 상태로는 되돌린다.
+                animationPlayback?.stop(blendOutDuration: 0.15)
+                animationPlayback = nil
+                currentAnimationCue = cue
+            }
+            return
+        }
         animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
@@ -648,6 +664,21 @@ final class NPCClerkController {
             if let match = findAnimation(named: name, in: child) { return match }
         }
         return nil
+    }
+
+    /// Indoor.usda의 Barista AnimationLibrary에 이름으로 등록된 클립. 이 이름과 겹치지
+    /// 않는 첫 애니메이션이 Default.usdz 임포트 시 RealityKit이 모델 자체의 스켈레톤
+    /// 액션으로부터 자동 생성하는 "default subtree animation"(idle 루프)이다.
+    private static let libraryAnimationNames: Set<String> = ["Greet", "Walk", "Angry"]
+
+    /// availableAnimations는 이미 서브트리 전체를 포함하므로, 라이브러리에 등록된
+    /// 이름과 겹치지 않는 첫 항목을 idle 애니메이션으로 사용한다.
+    private func findDefaultSubtreeAnimation(in entity: Entity) -> (entity: Entity, resource: AnimationResource)? {
+        guard let resource = entity.availableAnimations.first(where: { animation in
+            guard let name = animation.name else { return true }
+            return !Self.libraryAnimationNames.contains(name)
+        }) else { return nil }
+        return (entity, resource)
     }
 
     // MARK: - Spatial interaction bubble
