@@ -66,6 +66,38 @@ enum NPCClerkTuning {
     static let fallbackAreaMax = SIMD2<Float>(3, 6)
 }
 
+/// AreaK의 로컬 평면을 worldRoot의 XZ 평면으로 옮긴 이동 영역.
+/// 월드축 AABB가 아니라 authored marker의 회전과 비균일 스케일을 그대로 보존한다.
+private struct NPCWorkArea {
+    let center: SIMD2<Float>
+    let axisU: SIMD2<Float>
+    let axisV: SIMD2<Float>
+
+    static let fallback: NPCWorkArea = {
+        let minimum = NPCClerkTuning.fallbackAreaMin
+        let maximum = NPCClerkTuning.fallbackAreaMax
+        let center = (minimum + maximum) * 0.5
+        let half = (maximum - minimum) * 0.5 - NPCClerkTuning.workAreaMargin
+        return NPCWorkArea(
+            center: center,
+            axisU: SIMD2(max(0, half.x), 0),
+            axisV: SIMD2(0, max(0, half.y)))
+    }()
+
+    func point(u: Float, v: Float) -> SIMD2<Float> {
+        center + axisU * u + axisV * v
+    }
+
+    func clamped(_ point: SIMD2<Float>) -> SIMD2<Float> {
+        let offset = point - center
+        let determinant = axisU.x * axisV.y - axisU.y * axisV.x
+        guard abs(determinant) > 0.000001 else { return center }
+        let u = (offset.x * axisV.y - offset.y * axisV.x) / determinant
+        let v = (axisU.x * offset.y - axisU.y * offset.x) / determinant
+        return self.point(u: max(-1, min(1, u)), v: max(-1, min(1, v)))
+    }
+}
+
 /// 실내 점원의 배치·이동·근접 감지·애니메이션을 한 상태 머신에서 관리한다.
 ///
 /// 앱은 플레이어 대신 `worldRoot`를 역이동시키므로, 모든 좌표는 화면(world) 좌표가
@@ -90,8 +122,7 @@ final class NPCClerkController {
     private var staffHome = NPCClerkTuning.fallbackStaffHome
     private var servicePoint = NPCClerkTuning.fallbackServicePoint
     private var customerPoint = NPCClerkTuning.fallbackCustomerPoint
-    private var workAreaMin = NPCClerkTuning.fallbackAreaMin
-    private var workAreaMax = NPCClerkTuning.fallbackAreaMax
+    private var workArea = NPCWorkArea.fallback
     private var workTarget: SIMD2<Float>?
     private var workPauseRemaining: Float = 0
     /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
@@ -178,8 +209,7 @@ final class NPCClerkController {
         staffHome = placement.staffHome
         servicePoint = placement.servicePoint
         customerPoint = placement.customerPoint
-        workAreaMin = placement.workAreaMin
-        workAreaMax = placement.workAreaMax
+        workArea = placement.workArea
         workTarget = nil
         workPauseRemaining = randomWorkPause()
 
@@ -308,21 +338,18 @@ final class NPCClerkController {
         let staffHome: SIMD2<Float>
         let servicePoint: SIMD2<Float>
         let customerPoint: SIMD2<Float>
-        let workAreaMin: SIMD2<Float>
-        let workAreaMax: SIMD2<Float>
+        let workArea: NPCWorkArea
     }
 
     private func makePlacement(in indoorMap: Entity,
                                relativeTo worldRoot: Entity,
                                kioskCenter: SIMD2<Float>) -> Placement {
-        var areaMin = NPCClerkTuning.fallbackAreaMin
-        var areaMax = NPCClerkTuning.fallbackAreaMax
-        var home = NPCClerkTuning.fallbackStaffHome
+        var resolvedWorkArea = NPCWorkArea.fallback
+        var home = resolvedWorkArea.center
         if let area = indoorMap.findEntity(named: "AreaK") {
-            let bounds = area.visualBounds(relativeTo: worldRoot)
-            areaMin = SIMD2(bounds.min.x, bounds.min.z)
-            areaMax = SIMD2(bounds.max.x, bounds.max.z)
-            home = SIMD2(bounds.center.x, bounds.center.z)
+            resolvedWorkArea = makeWorkArea(from: area, relativeTo: worldRoot)
+                ?? resolvedWorkArea
+            home = resolvedWorkArea.center
         }
 
         var service = NPCClerkTuning.fallbackServicePoint
@@ -358,21 +385,46 @@ final class NPCClerkController {
             customer = edge + towardCustomer * NPCClerkTuning.customerStandOff
         }
 
-        let insetMin = areaMin + NPCClerkTuning.workAreaMargin
-        let insetMax = areaMax - NPCClerkTuning.workAreaMargin
-        // 마커가 여백보다 좁은 축에서도 닫힌 난수 범위를 만들 수 있도록 정규화한다.
-        let roamMin = SIMD2<Float>(Swift.min(insetMin.x, insetMax.x),
-                                   Swift.min(insetMin.y, insetMax.y))
-        let roamMax = SIMD2<Float>(Swift.max(insetMin.x, insetMax.x),
-                                   Swift.max(insetMin.y, insetMax.y))
-        home = clamp(home, minimum: roamMin, maximum: roamMax)
-        service = clamp(service, minimum: roamMin, maximum: roamMax)
+        home = resolvedWorkArea.clamped(home)
+        service = resolvedWorkArea.clamped(service)
 
         return Placement(staffHome: home,
                          servicePoint: service,
                          customerPoint: customer,
-                         workAreaMin: roamMin,
-                         workAreaMax: roamMax)
+                         workArea: resolvedWorkArea)
+    }
+
+    /// AreaK는 Blender XY 평면이 Indoor의 -90° X 회전으로 월드 XZ 평면에 놓일 수 있다.
+    /// 따라서 로컬 X/Z를 고정 가정하지 않고, 월드 XZ에 가장 크게 투영되는 두 축을 선택한다.
+    private func makeWorkArea(from area: Entity,
+                              relativeTo worldRoot: Entity) -> NPCWorkArea? {
+        let bounds = area.visualBounds(relativeTo: area)
+        let localCenter = bounds.center
+        let halfExtents = (bounds.max - bounds.min) * 0.5
+        let worldCenter3 = area.convert(position: localCenter, to: worldRoot)
+        let worldCenter = SIMD2<Float>(worldCenter3.x, worldCenter3.z)
+        let localAxes = [
+            SIMD3<Float>(halfExtents.x, 0, 0),
+            SIMD3<Float>(0, halfExtents.y, 0),
+            SIMD3<Float>(0, 0, halfExtents.z),
+        ]
+        let projected = localAxes.map { localAxis -> SIMD2<Float> in
+            let endpoint = area.convert(position: localCenter + localAxis, to: worldRoot)
+            return SIMD2(endpoint.x - worldCenter.x, endpoint.z - worldCenter.y)
+        }.sorted { simd_length_squared($0) > simd_length_squared($1) }
+
+        guard projected.count >= 2,
+              simd_length(projected[0]) > 0.001,
+              simd_length(projected[1]) > 0.001 else { return nil }
+
+        func inset(_ axis: SIMD2<Float>) -> SIMD2<Float> {
+            let length = simd_length(axis)
+            let usableLength = max(0.01, length - NPCClerkTuning.workAreaMargin)
+            return axis * (usableLength / length)
+        }
+        return NPCWorkArea(center: worldCenter,
+                           axisU: inset(projected[0]),
+                           axisV: inset(projected[1]))
     }
 
     private func clamp(_ value: Float, _ minimum: Float, _ maximum: Float) -> Float {
@@ -416,16 +468,12 @@ final class NPCClerkController {
     }
 
     private func randomWorkTarget(awayFrom current: SIMD2<Float>) -> SIMD2<Float>? {
-        guard workAreaMin.x <= workAreaMax.x,
-              workAreaMin.y <= workAreaMax.y else { return nil }
-
         var fallback = current
-        // 좁거나 긴 AreaK에서도 무한 반복하지 않도록 유한 횟수 뒤 마지막 후보를 사용한다.
+        // AreaK의 authored 회전/스케일이 적용된 평면 안에서만 후보를 만든다.
         for _ in 0..<8 {
-            let candidate = SIMD2<Float>(
-                Float.random(in: workAreaMin.x...workAreaMax.x),
-                Float.random(in: workAreaMin.y...workAreaMax.y)
-            )
+            let candidate = workArea.point(
+                u: Float.random(in: -1...1),
+                v: Float.random(in: -1...1))
             fallback = candidate
             if simd_distance(candidate, current) >= NPCClerkTuning.minimumRoamDistance {
                 return candidate
