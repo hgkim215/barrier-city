@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import simd
 
 /// 휠체어 물리 시뮬레이션의 프레임 간 상태와 저빈도 성능 진단을 소유한다.
 /// AppModel은 사용자 입력과 앱 수명주기만 담당하고, MovementSystem은 이 객체만 갱신한다.
@@ -24,6 +25,10 @@ final class WheelchairMotionState {
     var roll: Float = 0
     var pitchVelocity: Float = 0
     var rollVelocity: Float = 0
+    /// 지면 법선의 프레임 간 저역통과 결과. 5점 공간 평균만으로는 겹치는 콜라이더나
+    /// 메시 이음매에서 매 프레임 다른 표면이 걸리는 시간축 떨림을 못 막아, 기울기가
+    /// 그 노이즈를 그대로 따라가며 시야가 미세하게 떨렸다.
+    var groundNormal: SIMD3<Float> = [0, 1, 0]
 
     var chairHeight: Float = 0
     var fallVelocity: Float = 0
@@ -76,6 +81,7 @@ final class WheelchairMotionState {
         surgeOffset = 0
         surgeVelocity = 0
         isBumpSettling = false
+        groundNormal = [0, 1, 0]
         hasFallen = false
         fallDirectionPitch = 0
         fallDirectionRoll = 0
