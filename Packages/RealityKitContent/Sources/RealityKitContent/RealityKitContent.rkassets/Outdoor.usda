@@ -764,7 +764,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -794,7 +794,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -824,7 +824,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -854,7 +854,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -884,7 +884,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -914,7 +914,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -944,7 +944,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -974,7 +974,7 @@ def Xform "Root" (
 
                     def RealityKitComponent "PointLight"
                     {
-                        float attenuationFalloffExponent = 1.5
+                        float attenuationFalloffExponent = 2
                         float3 color = (1, 0.7349227, 0.48944563)
                         token info:id = "RealityKit.PointLight"
                         float intensity = 10000
@@ -2402,6 +2402,53 @@ def Xform "Root" (
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-140.84766, 128.86328)
             int ui:nodegraph:node:stackingOrder = 10
+        }
+    }
+
+    def "SkyDome" (
+        active = true
+        prepend references = @SkyDome.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, 0, -0.70710677, 0)
+        float3 xformOp:scale = (0.05, 0.05, 0.05)
+        float3 xformOp:translate = (5.566795, -0.000015735626, 5.92259)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        over "Looks"
+        {
+            over "DomeMATSG"
+            {
+                token inputs:frame:stPrimvarName = "st" (
+                    customData = {
+                        dictionary realitykit = {
+                            bool hide = 1
+                        }
+                    }
+                )
+                token outputs:mtlx:surface
+                token outputs:realitykit:vertex
+
+                def Shader "diffuseColor"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    asset inputs:file = @textures/Sky.png@
+                    float2 inputs:st.connect = </Root/SkyDome/Looks/DomeMATSG/diffuseColor/TexCoordReader.outputs:result>
+                    color3f outputs:rgb
+
+                    def Shader "TexCoordReader"
+                    {
+                        uniform token info:id = "UsdPrimvarReader_float2"
+                        token inputs:varname.connect = </Root/SkyDome/Looks/DomeMATSG.inputs:frame:stPrimvarName>
+                        float2 outputs:result
+                    }
+                }
+
+                over "DomeMAT"
+                {
+                    color3f inputs:diffuseColor.connect = </Root/SkyDome/Looks/DomeMATSG/diffuseColor.outputs:rgb>
+                }
+            }
         }
     }
 }
