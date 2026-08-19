@@ -110,7 +110,7 @@ final class NPCDialogueController {
     }
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
-    func reset() {
+    func resetImmersiveProgress() {
         cancelEncounter()
         status = .idle
         userText = ""
@@ -121,7 +121,7 @@ final class NPCDialogueController {
         tone = climate.tone
         realtimeLiveText = ""
         realtimeSpeechDetected = false
-        realtimeMission.reset()
+        realtimeMission.resetImmersiveProgress()
         resetRealtimeTurnState()
         animationSequence = 0
         hasRequestedGreetingAnimation = false

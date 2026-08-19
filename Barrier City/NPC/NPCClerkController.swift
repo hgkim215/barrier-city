@@ -122,8 +122,8 @@ final class NPCClerkController {
         if locked { isTalkAvailable = false }
     }
 
-    /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
-    func resetForOutdoor() {
+    /// 점원 엔티티와 진행 중 encounter만 정리한다. immersive 대화 진행은 보존한다.
+    func tearDownForOutdoor() {
         greetingTask?.cancel()
         greetingTask = nil
         animationPlayback?.stop()

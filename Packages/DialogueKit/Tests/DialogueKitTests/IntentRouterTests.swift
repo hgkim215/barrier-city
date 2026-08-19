@@ -132,6 +132,56 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .completeOrder)
     }
 
+    func test_encounterCleanup_discardsFunctionCallAndExitEvent() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        _ = coordinator.register(
+            name: "end_conversation",
+            callID: "call-exit",
+            arguments: "{}"
+        )
+
+        coordinator.clearEncounterTransientState()
+
+        XCTAssertNil(coordinator.takeFunctionCall())
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_encounterCleanup_preservesUnconsumedOrderCompletion() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(
+            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
+        )
+        _ = coordinator.register(
+            name: "place_order",
+            callID: "call-preserved-order",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+
+        coordinator.clearEncounterTransientState()
+
+        XCTAssertTrue(coordinator.snapshot.orderPlaced)
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
+    func test_immersiveReset_clearsProgressAndUnconsumedOrderCompletion() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(
+            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
+        )
+        _ = coordinator.register(
+            name: "place_order",
+            callID: "call-reset-order",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+
+        coordinator.resetImmersiveProgress()
+
+        XCTAssertTrue(coordinator.snapshot.isPristine)
+        XCTAssertNil(coordinator.takeFunctionCall())
+        XCTAssertNil(coordinator.takeCompletedEvent())
+    }
+
     func test_realtimeReturningOpening_usesSavedOrderState() {
         var coordinator = RealtimeMissionCoordinator(personality: .hurried)
         coordinator.observe(

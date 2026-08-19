@@ -54,7 +54,7 @@ final class AppModel {
 
     /// 몰입 공간 열기/닫기와 뷰 생명주기가 공유하는 단일 상태.
     private(set) var immersiveSessionState = ImmersiveSessionState()
-    @ObservationIgnored private var preparedNPCDialogueGeneration = 0
+    @ObservationIgnored private var npcDialogueResetGate = ImmersiveGenerationResetGate()
 
     /// 기존 손 추적·진단 코드가 읽는 호환 속성.
     var isImmersive: Bool { immersiveSessionState.isImmersive }
@@ -79,11 +79,15 @@ final class AppModel {
 
     func immersiveSessionAppeared() -> Int? {
         guard let generation = immersiveSessionState.appeared() else { return nil }
-        if preparedNPCDialogueGeneration != generation {
-            npcDialogue.reset()
-            preparedNPCDialogueGeneration = generation
-        }
+        resetNPCDialogueProgressIfNeeded(for: generation)
         return generation
+    }
+
+    /// 전체 NPC 대화 진행 초기화의 유일한 호출 지점이다.
+    /// RealityView 재구성이나 indoor 전환이 아니라 새 immersive generation에만 반응한다.
+    private func resetNPCDialogueProgressIfNeeded(for generation: Int) {
+        guard npcDialogueResetGate.shouldReset(for: generation) else { return }
+        npcDialogue.resetImmersiveProgress()
     }
 
     func immersiveSessionDisappeared(generation: Int) -> Bool {

@@ -45,7 +45,10 @@ public struct RealtimeMissionCoordinator: Sendable {
         public let followUpInstructions: String
     }
 
-    private var pendingEvent: MissionEvent?
+    /// 현재 encounter의 정상 종료 응답이 끝날 때까지만 유효하다.
+    private var pendingEncounterEvent: MissionEvent?
+    /// Quest 계층이 소비할 때까지 encounter 경계를 넘어 보존한다.
+    private var hasPendingOrderCompletion = false
     private var pendingFunctionCall: FunctionCall?
     private var orderProgress: RainbowSmoothieMissionProgress
     private var orderWasPlaced = false
@@ -57,8 +60,9 @@ public struct RealtimeMissionCoordinator: Sendable {
         orderProgress = RainbowSmoothieMissionProgress(personality: personality)
     }
 
-    public mutating func reset() {
-        pendingEvent = nil
+    public mutating func resetImmersiveProgress() {
+        pendingEncounterEvent = nil
+        hasPendingOrderCompletion = false
         pendingFunctionCall = nil
         orderProgress.reset()
         orderWasPlaced = false
@@ -69,7 +73,7 @@ public struct RealtimeMissionCoordinator: Sendable {
     /// 주문 진행과 아직 전달되지 않은 주문 완료 이벤트는 immersive session 동안 보존한다.
     public mutating func clearEncounterTransientState() {
         pendingFunctionCall = nil
-        if pendingEvent == .exited { pendingEvent = nil }
+        pendingEncounterEvent = nil
         clearOrderToolEvaluation()
     }
 
@@ -89,8 +93,8 @@ public struct RealtimeMissionCoordinator: Sendable {
     }
 
     /// 즉시 게시할 이벤트를 반환한다. 대화 종료는 tool 결과를 모델에 보낸 뒤
-    /// response.done에서 세션을 닫아야 하므로 pendingEvent로 보관한다. 주문 완료는
-    /// `observe`가 로컬 슬롯을 채우는 순간 별도로 보관한다.
+    /// response.done에서 세션을 닫아야 하므로 encounter 상태로 보관한다. 주문 완료는
+    /// 검증된 place_order 호출이 성공한 뒤 Quest가 소비할 때까지 별도로 보존한다.
     public mutating func register(
         name: String,
         callID: String,
@@ -110,7 +114,7 @@ public struct RealtimeMissionCoordinator: Sendable {
             if accepted {
                 if !orderWasPlaced {
                     orderWasPlaced = true
-                    pendingEvent = .orderPlaced
+                    hasPendingOrderCompletion = true
                 }
                 output = #"{"success":true,"message":"one-cup Rainbow Smoothie order placed"}"#
                 followUpInstructions = """
@@ -140,7 +144,7 @@ public struct RealtimeMissionCoordinator: Sendable {
               has been requested, then stop and wait for the visitor.
               """
         case "end_conversation":
-            pendingEvent = .exited
+            pendingEncounterEvent = .exited
             immediateEvent = nil
             output = #"{"success":true,"message":"conversation may close"}"#
             followUpInstructions = """
@@ -194,8 +198,12 @@ public struct RealtimeMissionCoordinator: Sendable {
     }
 
     public mutating func takeCompletedEvent() -> MissionEvent? {
-        defer { pendingEvent = nil }
-        return pendingEvent
+        if hasPendingOrderCompletion {
+            hasPendingOrderCompletion = false
+            return .orderPlaced
+        }
+        defer { pendingEncounterEvent = nil }
+        return pendingEncounterEvent
     }
 
     private func validatePlaceOrderArguments(_ arguments: String) -> Bool {
