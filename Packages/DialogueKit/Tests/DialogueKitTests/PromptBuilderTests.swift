@@ -84,17 +84,15 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(guide.contains("natural everyday Korean"))
         XCTAssertTrue(guide.contains("Korean is the ONLY language"))
-        XCTAssertTrue(guide.contains("Never answer in English or switch languages"))
-        XCTAssertTrue(guide.contains("including the first greeting"))
-        XCTAssertTrue(guide.contains("Listen for meaning"))
-        XCTAssertTrue(guide.contains("not trigger words"))
-        XCTAssertTrue(guide.contains("do not recite a"))
+        XCTAssertTrue(guide.contains("Respond directly to the visitor's latest meaning"))
+        XCTAssertTrue(guide.contains("genuine small talk"))
+        XCTAssertTrue(guide.contains("topic changes"))
         XCTAssertTrue(guide.contains("fixed script"))
-        XCTAssertTrue(guide.contains("Accept interruptions, corrections, topic changes"))
-        XCTAssertTrue(guide.contains("After each answer, stop and wait"))
+        XCTAssertTrue(guide.contains("Stop after each answer and wait"))
+        XCTAssertTrue(guide.contains("running out of beans"))
     }
 
-    func test_realtimeGuide_keepsMissionTransitionsDeterministic() {
+    func test_realtimeGuide_keepsOnlyMissionOrderDeterministic() {
         let ableist = NPCPersona(
             id: "staff",
             role: "cafe staff",
@@ -106,12 +104,11 @@ final class PromptBuilderTests: XCTestCase {
             climate: SocialClimate(rapport: ableist.accessibilityAttitude.initialRapport)
         )
 
-        XCTAssertTrue(guide.contains("Assume the standard kiosk process"))
-        XCTAssertTrue(guide.contains("personality-specific acceptance timing"))
-        XCTAssertTrue(guide.contains("Call place_order only when"))
-        XCTAssertTrue(guide.contains("never claim placement before success"))
-        XCTAssertTrue(guide.contains("never call it for silence"))
-        XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
+        XCTAssertTrue(guide.contains("Ordinary dialogue never changes game state"))
+        XCTAssertTrue(guide.contains("only function-backed game"))
+        XCTAssertTrue(guide.contains("place_mission_order"))
+        XCTAssertTrue(guide.contains("never claim the order was placed until"))
+        XCTAssertTrue(guide.contains("shorter Rainbow"))
     }
 
     func test_prompts_defineRainbowSmoothieAsMissionOrder() {
@@ -131,7 +128,7 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(messages.first!.content.contains("레인보우 스무디"))
         XCTAssertTrue(messages.first!.content.contains("레인보우 마카롱 스무디"))
         XCTAssertTrue(messages.first!.content.contains("Do not mark a different menu item"))
-        XCTAssertTrue(realtime.contains("Rainbow Smoothie"))
+        XCTAssertTrue(realtime.contains("Rainbow Macaron Smoothie"))
         XCTAssertTrue(realtime.contains("레인보우 마카롱 스무디"))
     }
 
@@ -158,30 +155,24 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(messages.first!.content.contains("Clerk personality: chatty"))
         XCTAssertTrue(messages.first!.content.contains("sociable and expressive"))
         XCTAssertTrue(realtime.contains("Clerk personality: chatty"))
-        XCTAssertTrue(realtime.contains("clearly audible in word choice"))
+        XCTAssertTrue(realtime.contains("Sociable, expressive, and curious"))
     }
 
-    func test_realtimeGuide_requiresKioskOpeningBeforeBarrierIsExplained() {
+    func test_realtimeGuide_opensWithoutForcingAnOrderFlow() {
         let guide = RealtimeConversationGuide().instructions(
             persona: persona,
             climate: SocialClimate()
         )
 
         let opening = RealtimeConversationGuide.openingInstructions(
-            snapshot: RealtimeMissionCoordinator().snapshot,
+            memory: ConversationMemory(),
             isReturningEncounter: false
         )
-        XCTAssertTrue(opening.contains("# Conversation stage"))
-        XCTAssertTrue(opening.contains("# Response goal"))
-        XCTAssertTrue(opening.contains("direct them to use the kiosk"))
-        XCTAssertTrue(opening.contains("Do not use a fixed stock script"))
-        XCTAssertFalse(opening.contains("Speak ONLY this exact"))
-        XCTAssertTrue(guide.contains("# Required conversation flow"))
-        XCTAssertTrue(guide.contains("private scene context"))
-        XCTAssertTrue(guide.contains("explaining an access barrier"))
-        XCTAssertTrue(guide.contains("Do not ask for an item"))
-        XCTAssertTrue(guide.contains("barrier explanation only determines"))
-        XCTAssertTrue(guide.contains("ask only how many cups"))
+        XCTAssertTrue(opening.contains("Greet the visitor briefly and naturally"))
+        XCTAssertTrue(opening.contains("must not force the visitor into an ordering flow"))
+        XCTAssertFalse(opening.contains("direct them to use the kiosk"))
+        XCTAssertTrue(guide.contains("Do not repeatedly steer the visitor"))
+        XCTAssertTrue(guide.contains("when the visitor brings them up"))
     }
 
     func test_collectionDecision_separatesBarrierAcceptance_item_andQuantity() {
@@ -221,20 +212,20 @@ final class PromptBuilderTests: XCTestCase {
     }
 
     func test_realtimeReadyOrder_requiresValidatedToolBeforeConfirmation() {
-        let guide = RainbowSmoothieOrderDecision.completeOrder.realtimeToolPromptGuide
+        let guide = RealtimeMissionRoutingDecision.missionOrderCandidate.promptGuide
 
-        XCTAssertTrue(guide.contains("LOCAL_ORDER_READY=true"))
-        XCTAssertTrue(guide.contains("ORDER_PLACED=false"))
-        XCTAssertTrue(guide.contains("Call place_order"))
-        XCTAssertTrue(guide.contains("before the tool result succeeds"))
+        XCTAssertTrue(guide.contains("explicit evidence"))
+        XCTAssertTrue(guide.contains("exactly one Rainbow Macaron Smoothie"))
+        XCTAssertTrue(guide.contains("Call place_mission_order"))
+        XCTAssertTrue(guide.contains("before the function result succeeds"))
     }
 
-    func test_realtimeGuide_definesDistinctPersonalityAcceptanceTiming() {
+    func test_realtimeGuide_definesDistinctFreeConversationStyles() {
         let expectedRules: [(ClerkPersonality, String)] = [
-            (.hurried, "accept the verbal order immediately because arguing would waste time"),
-            (.chatty, "accept the verbal order immediately"),
-            (.cautious, "ask one skeptical verification question"),
-            (.blunt, "On the first two relevant requests or explanations"),
+            (.hurried, "Fast, practical, and slightly distracted"),
+            (.chatty, "Sociable, expressive, and curious"),
+            (.cautious, "Careful and reserved"),
+            (.blunt, "Direct and terse"),
         ]
 
         for (personality, expected) in expectedRules {

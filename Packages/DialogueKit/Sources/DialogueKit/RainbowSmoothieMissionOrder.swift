@@ -33,6 +33,24 @@ public enum RainbowSmoothieMissionOrder: Sendable {
             && !mentionsMultipleItemsByNumber
     }
 
+    /// Realtime function calling의 유일한 미션 상품은 전체 상품명인
+    /// "레인보우 마카롱 스무디"다. 짧은 별칭은 기존 대화 경로에서만 허용한다.
+    public static func isExactMissionItemMention(in userText: String) -> Bool {
+        let normalized = normalize(userText)
+        let mentionsExactItem = [
+            "레인보우마카롱스무디",
+            "rainbowmacaronsmoothie",
+        ].contains(where: normalized.contains)
+        let rejectsItem = [
+            "레인보우마카롱스무디말고",
+            "레인보우마카롱스무디는말고",
+            "레인보우마카롱스무디취소",
+            "레인보우마카롱스무디아니",
+            "레인보우마카롱스무디안",
+        ].contains(where: normalized.contains)
+        return mentionsExactItem && !rejectsItem
+    }
+
     static func isAcceptedItemMention(in userText: String) -> Bool {
         let normalized = normalize(userText)
         let rejectsMissionItem = [
@@ -92,10 +110,6 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
     case askItem
     case askQuantity
     case completeOrder
-
-    public var disablesTools: Bool {
-        self == .askItem || self == .askQuantity || self == .completeOrder
-    }
 
     public var endsConversationAfterResponse: Bool {
         self == .completeOrder
@@ -170,24 +184,6 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
         }
     }
 
-    /// Realtime 경로에서는 로컬 슬롯 완성을 곧바로 주문 완료로 발표하지 않고,
-    /// 검증된 `place_order` tool 결과가 성공한 뒤에만 완료를 말한다.
-    public var realtimeToolPromptGuide: String {
-        guard self == .completeOrder else { return promptGuide }
-        return """
-        ## Authoritative app state
-        - COUNTER_SERVICE_ACCEPTED=true
-        - ITEM=Rainbow Smoothie
-        - QUANTITY=1
-        - LOCAL_ORDER_READY=true
-        - ORDER_PLACED=false
-        ## Required action
-        - Call place_order with item=rainbow_smoothie and quantity=1 now.
-        ## Boundaries
-        - Do not speak an order confirmation before the tool result succeeds.
-        - Do not ask another question, reopen the kiosk issue, or invent another item or quantity.
-        """
-    }
 }
 
 /// Realtime 모델의 주장과 별개로 사용자 transcript와 성격별 설득 단계를 로컬에서 추적한다.

@@ -96,83 +96,130 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(correctedQuantity.observe(userTranscript: "한 잔이요"), .completeOrder)
     }
 
-    func test_realtimeMissionCoordinator_itemThenQuantity_completesWithoutToolCall() {
-        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
-        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
-        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
+    func test_realtimeMissionCoordinator_keepsOrdinaryConversationToolFree() {
+        var coordinator = RealtimeMissionCoordinator()
+
         XCTAssertEqual(
-            coordinator.observe(userTranscript: "레인보우 스무디 주세요"),
-            .askQuantity
+            coordinator.observe(userTranscript: "오늘 원두가 다 떨어졌어요?"),
+            .ordinaryConversation
         )
-        XCTAssertNil(coordinator.takeCompletedEvent())
-        XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .completeOrder)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-        _ = coordinator.register(
-            name: "place_order",
-            callID: "call-quantity",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
-        )
-        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-    }
-
-    func test_realtimeMissionCoordinator_encounterCleanup_preservesOrderProgress() {
-        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
-        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
-        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
         XCTAssertEqual(
-            coordinator.observe(userTranscript: "레인보우 스무디 주세요"),
-            .askQuantity
+            coordinator.observe(userTranscript: "아메리카노 한 잔 주세요"),
+            .ordinaryConversation
         )
-
-        coordinator.clearEncounterTransientState()
-
-        XCTAssertTrue(coordinator.snapshot.order.counterOrderAccepted)
-        XCTAssertTrue(coordinator.snapshot.order.hasMissionItem)
-        XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .completeOrder)
+        XCTAssertTrue(coordinator.snapshot.isPristine)
     }
 
-    func test_encounterCleanup_discardsFunctionCallAndExitEvent() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        _ = coordinator.register(
-            name: "end_conversation",
-            callID: "call-exit",
-            arguments: "{}"
+    func test_realtimeMissionCoordinator_requiresExactMacaronItem() {
+        var coordinator = RealtimeMissionCoordinator()
+
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요"),
+            .ordinaryConversation
+        )
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 맛있어요?"),
+            .ordinaryConversation
+        )
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요"),
+            .missionOrderCandidate
+        )
+    }
+
+    func test_realtimeMissionCoordinator_distinguishesCorrectionFromCancellation() {
+        var correction = RealtimeMissionCoordinator()
+        XCTAssertEqual(
+            correction.observe(userTranscript: "아니, 레인보우 마카롱 스무디 한 잔 주세요"),
+            .missionOrderCandidate
         )
 
-        coordinator.clearEncounterTransientState()
+        var cancellation = RealtimeMissionCoordinator()
+        cancellation.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
+        XCTAssertEqual(
+            cancellation.observe(userTranscript: "레인보우 마카롱 스무디 말고 라떼 주세요"),
+            .ordinaryConversation
+        )
+        XCTAssertTrue(cancellation.snapshot.isPristine)
+    }
 
-        XCTAssertNil(coordinator.takeFunctionCall())
+    func test_realtimeMissionCoordinator_itemThenQuantity_exposesToolOnlyWhenComplete() {
+        var coordinator = RealtimeMissionCoordinator()
+
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요"),
+            .partialMissionOrder
+        )
+        coordinator.clearEncounterTransientState()
+        XCTAssertTrue(coordinator.snapshot.hasMissionItem)
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "한 잔이요"),
+            .missionOrderCandidate
+        )
         XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
-    func test_encounterCleanup_preservesUnconsumedOrderCompletion() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
+    func test_placeMissionOrder_validatesJSONAndPublishesExactlyOnce() {
+        var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
+        let arguments = #"{"item":"rainbow_macaron_smoothie","quantity":1}"#
         _ = coordinator.register(
-            name: "place_order",
-            callID: "call-preserved-order",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+            name: "place_mission_order",
+            callID: "call-1",
+            arguments: arguments
         )
-
-        coordinator.clearEncounterTransientState()
 
         XCTAssertTrue(coordinator.snapshot.orderPlaced)
+        XCTAssertTrue(coordinator.takeFunctionCall()?.output.contains(#""success":true"#) == true)
         XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+
+        _ = coordinator.register(
+            name: "place_mission_order",
+            callID: "call-2",
+            arguments: arguments
+        )
         XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
-    func test_immersiveReset_clearsProgressAndUnconsumedOrderCompletion() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
+    func test_placeMissionOrder_rejectsInvalidJSONWithoutMissionEvent() {
+        var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         _ = coordinator.register(
-            name: "place_order",
-            callID: "call-reset-order",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+            name: "place_mission_order",
+            callID: "call-invalid",
+            arguments: #"{"item":"rainbow_macaron_smoothie","quantity":2}"#
+        )
+
+        XCTAssertFalse(coordinator.snapshot.orderPlaced)
+        XCTAssertNil(coordinator.takeCompletedEvent())
+        XCTAssertTrue(coordinator.takeFunctionCall()?.output.contains(#""success":false"#) == true)
+    }
+
+    func test_encounterCleanup_preservesMissionSlotsAndPendingCompletion() {
+        var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
+        coordinator.clearEncounterTransientState()
+        XCTAssertTrue(coordinator.snapshot.hasMissionItem)
+        XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .missionOrderCandidate)
+
+        _ = coordinator.register(
+            name: "place_mission_order",
+            callID: "call-preserved",
+            arguments: #"{"item":"rainbow_macaron_smoothie","quantity":1}"#
+        )
+        coordinator.clearEncounterTransientState()
+        XCTAssertTrue(coordinator.snapshot.orderPlaced)
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+    }
+
+    func test_immersiveReset_clearsMissionProgress() {
+        var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
+        _ = coordinator.register(
+            name: "place_mission_order",
+            callID: "call-reset",
+            arguments: #"{"item":"rainbow_macaron_smoothie","quantity":1}"#
         )
 
         coordinator.resetImmersiveProgress()
@@ -182,72 +229,13 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
-    func test_realtimeReturningOpening_usesSavedOrderState() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요"
-        )
-
-        let opening = RealtimeConversationGuide.openingInstructions(
-            snapshot: coordinator.snapshot,
-            isReturningEncounter: true
-        )
-
-        XCTAssertTrue(opening.contains("same visitor"))
-        XCTAssertTrue(opening.contains("ask only how many cups"))
-        XCTAssertFalse(opening.contains("first greeting before"))
-    }
-
-    func test_realtimeMissionCoordinator_fullMacaronOrder_completesImmediately() {
-        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
-        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
-        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
-        XCTAssertEqual(
-            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요"),
-            .completeOrder
-        )
-        XCTAssertNil(coordinator.takeCompletedEvent())
+    func test_orderToolEvaluation_comparesCandidateAndFunctionCall() {
+        var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         _ = coordinator.register(
-            name: "place_order",
-            callID: "call-macaron",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
-        )
-        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-    }
-
-    func test_realtimeMissionCoordinator_loggedNaturalFlow_completesOrder() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-
-        XCTAssertEqual(
-            coordinator.observe(
-                userTranscript: "아니 저 손이 안 닿아서 그러는데요. 닫아주시면 안 되나요?"
-            ),
-            .askItem
-        )
-        XCTAssertEqual(
-            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔이요."),
-            .completeOrder
-        )
-        XCTAssertNil(coordinator.takeCompletedEvent())
-        _ = coordinator.register(
-            name: "place_order",
-            callID: "call-natural",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
-        )
-        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-    }
-
-    func test_orderToolShadow_matchesLocallyCompleteOrder() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
-        _ = coordinator.register(
-            name: "place_order",
+            name: "place_mission_order",
             callID: "call-order",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+            arguments: #"{"item":"rainbow_macaron_smoothie","quantity":1}"#
         )
 
         XCTAssertEqual(
@@ -259,62 +247,6 @@ final class IntentRouterTests: XCTestCase {
                 argumentsValid: true
             )
         )
-    }
-
-    func test_orderToolShadow_reportsPrematureProposalWithoutTranscript() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(userTranscript: "레인보우 스무디 주세요")
-        _ = coordinator.register(
-            name: "place_order",
-            callID: "call-premature",
-            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
-        )
-
-        let evaluation = coordinator.finishOrderToolEvaluation()
-        XCTAssertEqual(evaluation?.outcome, .prematureProposal)
-        XCTAssertFalse(evaluation?.localOrderReady ?? true)
-        XCTAssertTrue(evaluation?.modelProposedOrder ?? false)
-    }
-
-    func test_orderToolShadow_reportsMissedProposal() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
-
-        XCTAssertEqual(coordinator.finishOrderToolEvaluation()?.outcome, .missedProposal)
-    }
-
-    func test_placeOrderTool_rejectsInvalidArgumentsWithoutMissionEvent() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
-        _ = coordinator.register(
-            name: "place_order",
-            callID: "call-invalid",
-            arguments: #"{"item":"rainbow_smoothie","quantity":2}"#
-        )
-
-        XCTAssertFalse(coordinator.snapshot.orderPlaced)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-        XCTAssertTrue(coordinator.takeFunctionCall()?.output.contains(#""success":false"#) == true)
-    }
-
-    func test_placeOrderTool_publishesOrderExactlyOnce() {
-        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
-        coordinator.observe(
-            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
-        )
-        let arguments = #"{"item":"rainbow_smoothie","quantity":1}"#
-        _ = coordinator.register(name: "place_order", callID: "call-1", arguments: arguments)
-
-        XCTAssertTrue(coordinator.snapshot.orderPlaced)
-        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
-        XCTAssertNil(coordinator.takeCompletedEvent())
-
-        _ = coordinator.register(name: "place_order", callID: "call-2", arguments: arguments)
-        XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
     func test_onlyCompletedOrderEndsConversationAfterResponse() {

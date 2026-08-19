@@ -91,7 +91,11 @@ final class AppModel {
     }
 
     func immersiveSessionDisappeared(generation: Int) -> Bool {
-        immersiveSessionState.disappeared(generation: generation)
+        let didDisappear = immersiveSessionState.disappeared(generation: generation)
+        if didDisappear {
+            npcDialogue.endImmersiveSession()
+        }
+        return didDisappear
     }
 
     /// 손 추적을 쓸지(실기), 버튼 입력을 쓸지(시뮬레이터).

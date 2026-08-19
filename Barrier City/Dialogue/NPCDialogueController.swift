@@ -74,6 +74,8 @@ final class NPCDialogueController {
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
     private var realtimeMission = RealtimeMissionCoordinator()
+    /// Realtime 연결보다 오래 살며, 새 immersive generation에서만 초기화된다.
+    private var conversationMemory = ConversationMemory()
     private var realtimeOutputIsPlaying = false
     private var realtimeResponseDonePending = false
     private var realtimeMicrophoneIsReady = false
@@ -122,12 +124,21 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.resetImmersiveProgress()
+        conversationMemory.reset()
         resetRealtimeTurnState()
         animationSequence = 0
         hasRequestedGreetingAnimation = false
         animationRequest = nil
         lastMissionEvent = nil
         missionEventSequence = 0
+        encounterCount = 0
+    }
+
+    /// ImmersiveSpace가 실제로 닫히는 순간 네트워크 연결과 대화 문맥을 폐기한다.
+    /// 미션·호감도 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
+    func endImmersiveSession() {
+        cancelEncounter()
+        conversationMemory.reset()
         encounterCount = 0
     }
 
@@ -215,13 +226,14 @@ final class NPCDialogueController {
         do {
             try await session.start(
                 instructions: realtimeInstructions(
-                    for: SocialClimate(rapport: rapport)
+                    for: SocialClimate(rapport: rapport),
+                    memory: conversationMemory
                 ),
                 openingInstructions: RealtimeConversationGuide.openingInstructions(
-                    snapshot: realtimeMission.snapshot,
+                    memory: conversationMemory,
                     isReturningEncounter: isReturningEncounter
                 ),
-                tools: Self.realtimeTools
+                tools: []
             ) { [weak self] event in
                 self?.handleRealtimeEvent(event)
             }
@@ -279,10 +291,11 @@ final class NPCDialogueController {
                 if realtimeCanAcceptInput { armRealtimeResponseTimeout() }
                 return
             }
-            let orderDecision = realtimeMission.observe(userTranscript: transcript)
+            conversationMemory.append(.user, text: transcript)
+            let routingDecision = realtimeMission.observe(userTranscript: transcript)
 #if DEBUG
             Self.lifecycleLogger.debug(
-                "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: orderDecision), privacy: .public) terminal=\(orderDecision.endsConversationAfterResponse, privacy: .public)"
+                "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: routingDecision), privacy: .public) exposesTool=\(routingDecision.exposesMissionOrderTool, privacy: .public)"
             )
 #endif
             realtimeMicrophoneIsReady = false
@@ -302,10 +315,12 @@ final class NPCDialogueController {
                     try await realtimeSession.requestResponse(
                         instructions: self.realtimeInstructions(
                             for: self.climate,
-                            orderDecision: orderDecision
+                            routingDecision: routingDecision
                         ),
-                        toolChoice: orderDecision == .completeOrder ? .required : .auto,
-                        tools: orderDecision == .completeOrder ? [Self.placeOrderTool] : nil
+                        toolChoice: routingDecision.exposesMissionOrderTool ? .auto : .none,
+                        tools: routingDecision.exposesMissionOrderTool
+                            ? [Self.placeMissionOrderTool]
+                            : []
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -322,7 +337,10 @@ final class NPCDialogueController {
         case .outputTranscriptDone(let text):
             cancelRealtimeGenerationTimeout()
             let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !transcript.isEmpty { npcSubtitle = transcript }
+            if !transcript.isEmpty {
+                npcSubtitle = transcript
+                conversationMemory.append(.assistant, text: transcript)
+            }
 
         case .outputAudioStarted:
             cancelRealtimeGenerationTimeout()
@@ -376,7 +394,8 @@ final class NPCDialogueController {
             if completedOrder {
                 // 검증된 tool이 주문을 확정했다. 최종 확인 음성 연결이 끊겨도 퀘스트와
                 // 앱의 주문 상태가 서로 어긋나지 않도록 완료를 우선한다.
-                npcSubtitle = "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요."
+                npcSubtitle = "레인보우 마카롱 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요."
+                conversationMemory.append(.assistant, text: npcSubtitle)
                 publishMissionEvent(.orderPlaced)
             } else {
                 npcSubtitle = "음성 연결 오류: \(message)"
@@ -387,7 +406,8 @@ final class NPCDialogueController {
 
     private func realtimeInstructions(
         for climate: SocialClimate,
-        orderDecision: RainbowSmoothieOrderDecision = .continueConversation
+        routingDecision: RealtimeMissionRoutingDecision = .ordinaryConversation,
+        memory: ConversationMemory? = nil
     ) -> String {
         """
         \(RealtimeConversationGuide().instructions(
@@ -395,13 +415,15 @@ final class NPCDialogueController {
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
-            climate: climate
+            climate: climate,
+            memory: memory
         ))
 
         # App-owned order state for this response
         \(realtimeMission.snapshot.promptGuide)
 
-        \(orderDecision.realtimeToolPromptGuide)
+        # Routing for this response
+        \(routingDecision.promptGuide)
         """
     }
 
@@ -577,15 +599,15 @@ final class NPCDialogueController {
         return PlayerTurn(text: text, polite: polite, impatient: impatient, hostile: hostile)
     }
 
-    private static let placeOrderTool = RealtimeFunctionTool(
-        name: "place_order",
-        description: "Call once only when counter service is accepted and the visitor explicitly requested exactly one Rainbow Smoothie. The app validates the action before any confirmation.",
+    private static let placeMissionOrderTool = RealtimeFunctionTool(
+        name: "place_mission_order",
+        description: "Place exactly one Rainbow Macaron Smoothie. This function is exposed only after the app detects an explicit matching order; call it before confirming placement.",
         parameters: [
             .init(
                 name: "item",
                 type: .string,
                 description: "Canonical requested menu item.",
-                allowedStringValues: ["rainbow_smoothie"]
+                allowedStringValues: ["rainbow_macaron_smoothie"]
             ),
             .init(
                 name: "quantity",
@@ -596,14 +618,6 @@ final class NPCDialogueController {
             ),
         ]
     )
-
-    private static let realtimeTools: [RealtimeFunctionTool] = [
-        placeOrderTool,
-        .init(name: "request_help",
-              description: "Call only when the visitor explicitly asks for another employee or assistance."),
-        .init(name: "end_conversation",
-              description: "Call only when the visitor clearly says they are leaving or ending the conversation."),
-    ]
 
     private func requestAnimation(_ cue: NPCAnimationCue) {
         animationSequence += 1
