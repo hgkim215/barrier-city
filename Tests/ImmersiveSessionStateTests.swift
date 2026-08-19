@@ -75,5 +75,15 @@ struct ImmersiveSessionStateTests {
                "replacement disappearance owns its teardown")
         expect(staleCallbacks.phase, .closed, "replacement disappearance closes session")
 
+        var resetGate = ImmersiveGenerationResetGate()
+        expect(resetGate.shouldReset(for: 1), true,
+               "first immersive generation resets progress")
+        expect(resetGate.shouldReset(for: 1), false,
+               "same generation cannot reset progress twice")
+        expect(resetGate.shouldReset(for: 2), true,
+               "new immersive generation resets progress")
+        expect(resetGate.shouldReset(for: 1), false,
+               "stale generation cannot reset newer progress")
+
     }
 }

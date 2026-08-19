@@ -6,7 +6,7 @@ import DialogueKit
 
 /// Indoor.usda의 Barista AnimationLibrary에 연결된 코드 실행용 애니메이션 키.
 /// 같은 cue가 연속으로 와도 다시 재생할 수 있도록 요청에는 별도 sequence를 사용한다.
-enum NPCAnimationCue: String, CaseIterable {
+enum NPCAnimationCue: String {
     case idle = "Idle"
     case greet = "Greet"
     case walk = "Walk"
@@ -35,7 +35,9 @@ enum NPCClerkTuning {
     static let detectionRadius: Float = 4.0
     /// 진입 반경보다 1m 넓혀 대화 중 경계에서 종료가 반복되지 않게 한다.
     static let conversationExitRadius: Float = detectionRadius + 1.0
-    static let moveSpeed: Float = 0.8
+    /// Walk 클립의 루트 이동(1.47m / 56frame @ 24fps)에 authored 1.5배 스케일을
+    /// 반영한 속도다. 재생 중인 발걸음과 wrapper의 position 이동을 일치시킨다.
+    static let moveSpeed: Float = 0.95
     static let turnResponse: Float = 7
     static let arrivalDistance: Float = 0.04
     /// 한 지점에 도착한 뒤 다음 행동을 시작하기까지 매번 달라지는 대기 시간.
@@ -54,13 +56,47 @@ enum NPCClerkTuning {
     /// Blender에서 제작된 Barista의 시각적 정면(+Z)을 RealityKit 이동 정면(-Z)에 맞춘다.
     static let baristaForwardYawOffset: Float = .pi
 
-    static let dialogueHeight: Float = 1.55
+    /// 패널은 자신의 중심을 기준으로 배치되므로, 실측 머리 높이에 이 여백만 더해
+    /// 카드 하단이 머리 바로 위에 오게 한다(모델이 바뀌어도 자동으로 맞는다).
+    static let dialogueHeadroom: Float = 0.22
 
     static let fallbackStaffHome = SIMD2<Float>(0, 5.2)
     static let fallbackServicePoint = SIMD2<Float>(0, 3.1)
     static let fallbackCustomerPoint = SIMD2<Float>(0, 1.35)
     static let fallbackAreaMin = SIMD2<Float>(-4, 2)
     static let fallbackAreaMax = SIMD2<Float>(3, 6)
+}
+
+/// AreaK의 로컬 평면을 worldRoot의 XZ 평면으로 옮긴 이동 영역.
+/// 월드축 AABB가 아니라 authored marker의 회전과 비균일 스케일을 그대로 보존한다.
+private struct NPCWorkArea {
+    let center: SIMD2<Float>
+    let axisU: SIMD2<Float>
+    let axisV: SIMD2<Float>
+
+    static let fallback: NPCWorkArea = {
+        let minimum = NPCClerkTuning.fallbackAreaMin
+        let maximum = NPCClerkTuning.fallbackAreaMax
+        let center = (minimum + maximum) * 0.5
+        let half = (maximum - minimum) * 0.5 - NPCClerkTuning.workAreaMargin
+        return NPCWorkArea(
+            center: center,
+            axisU: SIMD2(max(0, half.x), 0),
+            axisV: SIMD2(0, max(0, half.y)))
+    }()
+
+    func point(u: Float, v: Float) -> SIMD2<Float> {
+        center + axisU * u + axisV * v
+    }
+
+    func clamped(_ point: SIMD2<Float>) -> SIMD2<Float> {
+        let offset = point - center
+        let determinant = axisU.x * axisV.y - axisU.y * axisV.x
+        guard abs(determinant) > 0.000001 else { return center }
+        let u = (offset.x * axisV.y - offset.y * axisV.x) / determinant
+        let v = (axisU.x * offset.y - axisU.y * offset.x) / determinant
+        return self.point(u: max(-1, min(1, u)), v: max(-1, min(1, v)))
+    }
 }
 
 /// 실내 점원의 배치·이동·근접 감지·애니메이션을 한 상태 머신에서 관리한다.
@@ -71,7 +107,6 @@ enum NPCClerkTuning {
 @MainActor
 final class NPCClerkController {
     private(set) var phase: NPCClerkPhase = .unavailable
-    private(set) var lastPlayedAnimation: String = ""
     private(set) var isInteractionBubbleVisible = false
     private(set) var isTalkAvailable = false
 
@@ -81,14 +116,14 @@ final class NPCClerkController {
     @ObservationIgnored private var baristaEntity: Entity?
     @ObservationIgnored private var interactionBubble: Entity?
     @ObservationIgnored private var animationPlayback: AnimationPlaybackController?
+    @ObservationIgnored private var currentAnimationCue: NPCAnimationCue?
     @ObservationIgnored private var greetingTask: Task<Void, Never>?
     private var isGuideInteractionLocked = false
 
     private var staffHome = NPCClerkTuning.fallbackStaffHome
     private var servicePoint = NPCClerkTuning.fallbackServicePoint
     private var customerPoint = NPCClerkTuning.fallbackCustomerPoint
-    private var workAreaMin = NPCClerkTuning.fallbackAreaMin
-    private var workAreaMax = NPCClerkTuning.fallbackAreaMax
+    private var workArea = NPCWorkArea.fallback
     private var workTarget: SIMD2<Float>?
     private var workPauseRemaining: Float = 0
     /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
@@ -109,7 +144,7 @@ final class NPCClerkController {
     func installInteractionBubble(_ panel: Entity, in worldRoot: Entity) {
         panel.removeFromParent()
         panel.isEnabled = false
-        panel.scale = SIMD3(repeating: 0.9)
+        panel.scale = SIMD3(repeating: 1.05)
         worldRoot.addChild(panel)
         interactionBubble = panel
     }
@@ -122,8 +157,8 @@ final class NPCClerkController {
         if locked { isTalkAvailable = false }
     }
 
-    /// 몰입 공간 재진입/종료 시 이전 엔티티와 대화 상태를 제거한다.
-    func resetForOutdoor() {
+    /// 점원 엔티티와 진행 중 encounter만 정리한다. immersive 대화 진행은 보존한다.
+    func tearDownForOutdoor() {
         greetingTask?.cancel()
         greetingTask = nil
         animationPlayback?.stop()
@@ -137,7 +172,7 @@ final class NPCClerkController {
         isTalkAvailable = false
         isGuideInteractionLocked = false
         phase = .unavailable
-        lastPlayedAnimation = ""
+        currentAnimationCue = nil
         conversationAnchor = nil
         workTarget = nil
         handledAnimationSequence = 0
@@ -145,7 +180,7 @@ final class NPCClerkController {
         hasPlayedGreetingAnimation = false
         pendingOrderConversationEnd = false
         isRemoteDevelopmentConversation = false
-        dialogue.reset()
+        dialogue.cancelEncounter()
     }
 
     /// Indoor의 authoring marker(BarTable/AreaK)로 동선과 계산대 위치를 구성한다.
@@ -157,7 +192,7 @@ final class NPCClerkController {
         greetingTask?.cancel()
         animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
-        dialogue.reset()
+        dialogue.cancelEncounter()
 
         handledAnimationSequence = 0
         handledMissionSequence = 0
@@ -175,13 +210,13 @@ final class NPCClerkController {
         staffHome = placement.staffHome
         servicePoint = placement.servicePoint
         customerPoint = placement.customerPoint
-        workAreaMin = placement.workAreaMin
-        workAreaMax = placement.workAreaMax
+        workArea = placement.workArea
         workTarget = nil
         workPauseRemaining = randomWorkPause()
 
-        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle/Walk는
-        // 원본 클립의 루트 이동을 제거한 in-place 리소스라 wrapper 이동과 중복되지 않는다.
+        // Indoor.usda에 배치된 완성형 Barista를 그대로 사용한다. Idle(Default.usdz의
+        // 기본 서브트리 애니메이션)과 Walk 모두 원본 클립의 루트 이동을 제거한 in-place
+        // 리소스라 wrapper 이동과 중복되지 않는다.
         guard let barista = indoorMap.findEntity(named: "Barista") else {
             phase = .unavailable
             return
@@ -195,14 +230,30 @@ final class NPCClerkController {
         locomotion.name = "NPCClerkLocomotionRoot"
         locomotion.position = [staffHome.x, NPCClerkTuning.baristaBaseY, staffHome.y]
         locomotion.scale = SIMD3(repeating: NPCClerkTuning.baristaScale)
-        locomotion.addChild(barista)
+
+        // 애니메이션 자산의 원점 대신 실제 모델의 발 중심을 position 좌표로 사용한다.
+        // 모델/애니메이션이 교체되어 원점이 달라져도 이동 경로가 옆으로 밀리거나
+        // 바닥 위아래로 뜨지 않도록 별도 alignment wrapper에서 보정한다.
+        let modelAlignment = Entity()
+        modelAlignment.name = "NPCClerkModelAlignment"
+        modelAlignment.addChild(barista)
+        locomotion.addChild(modelAlignment)
+        let modelBounds = barista.visualBounds(relativeTo: modelAlignment)
+        modelAlignment.position = [
+            -modelBounds.center.x,
+            -modelBounds.min.y,
+            -modelBounds.center.z,
+        ]
         if let bubble = interactionBubble {
             // 월드 좌표를 매 프레임 추종하지 않고 NPC 이동 wrapper에 직접 결합한다.
-            // 위치와 회전이 동일한 transform 계층에서 갱신되므로 추종 지연이 없고,
-            // 사용자의 시선을 향한 별도 forward/yaw 보정도 적용하지 않는다.
+            // 위치는 같은 transform 계층에서 지연 없이 추종하고, 로컬 회전만 매 프레임
+            // 상쇄해 NPC의 보행 방향과 관계없이 패널 앞면이 사용자를 향하게 한다.
             bubble.removeFromParent()
             locomotion.addChild(bubble)
-            bubble.position = [0, NPCClerkTuning.dialogueHeight, 0]
+            // 발 기준 정렬 후의 실측 모델 높이(머리 끝)를 그대로 써서 애셋이 바뀌어도
+            // 항상 실제 머리 바로 위에 오게 한다. 하드코딩된 절대 높이는 쓰지 않는다.
+            let headHeight = modelBounds.max.y - modelBounds.min.y
+            bubble.position = [0, headHeight + NPCClerkTuning.dialogueHeadroom, 0]
             bubble.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
         worldRoot.addChild(locomotion)
@@ -225,6 +276,7 @@ final class NPCClerkController {
 
         let dt = min(max(rawDeltaTime, 0), 1.0 / 15.0)
         let player = SIMD2<Float>(appModel.motion.positionX, appModel.motion.positionZ)
+        defer { faceInteractionBubble(toward: player) }
         // 대화 감지는 계산대의 고정 좌표가 아니라 현재 돌아다니는 NPC의 실제 위치를 쓴다.
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
@@ -285,32 +337,24 @@ final class NPCClerkController {
         beginGreeting(isRemoteDevelopmentConversation: true)
     }
 
-    /// DEBUG 패널에서 자산 연결을 대화 없이 바로 확인할 때 사용한다.
-    func playForTesting(_ cue: NPCAnimationCue) {
-        playAnimation(cue, restart: true, allowsGreetingReplay: true)
-    }
-
     // MARK: - Placement
 
     private struct Placement {
         let staffHome: SIMD2<Float>
         let servicePoint: SIMD2<Float>
         let customerPoint: SIMD2<Float>
-        let workAreaMin: SIMD2<Float>
-        let workAreaMax: SIMD2<Float>
+        let workArea: NPCWorkArea
     }
 
     private func makePlacement(in indoorMap: Entity,
                                relativeTo worldRoot: Entity,
                                kioskCenter: SIMD2<Float>) -> Placement {
-        var areaMin = NPCClerkTuning.fallbackAreaMin
-        var areaMax = NPCClerkTuning.fallbackAreaMax
-        var home = NPCClerkTuning.fallbackStaffHome
+        var resolvedWorkArea = NPCWorkArea.fallback
+        var home = resolvedWorkArea.center
         if let area = indoorMap.findEntity(named: "AreaK") {
-            let bounds = area.visualBounds(relativeTo: worldRoot)
-            areaMin = SIMD2(bounds.min.x, bounds.min.z)
-            areaMax = SIMD2(bounds.max.x, bounds.max.z)
-            home = SIMD2(bounds.center.x, bounds.center.z)
+            resolvedWorkArea = makeWorkArea(from: area, relativeTo: worldRoot)
+                ?? resolvedWorkArea
+            home = resolvedWorkArea.center
         }
 
         var service = NPCClerkTuning.fallbackServicePoint
@@ -346,21 +390,46 @@ final class NPCClerkController {
             customer = edge + towardCustomer * NPCClerkTuning.customerStandOff
         }
 
-        let insetMin = areaMin + NPCClerkTuning.workAreaMargin
-        let insetMax = areaMax - NPCClerkTuning.workAreaMargin
-        // 마커가 여백보다 좁은 축에서도 닫힌 난수 범위를 만들 수 있도록 정규화한다.
-        let roamMin = SIMD2<Float>(Swift.min(insetMin.x, insetMax.x),
-                                   Swift.min(insetMin.y, insetMax.y))
-        let roamMax = SIMD2<Float>(Swift.max(insetMin.x, insetMax.x),
-                                   Swift.max(insetMin.y, insetMax.y))
-        home = clamp(home, minimum: roamMin, maximum: roamMax)
-        service = clamp(service, minimum: roamMin, maximum: roamMax)
+        home = resolvedWorkArea.clamped(home)
+        service = resolvedWorkArea.clamped(service)
 
         return Placement(staffHome: home,
                          servicePoint: service,
                          customerPoint: customer,
-                         workAreaMin: roamMin,
-                         workAreaMax: roamMax)
+                         workArea: resolvedWorkArea)
+    }
+
+    /// AreaK는 Blender XY 평면이 Indoor의 -90° X 회전으로 월드 XZ 평면에 놓일 수 있다.
+    /// 따라서 로컬 X/Z를 고정 가정하지 않고, 월드 XZ에 가장 크게 투영되는 두 축을 선택한다.
+    private func makeWorkArea(from area: Entity,
+                              relativeTo worldRoot: Entity) -> NPCWorkArea? {
+        let bounds = area.visualBounds(relativeTo: area)
+        let localCenter = bounds.center
+        let halfExtents = (bounds.max - bounds.min) * 0.5
+        let worldCenter3 = area.convert(position: localCenter, to: worldRoot)
+        let worldCenter = SIMD2<Float>(worldCenter3.x, worldCenter3.z)
+        let localAxes = [
+            SIMD3<Float>(halfExtents.x, 0, 0),
+            SIMD3<Float>(0, halfExtents.y, 0),
+            SIMD3<Float>(0, 0, halfExtents.z),
+        ]
+        let projected = localAxes.map { localAxis -> SIMD2<Float> in
+            let endpoint = area.convert(position: localCenter + localAxis, to: worldRoot)
+            return SIMD2(endpoint.x - worldCenter.x, endpoint.z - worldCenter.y)
+        }.sorted { simd_length_squared($0) > simd_length_squared($1) }
+
+        guard projected.count >= 2,
+              simd_length(projected[0]) > 0.001,
+              simd_length(projected[1]) > 0.001 else { return nil }
+
+        func inset(_ axis: SIMD2<Float>) -> SIMD2<Float> {
+            let length = simd_length(axis)
+            let usableLength = max(0.01, length - NPCClerkTuning.workAreaMargin)
+            return axis * (usableLength / length)
+        }
+        return NPCWorkArea(center: worldCenter,
+                           axisU: inset(projected[0]),
+                           axisV: inset(projected[1]))
     }
 
     private func clamp(_ value: Float, _ minimum: Float, _ maximum: Float) -> Float {
@@ -404,16 +473,12 @@ final class NPCClerkController {
     }
 
     private func randomWorkTarget(awayFrom current: SIMD2<Float>) -> SIMD2<Float>? {
-        guard workAreaMin.x <= workAreaMax.x,
-              workAreaMin.y <= workAreaMax.y else { return nil }
-
         var fallback = current
-        // 좁거나 긴 AreaK에서도 무한 반복하지 않도록 유한 횟수 뒤 마지막 후보를 사용한다.
+        // AreaK의 authored 회전/스케일이 적용된 평면 안에서만 후보를 만든다.
         for _ in 0..<8 {
-            let candidate = SIMD2<Float>(
-                Float.random(in: workAreaMin.x...workAreaMax.x),
-                Float.random(in: workAreaMin.y...workAreaMax.y)
-            )
+            let candidate = workArea.point(
+                u: Float.random(in: -1...1),
+                v: Float.random(in: -1...1))
             fallback = candidate
             if simd_distance(candidate, current) >= NPCClerkTuning.minimumRoamDistance {
                 return candidate
@@ -566,18 +631,31 @@ final class NPCClerkController {
 
     // MARK: - Animation
 
-    private func playAnimation(_ cue: NPCAnimationCue,
-                               restart: Bool = false,
-                               allowsGreetingReplay: Bool = false) {
-        guard restart || lastPlayedAnimation != cue.rawValue else { return }
-        guard cue != .greet || !hasPlayedGreetingAnimation || allowsGreetingReplay else { return }
-        guard let barista = baristaEntity,
-              let match = findAnimation(named: cue.rawValue, in: barista) else { return }
+    private func playAnimation(_ cue: NPCAnimationCue, restart: Bool = false) {
+        guard restart || currentAnimationCue != cue else { return }
+        guard cue != .greet || !hasPlayedGreetingAnimation else { return }
+        guard let barista = baristaEntity else { return }
+
+        // Idle은 AnimationLibrary에 이름으로 등록되어 있지 않다. Default.usdz 자체에
+        // baked된 기본 서브트리 애니메이션(멈춰 있을 때의 숨쉬기 등 idle 루프)을 그대로 쓴다.
+        let match = cue == .idle
+            ? findDefaultSubtreeAnimation(in: barista)
+            : findAnimation(named: cue.rawValue, in: barista)
+
+        guard let match else {
+            if cue == .idle {
+                // 내장 idle 애니메이션을 찾지 못하면 최소한 걷기가 멈춘 상태로는 되돌린다.
+                animationPlayback?.stop(blendOutDuration: 0.15)
+                animationPlayback = nil
+                currentAnimationCue = cue
+            }
+            return
+        }
         animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.20)
-        if cue == .greet, !allowsGreetingReplay { hasPlayedGreetingAnimation = true }
-        lastPlayedAnimation = cue.rawValue
+        if cue == .greet { hasPlayedGreetingAnimation = true }
+        currentAnimationCue = cue
     }
 
     private func findAnimation(named name: String,
@@ -592,7 +670,35 @@ final class NPCClerkController {
         return nil
     }
 
+    /// Indoor.usda의 Barista AnimationLibrary에 이름으로 등록된 클립. 이 이름과 겹치지
+    /// 않는 첫 애니메이션이 Default.usdz 임포트 시 RealityKit이 모델 자체의 스켈레톤
+    /// 액션으로부터 자동 생성하는 "default subtree animation"(idle 루프)이다.
+    private static let libraryAnimationNames: Set<String> = ["Greet", "Walk", "Angry"]
+
+    /// availableAnimations는 이미 서브트리 전체를 포함하므로, 라이브러리에 등록된
+    /// 이름과 겹치지 않는 첫 항목을 idle 애니메이션으로 사용한다.
+    private func findDefaultSubtreeAnimation(in entity: Entity) -> (entity: Entity, resource: AnimationResource)? {
+        guard let resource = entity.availableAnimations.first(where: { animation in
+            guard let name = animation.name else { return true }
+            return !Self.libraryAnimationNames.contains(name)
+        }) else { return nil }
+        return (entity, resource)
+    }
+
     // MARK: - Spatial interaction bubble
+
+    /// NPC가 업무 중 어느 방향으로 걷더라도 공간 UI의 앞면은 항상 사용자를 향한다.
+    private func faceInteractionBubble(toward player: SIMD2<Float>) {
+        guard let root = locomotionRoot,
+              let bubble = interactionBubble,
+              bubble.parent === root else { return }
+        let delta = player - currentClerkPosition
+        guard simd_length(delta) > 0.001 else { return }
+
+        let worldYaw = atan2(delta.x, delta.y)
+        let worldFacing = simd_quatf(angle: worldYaw, axis: [0, 1, 0])
+        bubble.orientation = root.orientation.inverse * worldFacing
+    }
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible

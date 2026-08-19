@@ -183,22 +183,6 @@ struct ControlPanelView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 #endif
 
-            if model.isImmersive {
-                VStack(spacing: 8) {
-                    Text("NPC: \(model.npcClerk.phase.rawValue)"
-                         + (model.npcClerk.lastPlayedAnimation.isEmpty
-                            ? "" : " · \(model.npcClerk.lastPlayedAnimation)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        ForEach(NPCAnimationCue.allCases, id: \.rawValue) { cue in
-                            Button(cue.rawValue) { model.npcClerk.playForTesting(cue) }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .font(.caption)
-                }
-            }
 #endif
 
             Divider()

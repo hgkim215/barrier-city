@@ -159,36 +159,7 @@ public enum RealtimeClientEvent {
         transcriptionModel: String = "gpt-4o-transcribe",
         transcriptionLanguage: String = "ko"
     ) throws -> Data {
-        let toolObjects: [[String: Any]] = tools.map { tool in
-            let properties = Dictionary(uniqueKeysWithValues: tool.parameters.map { parameter in
-                var schema: [String: Any] = [
-                    "type": parameter.type.rawValue,
-                    "description": parameter.description,
-                ]
-                if let allowedValues = parameter.allowedStringValues {
-                    schema["enum"] = allowedValues
-                }
-                if let minimum = parameter.minimumIntegerValue {
-                    schema["minimum"] = minimum
-                }
-                if let maximum = parameter.maximumIntegerValue {
-                    schema["maximum"] = maximum
-                }
-                return (parameter.name, schema)
-            })
-            let required = tool.parameters.filter(\.isRequired).map(\.name)
-            return [
-                "type": "function",
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": [
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                    "additionalProperties": false,
-                ] as [String: Any],
-            ]
-        }
+        let toolObjects = encodeTools(tools)
         return try encode([
             "type": "session.update",
             "session": [
@@ -220,14 +191,49 @@ public enum RealtimeClientEvent {
 
     public static func createResponse(
         instructions: String? = nil,
-        toolChoice: RealtimeToolChoice = .auto
+        toolChoice: RealtimeToolChoice = .auto,
+        tools: [RealtimeFunctionTool]? = nil
     ) throws -> Data {
         var response: [String: Any] = [
             "output_modalities": ["audio"],
             "tool_choice": toolChoice.rawValue,
         ]
         if let instructions { response["instructions"] = instructions }
+        if let tools { response["tools"] = encodeTools(tools) }
         return try encode(["type": "response.create", "response": response])
+    }
+
+    private static func encodeTools(_ tools: [RealtimeFunctionTool]) -> [[String: Any]] {
+        tools.map { tool in
+            let properties = Dictionary(uniqueKeysWithValues: tool.parameters.map { parameter in
+                var schema: [String: Any] = [
+                    "type": parameter.type.rawValue,
+                    "description": parameter.description,
+                ]
+                if let allowedValues = parameter.allowedStringValues {
+                    schema["enum"] = allowedValues
+                }
+                if let minimum = parameter.minimumIntegerValue {
+                    schema["minimum"] = minimum
+                }
+                if let maximum = parameter.maximumIntegerValue {
+                    schema["maximum"] = maximum
+                }
+                return (parameter.name, schema)
+            })
+            let required = tool.parameters.filter(\.isRequired).map(\.name)
+            return [
+                "type": "function",
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": [
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                    "additionalProperties": false,
+                ] as [String: Any],
+            ]
+        }
     }
 
     public static func functionOutput(callID: String, output: String) throws -> Data {

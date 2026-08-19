@@ -24,7 +24,6 @@ let package = Package(
         .target(
             name: "DialogueKitOpenAI",
             dependencies: [
-                "DialogueKit",
                 .product(name: "LiveKitWebRTC", package: "webrtc-xcframework"),
             ]
         ),
