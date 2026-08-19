@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -42,11 +42,11 @@ def Xform "Root"
         def Shader "Image"
         {
             uniform token info:id = "ND_image_color3"
-            asset inputs:file = @textures/New Folder/FT.png@
+            asset inputs:file = @textures/FT.png@
             float2 inputs:texcoord
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-642.9464, 19.031008)
-            int ui:nodegraph:node:stackingOrder = 35
+            int ui:nodegraph:node:stackingOrder = 36
         }
     }
 
@@ -4488,14 +4488,14 @@ def Xform "Root"
         def Shader "TiledImage"
         {
             uniform token info:id = "ND_tiledimage_color3"
-            asset inputs:file = @textures/New Folder/FT.png@
+            asset inputs:file = @textures/FT.png@
             string inputs:filtertype
             float2 inputs:realworldimagesize = (0.2, 0.25)
             float2 inputs:realworldtilesize
             float2 inputs:uvtiling = (1, 1)
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-213.65083, 148.03477)
-            int ui:nodegraph:node:stackingOrder = 33
+            int ui:nodegraph:node:stackingOrder = 34
         }
     }
 
@@ -4706,12 +4706,12 @@ def Xform "Root"
         def Shader "Image"
         {
             uniform token info:id = "ND_image_color3"
-            asset inputs:file = @textures/New Folder/wood.png@
+            asset inputs:file = @textures/wood.png@
             string inputs:filtertype
             string inputs:vaddressmode
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-133.89062, 69.04297)
-            int ui:nodegraph:node:stackingOrder = 7
+            int ui:nodegraph:node:stackingOrder = 8
         }
     }
 
@@ -4738,11 +4738,11 @@ def Xform "Root"
         def Shader "Image"
         {
             uniform token info:id = "ND_image_color3"
-            asset inputs:file = @textures/New Folder/Drawing1.png@
+            asset inputs:file = @textures/Drawing1.png@
             string inputs:filtertype
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
-            int ui:nodegraph:node:stackingOrder = 11
+            int ui:nodegraph:node:stackingOrder = 12
         }
     }
 
@@ -4769,11 +4769,11 @@ def Xform "Root"
         def Shader "Image"
         {
             uniform token info:id = "ND_image_color3"
-            asset inputs:file = @textures/New Folder/Drawing2.png@
+            asset inputs:file = @textures/Drawing2.png@
             string inputs:filtertype
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
-            int ui:nodegraph:node:stackingOrder = 11
+            int ui:nodegraph:node:stackingOrder = 12
         }
     }
 
@@ -4800,11 +4800,11 @@ def Xform "Root"
         def Shader "Image"
         {
             uniform token info:id = "ND_image_color3"
-            asset inputs:file = @textures/New Folder/Drawing3.png@
+            asset inputs:file = @textures/Drawing3.png@
             string inputs:filtertype
             color3f outputs:out
             float2 ui:nodegraph:node:pos = (-267.698, -14.929709)
-            int ui:nodegraph:node:stackingOrder = 11
+            int ui:nodegraph:node:stackingOrder = 12
         }
     }
 
@@ -4869,17 +4869,17 @@ def Xform "Root"
         }
     }
 
-    def "Barista" (
+    def "Default" (
         active = true
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        references = @Barista/Default.usdz@
+        prepend references = @NPC/Barista/Default.usdz@
     )
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
         float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (-1.5221168, 0, 0.3811481)
+        float3 xformOp:translate = (-0.19872952, 0, 0.47981215)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def RealityKitComponent "AnimationLibrary"
@@ -4888,20 +4888,20 @@ def Xform "Root"
 
             def RealityKitAnimationFile "Greet"
             {
-                uniform asset file = @Barista/Greet.usdz@
+                uniform asset file = @NPC/Barista/Greet.usdz@
                 uniform string name = "Greet"
+            }
+
+            def RealityKitAnimationFile "Angry"
+            {
+                uniform asset file = @NPC/Barista/Angry.usdz@
+                uniform string name = "Angry"
             }
 
             def RealityKitAnimationFile "Walk"
             {
-                uniform asset file = @Barista/Walk.usdz@
+                uniform asset file = @NPC/Barista/Walk.usdz@
                 uniform string name = "Walk"
-            }
-
-            def RealityKitAnimationFile "angry"
-            {
-                uniform asset file = @Barista/angry.usdz@
-                uniform string name = "angry"
             }
         }
     }
