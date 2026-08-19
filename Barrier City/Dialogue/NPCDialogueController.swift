@@ -317,7 +317,7 @@ final class NPCDialogueController {
                             for: self.climate,
                             routingDecision: routingDecision
                         ),
-                        toolChoice: routingDecision.exposesMissionOrderTool ? .auto : .none,
+                        toolChoice: routingDecision.exposesMissionOrderTool ? .required : .none,
                         tools: routingDecision.exposesMissionOrderTool
                             ? [Self.placeMissionOrderTool]
                             : []
