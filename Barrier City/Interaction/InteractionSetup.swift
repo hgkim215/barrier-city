@@ -73,22 +73,38 @@ enum InteractionSetup {
 
         // 2) 문 트리거 등록: 최신 Outdoor의 Door 프림 좌표를 찾고, 실패 시 authored 폴백 사용.
         var center = InteractionTuning.doorFallbackCenter
+        var cafeCenter = SIMD2<Float>.zero
         if let worldRoot = appModel.worldRoot,
            let door = im.visibleMap?.findEntity(named: "Door") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
         }
 
-        // 스폰은 맵 원점 고정. 문 앞 자동 배치(OutdoorSessionStart.positionOutsideCafe)는
-        // 맵 좌표가 자주 바뀌는 동안 예측이 어려워 잠시 쓰지 않는다. 바라보는 방향은
-        // 아래 reset이 문 쪽으로 맞춘다.
-        let startPosition = InteractionTuning.outdoorSpawnPosition
+        if let worldRoot = appModel.worldRoot,
+                   let cafe = im.visibleMap?.findEntity(named: "Outdoor") {
+                    let bounds = cafe.visualBounds(relativeTo: worldRoot)
+                    cafeCenter = SIMD2(bounds.center.x, bounds.center.z)
+                }
+                let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
+                let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
+                    minimum: SIMD2(repeating: -fallbackHalfExtent),
+                    maximum: SIMD2(repeating: fallbackHalfExtent),
+                    height: 0)
+                let startPosition = OutdoorSessionStart.positionOutsideCafe(
+                    doorCenter: center,
+                    cafeCenter: cafeCenter,
+                    fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
+                    groundMinimum: groundLayout.minimum,
+                    groundMaximum: groundLayout.maximum,
+                    preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
+                    safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
 
         OutdoorSessionStart.reset(
             appModel,
             startPosition: startPosition,
             doorCenter: center,
             fallbackDoorCenter: InteractionTuning.doorFallbackCenter)
+        
         // 첫 raycast 전에도 휠체어와 보이는 지면이 정확히 맞도록 authored 높이로 시작한다.
         appModel.motion.chairHeight = groundLayout.height
         appModel.motion.groundHeight = groundLayout.height
