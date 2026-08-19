@@ -56,8 +56,9 @@ enum NPCClerkTuning {
     /// Blender에서 제작된 Barista의 시각적 정면(+Z)을 RealityKit 이동 정면(-Z)에 맞춘다.
     static let baristaForwardYawOffset: Float = .pi
 
-    /// 1.5m Barista와 확장된 대화 카드가 겹치지 않도록 머리 위 여백을 확보한다.
-    static let dialogueHeight: Float = 1.92
+    /// 패널은 자신의 중심을 기준으로 배치되므로, 실측 머리 높이에 이 여백만 더해
+    /// 카드 하단이 머리 바로 위에 오게 한다(모델이 바뀌어도 자동으로 맞는다).
+    static let dialogueHeadroom: Float = 0.22
 
     static let fallbackStaffHome = SIMD2<Float>(0, 5.2)
     static let fallbackServicePoint = SIMD2<Float>(0, 3.1)
@@ -249,7 +250,10 @@ final class NPCClerkController {
             // 상쇄해 NPC의 보행 방향과 관계없이 패널 앞면이 사용자를 향하게 한다.
             bubble.removeFromParent()
             locomotion.addChild(bubble)
-            bubble.position = [0, NPCClerkTuning.dialogueHeight, 0]
+            // 발 기준 정렬 후의 실측 모델 높이(머리 끝)를 그대로 써서 애셋이 바뀌어도
+            // 항상 실제 머리 바로 위에 오게 한다. 하드코딩된 절대 높이는 쓰지 않는다.
+            let headHeight = modelBounds.max.y - modelBounds.min.y
+            bubble.position = [0, headHeight + NPCClerkTuning.dialogueHeadroom, 0]
             bubble.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
         worldRoot.addChild(locomotion)
