@@ -139,11 +139,11 @@ public struct RealtimeConversationGuide: Sendable {
 
         # State transitions
         Tools are silent game-state transitions; never say their names.
-        The app independently tracks order item and quantity from the transcript. Call place_order only when
+        The app independently validates order item and quantity from the transcript. Call place_order only when
         you judge that counter service has been accepted and the visitor has explicitly requested exactly one
-        Rainbow Smoothie. Its result is authoritative: never claim placement before success. During shadow
-        evaluation the app may already mark ORDER_PLACED=true; still call place_order once so the app can
-        compare your semantic judgment with its local state. Never invent a missing item or quantity.
+        Rainbow Smoothie. Its result is authoritative: never claim placement before success. If the app rejects
+        the call, ask only for the missing information and do not retry without new user input. Never invent a
+        missing item or quantity.
         Call request_help only when the visitor explicitly asks for another employee or outside help.
         Call end_conversation only when the visitor clearly says they are leaving or ending the exchange;
         never call it for silence, hesitation, disagreement, or a temporary interruption.

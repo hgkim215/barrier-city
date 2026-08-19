@@ -220,6 +220,15 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertFalse(complete.contains("주문 완료됐습니다"))
     }
 
+    func test_realtimeReadyOrder_requiresValidatedToolBeforeConfirmation() {
+        let guide = RainbowSmoothieOrderDecision.completeOrder.realtimeToolPromptGuide
+
+        XCTAssertTrue(guide.contains("LOCAL_ORDER_READY=true"))
+        XCTAssertTrue(guide.contains("ORDER_PLACED=false"))
+        XCTAssertTrue(guide.contains("Call place_order"))
+        XCTAssertTrue(guide.contains("before the tool result succeeds"))
+    }
+
     func test_realtimeGuide_definesDistinctPersonalityAcceptanceTiming() {
         let expectedRules: [(ClerkPersonality, String)] = [
             (.hurried, "accept the verbal order immediately because arguing would waste time"),

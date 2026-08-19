@@ -107,7 +107,8 @@ final class RealtimeNPCConversationSession {
     /// 앱이 명시적으로 응답을 생성한다.
     func requestResponse(
         instructions: String? = nil,
-        toolChoice: RealtimeToolChoice = .auto
+        toolChoice: RealtimeToolChoice = .auto,
+        tools: [RealtimeFunctionTool]? = nil
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
         await suspendMicrophoneForResponse()
@@ -115,7 +116,8 @@ final class RealtimeNPCConversationSession {
         try await client.send(
             RealtimeClientEvent.createResponse(
                 instructions: instructions,
-                toolChoice: toolChoice
+                toolChoice: toolChoice,
+                tools: tools
             )
         )
     }

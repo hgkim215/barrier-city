@@ -212,6 +212,40 @@ final class OpenAILLMClientTests: XCTestCase {
         XCTAssertEqual(response["output_modalities"] as? [String], ["audio"])
     }
 
+    func test_realtimeResponse_canRequireOnlyTheValidatedOrderTool() throws {
+        let orderTool = RealtimeFunctionTool(
+            name: "place_order",
+            description: "Place a validated order.",
+            parameters: [
+                .init(
+                    name: "item",
+                    type: .string,
+                    description: "Canonical item.",
+                    allowedStringValues: ["rainbow_smoothie"]
+                ),
+                .init(
+                    name: "quantity",
+                    type: .integer,
+                    description: "Cup count.",
+                    minimumIntegerValue: 1,
+                    maximumIntegerValue: 1
+                ),
+            ]
+        )
+        let data = try RealtimeClientEvent.createResponse(
+            instructions: "Call the validated order tool.",
+            toolChoice: .required,
+            tools: [orderTool]
+        )
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let response = try XCTUnwrap(object["response"] as? [String: Any])
+        let tools = try XCTUnwrap(response["tools"] as? [[String: Any]])
+
+        XCTAssertEqual(response["tool_choice"] as? String, "required")
+        XCTAssertEqual(tools.count, 1)
+        XCTAssertEqual(tools.first?["name"] as? String, "place_order")
+    }
+
     func test_realtimeWebRTC_postsSDPWithEphemeralBearerToken() throws {
         let endpoint = try XCTUnwrap(URL(string: "https://api.openai.test/v1/realtime/calls"))
 

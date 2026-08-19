@@ -85,10 +85,6 @@ public struct RealtimeMissionCoordinator: Sendable {
         localOrderReadyForCurrentTurn = decision == .completeOrder
         orderToolWasProposed = false
         orderToolArgumentsWereValid = nil
-        if decision == .completeOrder {
-            pendingEvent = .orderPlaced
-            orderWasPlaced = true
-        }
         return decision
     }
 
@@ -109,19 +105,32 @@ public struct RealtimeMissionCoordinator: Sendable {
             let argumentsAreValid = validatePlaceOrderArguments(arguments)
             orderToolArgumentsWereValid = argumentsAreValid
             let locallyReady = orderProgress.canComplete
+            let accepted = argumentsAreValid && locallyReady
             immediateEvent = nil
-            if locallyReady {
-                output = #"{"success":true,"mode":"shadow","message":"proposal matched app order state"}"#
+            if accepted {
+                if !orderWasPlaced {
+                    orderWasPlaced = true
+                    pendingEvent = .orderPlaced
+                }
+                output = #"{"success":true,"message":"one-cup Rainbow Smoothie order placed"}"#
                 followUpInstructions = """
-                  The app has already recorded the one-cup Rainbow Smoothie order. Briefly confirm it in
-                  natural Korean, say the visitor will be notified when it is ready, then stop.
+                  The app validated and placed the one-cup Rainbow Smoothie order. Briefly confirm it in
+                  natural Korean, say the visitor will be notified when it is ready, then stop. Do not claim
+                  that the drink itself is already ready.
                   """
             } else {
-                output = #"{"success":false,"mode":"shadow","message":"order fields or service state are incomplete"}"#
-                followUpInstructions = """
-                  The app rejected the order proposal because authoritative fields are incomplete. Do not
-                  claim an order was placed. Ask only for the next missing detail in natural Korean.
-                  """
+                output = #"{"success":false,"message":"order arguments or service state are invalid"}"#
+                if !argumentsAreValid {
+                    followUpInstructions = """
+                      The app rejected malformed order arguments. Do not claim an order was placed or expose
+                      technical details. Briefly ask the visitor to repeat the item and quantity in Korean.
+                      """
+                } else {
+                    followUpInstructions = """
+                      The app rejected the order because authoritative service or order fields are incomplete.
+                      Do not claim placement. Ask only for the next missing detail in natural Korean.
+                      """
+                }
             }
         case "request_help":
             immediateEvent = .helpRequested

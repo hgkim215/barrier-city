@@ -80,8 +80,6 @@ final class NPCDialogueController {
     private var realtimeCanAcceptInput = false
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
-    /// 로컬 주문 판정 직후 퀘스트 이벤트는 발행했지만 최종 음성 응답은 아직 끝나지 않은 상태.
-    private var realtimeTerminalEvent: MissionEvent?
     /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
     private var encounterCount = 0
 
@@ -124,7 +122,6 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.reset()
-        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         animationSequence = 0
         hasRequestedGreetingAnimation = false
@@ -144,7 +141,7 @@ final class NPCDialogueController {
     func cancelEncounter() {
 #if DEBUG
         Self.lifecycleLogger.debug(
-            "[CONVERSATION_LIFECYCLE] cancel active=\(self.isEncounterActive, privacy: .public) realtime=\(self.realtimeSession != nil, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public) status=\(self.status.rawValue, privacy: .public)"
+            "[CONVERSATION_LIFECYCLE] cancel active=\(self.isEncounterActive, privacy: .public) realtime=\(self.realtimeSession != nil, privacy: .public) status=\(self.status.rawValue, privacy: .public)"
         )
 #endif
         isEncounterActive = false
@@ -159,7 +156,6 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.clearEncounterTransientState()
-        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         cleanupGeneration &+= 1
         let generation = cleanupGeneration
@@ -197,7 +193,6 @@ final class NPCDialogueController {
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.clearEncounterTransientState()
-        realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = nil
@@ -290,10 +285,6 @@ final class NPCDialogueController {
                 "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: orderDecision), privacy: .public) terminal=\(orderDecision.endsConversationAfterResponse, privacy: .public)"
             )
 #endif
-            if orderDecision.endsConversationAfterResponse {
-                // 주문 슬롯은 확정됐지만 퀘스트 이벤트는 최종 확인 음성과 세션 종료 뒤에 보낸다.
-                realtimeTerminalEvent = .orderPlaced
-            }
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
@@ -313,7 +304,8 @@ final class NPCDialogueController {
                             for: self.climate,
                             orderDecision: orderDecision
                         ),
-                        toolChoice: .auto
+                        toolChoice: orderDecision == .completeOrder ? .required : .auto,
+                        tools: orderDecision == .completeOrder ? [Self.placeOrderTool] : nil
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -343,7 +335,7 @@ final class NPCDialogueController {
             realtimeOutputIsPlaying = false
 #if DEBUG
             Self.lifecycleLogger.debug(
-                "[CONVERSATION_LIFECYCLE] output_audio_stopped responseDonePending=\(self.realtimeResponseDonePending, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public)"
+                "[CONVERSATION_LIFECYCLE] output_audio_stopped responseDonePending=\(self.realtimeResponseDonePending, privacy: .public)"
             )
 #endif
             if realtimeResponseDonePending {
@@ -368,7 +360,7 @@ final class NPCDialogueController {
             cancelRealtimeGenerationTimeout()
 #if DEBUG
             Self.lifecycleLogger.debug(
-                "[CONVERSATION_LIFECYCLE] response_done audioPlaying=\(self.realtimeOutputIsPlaying, privacy: .public) terminal=\(String(describing: self.realtimeTerminalEvent), privacy: .public)"
+                "[CONVERSATION_LIFECYCLE] response_done audioPlaying=\(self.realtimeOutputIsPlaying, privacy: .public)"
             )
 #endif
             if realtimeOutputIsPlaying {
@@ -378,13 +370,12 @@ final class NPCDialogueController {
             finishRealtimeResponse()
 
         case .failure(let message):
-            let completedOrder = realtimeTerminalEvent == .orderPlaced
-                || realtimeMission.takeCompletedEvent() == .orderPlaced
+            let completedOrder = realtimeMission.takeCompletedEvent() == .orderPlaced
             cancelEncounter()
             status = .idle
             if completedOrder {
-                // 주문 슬롯은 이미 앱에서 확정됐다. 최종 생성 연결이 끊겨도 퀘스트와
-                // 대화 종료 상태가 서로 어긋나지 않도록 완료를 우선한다.
+                // 검증된 tool이 주문을 확정했다. 최종 확인 음성 연결이 끊겨도 퀘스트와
+                // 앱의 주문 상태가 서로 어긋나지 않도록 완료를 우선한다.
                 npcSubtitle = "레인보우 스무디 한 잔 주문됐어요. 준비되면 알려드릴게요."
                 publishMissionEvent(.orderPlaced)
             } else {
@@ -410,13 +401,21 @@ final class NPCDialogueController {
         # App-owned order state for this response
         \(realtimeMission.snapshot.promptGuide)
 
-        \(orderDecision.promptGuide)
+        \(orderDecision.realtimeToolPromptGuide)
         """
     }
 
     private func realtimeFollowUpInstructions(_ immediateInstructions: String) -> String {
         """
-        \(realtimeInstructions(for: SocialClimate(rapport: rapport)))
+        \(RealtimeConversationGuide().instructions(
+            persona: Self.makePersona(
+                accessibilityAttitude: accessibilityAttitude,
+                clerkPersonality: clerkPersonality
+            ),
+            climate: SocialClimate(rapport: rapport)
+        ))
+
+        \(realtimeMission.snapshot.promptGuide)
 
         # Immediate tool result response
         \(immediateInstructions)
@@ -433,7 +432,7 @@ final class NPCDialogueController {
         if let evaluation = realtimeMission.finishOrderToolEvaluation() {
 #if DEBUG
             Self.orderToolLogger.notice(
-                "[ORDER_TOOL_SHADOW] outcome=\(evaluation.outcome.rawValue, privacy: .public) localReady=\(evaluation.localOrderReady, privacy: .public) proposed=\(evaluation.modelProposedOrder, privacy: .public) argumentsValid=\(String(describing: evaluation.argumentsValid), privacy: .public)"
+                "[ORDER_TOOL_EVALUATION] outcome=\(evaluation.outcome.rawValue, privacy: .public) localReady=\(evaluation.localOrderReady, privacy: .public) proposed=\(evaluation.modelProposedOrder, privacy: .public) argumentsValid=\(String(describing: evaluation.argumentsValid), privacy: .public)"
             )
 #endif
         }
@@ -458,19 +457,6 @@ final class NPCDialogueController {
                     self?.handleRealtimeEvent(.failure(error.localizedDescription))
                 }
             }
-            return
-        }
-        if let terminalEvent = realtimeTerminalEvent {
-#if DEBUG
-            Self.lifecycleLogger.notice(
-                "[CONVERSATION_LIFECYCLE] terminal_response_finished closing encounter"
-            )
-#endif
-            realtimeTerminalEvent = nil
-            cancelEncounter()
-            status = .idle
-            // 논리적 Realtime 세션을 닫은 상태에서만 NPC/퀘스트 계층으로 전달한다.
-            publishMissionEvent(terminalEvent)
             return
         }
         if let event = realtimeMission.takeCompletedEvent() {
@@ -591,26 +577,28 @@ final class NPCDialogueController {
         return PlayerTurn(text: text, polite: polite, impatient: impatient, hostile: hostile)
     }
 
+    private static let placeOrderTool = RealtimeFunctionTool(
+        name: "place_order",
+        description: "Call once only when counter service is accepted and the visitor explicitly requested exactly one Rainbow Smoothie. The app validates the action before any confirmation.",
+        parameters: [
+            .init(
+                name: "item",
+                type: .string,
+                description: "Canonical requested menu item.",
+                allowedStringValues: ["rainbow_smoothie"]
+            ),
+            .init(
+                name: "quantity",
+                type: .integer,
+                description: "Explicitly requested number of cups.",
+                minimumIntegerValue: 1,
+                maximumIntegerValue: 1
+            ),
+        ]
+    )
+
     private static let realtimeTools: [RealtimeFunctionTool] = [
-        .init(
-            name: "place_order",
-            description: "Call once only when counter service is accepted and the visitor explicitly requested exactly one Rainbow Smoothie. The app validates the action before any confirmation.",
-            parameters: [
-                .init(
-                    name: "item",
-                    type: .string,
-                    description: "Canonical requested menu item.",
-                    allowedStringValues: ["rainbow_smoothie"]
-                ),
-                .init(
-                    name: "quantity",
-                    type: .integer,
-                    description: "Explicitly requested number of cups.",
-                    minimumIntegerValue: 1,
-                    maximumIntegerValue: 1
-                ),
-            ]
-        ),
+        placeOrderTool,
         .init(name: "request_help",
               description: "Call only when the visitor explicitly asks for another employee or assistance."),
         .init(name: "end_conversation",

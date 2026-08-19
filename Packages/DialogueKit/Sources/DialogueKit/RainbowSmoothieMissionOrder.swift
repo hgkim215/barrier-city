@@ -169,6 +169,25 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             """
         }
     }
+
+    /// Realtime 경로에서는 로컬 슬롯 완성을 곧바로 주문 완료로 발표하지 않고,
+    /// 검증된 `place_order` tool 결과가 성공한 뒤에만 완료를 말한다.
+    public var realtimeToolPromptGuide: String {
+        guard self == .completeOrder else { return promptGuide }
+        return """
+        ## Authoritative app state
+        - COUNTER_SERVICE_ACCEPTED=true
+        - ITEM=Rainbow Smoothie
+        - QUANTITY=1
+        - LOCAL_ORDER_READY=true
+        - ORDER_PLACED=false
+        ## Required action
+        - Call place_order with item=rainbow_smoothie and quantity=1 now.
+        ## Boundaries
+        - Do not speak an order confirmation before the tool result succeeds.
+        - Do not ask another question, reopen the kiosk issue, or invent another item or quantity.
+        """
+    }
 }
 
 /// Realtime 모델의 주장과 별개로 사용자 transcript와 성격별 설득 단계를 로컬에서 추적한다.
