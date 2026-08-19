@@ -145,7 +145,7 @@ final class NPCClerkController {
         hasPlayedGreetingAnimation = false
         pendingOrderConversationEnd = false
         isRemoteDevelopmentConversation = false
-        dialogue.reset()
+        dialogue.cancelEncounter()
     }
 
     /// Indoor의 authoring marker(BarTable/AreaK)로 동선과 계산대 위치를 구성한다.
@@ -157,7 +157,7 @@ final class NPCClerkController {
         greetingTask?.cancel()
         animationPlayback?.stop()
         locomotionRoot?.removeFromParent()
-        dialogue.reset()
+        dialogue.cancelEncounter()
 
         handledAnimationSequence = 0
         handledMissionSequence = 0

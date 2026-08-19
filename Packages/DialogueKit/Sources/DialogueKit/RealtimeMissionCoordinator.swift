@@ -1,6 +1,28 @@
 /// Realtime tool 호출을 앱 미션 이벤트와 서버 응답으로 변환하고, response.done까지
 /// 기다려야 하는 상태를 소유한다. 네트워크와 UI에 의존하지 않는 순수 상태 로직이다.
 public struct RealtimeMissionCoordinator: Sendable {
+    public struct Snapshot: Equatable, Sendable {
+        public let order: RainbowSmoothieMissionProgress.Snapshot
+        public let orderPlaced: Bool
+
+        public var isPristine: Bool { order.isPristine && !orderPlaced }
+
+        public var promptGuide: String {
+            let quantity = order.requestedQuantity.map(String.init) ?? "missing"
+            return """
+            # Authoritative immersive conversation state
+            - ACCESS_BARRIER_EXPLAINED=\(order.hasExplainedAccessBarrier)
+            - RELEVANT_SERVICE_ATTEMPTS=\(order.relevantOrderAttempts)/\(order.requiredOrderAttempts)
+            - COUNTER_SERVICE_ACCEPTED=\(order.counterOrderAccepted)
+            - ITEM=\(order.hasMissionItem ? "Rainbow Smoothie" : "missing")
+            - QUANTITY=\(quantity)
+            - ORDER_PLACED=\(orderPlaced)
+            Treat these values as more authoritative than assumptions from the current Realtime session.
+            Never restart a resolved accessibility dispute or ask again for a known order field.
+            """
+        }
+    }
+
     public struct FunctionCall: Sendable {
         public let callID: String
         public let output: String
@@ -10,6 +32,7 @@ public struct RealtimeMissionCoordinator: Sendable {
     private var pendingEvent: MissionEvent?
     private var pendingFunctionCall: FunctionCall?
     private var orderProgress: RainbowSmoothieMissionProgress
+    private var orderWasPlaced = false
 
     public init(personality: ClerkPersonality = .hurried) {
         orderProgress = RainbowSmoothieMissionProgress(personality: personality)
@@ -19,6 +42,18 @@ public struct RealtimeMissionCoordinator: Sendable {
         pendingEvent = nil
         pendingFunctionCall = nil
         orderProgress.reset()
+        orderWasPlaced = false
+    }
+
+    /// WebRTC encounter에만 속한 미완료 호출과 종료 이벤트를 제거한다.
+    /// 주문 진행과 아직 전달되지 않은 주문 완료 이벤트는 immersive session 동안 보존한다.
+    public mutating func clearEncounterTransientState() {
+        pendingFunctionCall = nil
+        if pendingEvent == .exited { pendingEvent = nil }
+    }
+
+    public var snapshot: Snapshot {
+        Snapshot(order: orderProgress.snapshot, orderPlaced: orderWasPlaced)
     }
 
     @discardableResult
@@ -28,6 +63,7 @@ public struct RealtimeMissionCoordinator: Sendable {
         let decision = orderProgress.observe(userTranscript: userTranscript)
         if decision == .completeOrder {
             pendingEvent = .orderPlaced
+            orderWasPlaced = true
         }
         return decision
     }

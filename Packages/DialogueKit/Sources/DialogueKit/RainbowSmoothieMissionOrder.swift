@@ -173,6 +173,25 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
 
 /// Realtime 모델의 주장과 별개로 사용자 transcript와 성격별 설득 단계를 로컬에서 추적한다.
 public struct RainbowSmoothieMissionProgress: Sendable {
+    public struct Snapshot: Equatable, Sendable {
+        public let hasExplainedAccessBarrier: Bool
+        public let relevantOrderAttempts: Int
+        public let requiredOrderAttempts: Int
+        public let counterOrderAccepted: Bool
+        public let hasMissionItem: Bool
+        public let requestedQuantity: Int?
+        public let isLocallyComplete: Bool
+
+        public var isPristine: Bool {
+            !hasExplainedAccessBarrier
+                && relevantOrderAttempts == 0
+                && !counterOrderAccepted
+                && !hasMissionItem
+                && requestedQuantity == nil
+                && !isLocallyComplete
+        }
+    }
+
     private struct DebugState: Equatable {
         let hasExplainedAccessBarrier: Bool
         let relevantOrderAttempts: Int
@@ -199,6 +218,18 @@ public struct RainbowSmoothieMissionProgress: Sendable {
     }
 
     public var acceptsCounterOrder: Bool { counterOrderAccepted }
+
+    public var snapshot: Snapshot {
+        Snapshot(
+            hasExplainedAccessBarrier: hasExplainedAccessBarrier,
+            relevantOrderAttempts: relevantOrderAttempts,
+            requiredOrderAttempts: requiredOrderAttempts,
+            counterOrderAccepted: counterOrderAccepted,
+            hasMissionItem: hasMissionItem,
+            requestedQuantity: requestedQuantity,
+            isLocallyComplete: isCompleted
+        )
+    }
 
     public var canComplete: Bool {
         counterOrderAccepted

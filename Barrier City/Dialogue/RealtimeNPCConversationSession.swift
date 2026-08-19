@@ -41,6 +41,7 @@ final class RealtimeNPCConversationSession {
 
     func start(
         instructions: String,
+        openingInstructions: String,
         tools: [RealtimeFunctionTool],
         onEvent: @escaping @MainActor (Event) -> Void
     ) async throws {
@@ -74,7 +75,7 @@ final class RealtimeNPCConversationSession {
                 \(instructions)
 
                 # App-owned conversation stage for this response
-                \(RealtimeConversationGuide.openingInstructions)
+                \(openingInstructions)
                 """,
                 toolChoice: .none
             )

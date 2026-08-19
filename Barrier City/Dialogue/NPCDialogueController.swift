@@ -78,6 +78,8 @@ final class NPCDialogueController {
     private var realtimeSuppressesCurrentInputTurn = false
     /// 로컬 주문 판정 직후 퀘스트 이벤트는 발행했지만 최종 음성 응답은 아직 끝나지 않은 상태.
     private var realtimeTerminalEvent: MissionEvent?
+    /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
+    private var encounterCount = 0
 
     init(
         accessibilityAttitude: AccessibilityAttitude = .ableist,
@@ -125,6 +127,7 @@ final class NPCDialogueController {
         animationRequest = nil
         lastMissionEvent = nil
         missionEventSequence = 0
+        encounterCount = 0
     }
 
     /// Realtime WebRTC 세션을 열고 NPC의 첫 인사부터 자동 음성 대화를 시작한다.
@@ -151,7 +154,7 @@ final class NPCDialogueController {
         realtimeSession = nil
         realtimeLiveText = ""
         realtimeSpeechDetected = false
-        realtimeMission.reset()
+        realtimeMission.clearEncounterTransientState()
         realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         cleanupGeneration &+= 1
@@ -189,7 +192,7 @@ final class NPCDialogueController {
         lastMissionEvent = nil
         realtimeLiveText = ""
         realtimeSpeechDetected = false
-        realtimeMission.reset()
+        realtimeMission.clearEncounterTransientState()
         realtimeTerminalEvent = nil
         resetRealtimeTurnState()
         realtimeResponseTimeoutTask?.cancel()
@@ -198,6 +201,8 @@ final class NPCDialogueController {
         npcSubtitle = "연결 중..."
         status = .thinking
         isEncounterActive = true
+        let isReturningEncounter = encounterCount > 0
+        encounterCount += 1
 
         if hasRequestedGreetingAnimation {
             requestAnimation(.idle)
@@ -212,6 +217,10 @@ final class NPCDialogueController {
             try await session.start(
                 instructions: realtimeInstructions(
                     for: SocialClimate(rapport: rapport)
+                ),
+                openingInstructions: RealtimeConversationGuide.openingInstructions(
+                    snapshot: realtimeMission.snapshot,
+                    isReturningEncounter: isReturningEncounter
                 ),
                 tools: Self.realtimeTools
             ) { [weak self] event in
@@ -395,6 +404,8 @@ final class NPCDialogueController {
         ))
 
         # App-owned order state for this response
+        \(realtimeMission.snapshot.promptGuide)
+
         \(orderDecision.promptGuide)
         """
     }

@@ -5,8 +5,12 @@ import Foundation
 public struct RealtimeConversationGuide: Sendable {
     public init() {}
 
-    public static var openingInstructions: String {
-        """
+    public static func openingInstructions(
+        snapshot: RealtimeMissionCoordinator.Snapshot,
+        isReturningEncounter: Bool
+    ) -> String {
+        guard isReturningEncounter else {
+            return """
         # Conversation stage
         This is the cafe employee's first greeting before the visitor has explained any access barrier.
 
@@ -18,6 +22,36 @@ public struct RealtimeConversationGuide: Sendable {
         Use one short sentence. Do not use a fixed stock script.
         Do not mention the wheelchair or accessibility, offer counter service, ask a question, or call a tool.
         Stop after the greeting and wait for the visitor.
+        """
+        }
+
+        let responseGoal: String
+        if snapshot.orderPlaced {
+            responseGoal = "Briefly welcome the visitor back and say their one-cup Rainbow Smoothie order is already accepted and still being prepared. Do not take another order."
+        } else if snapshot.order.isLocallyComplete {
+            responseGoal = "Briefly welcome the visitor back and confirm that the known one-cup Rainbow Smoothie request is being continued. Do not restart at the kiosk."
+        } else if snapshot.order.hasMissionItem {
+            responseGoal = "Briefly welcome the visitor back and ask only how many cups of the already-known Rainbow Smoothie they want."
+        } else if snapshot.order.counterOrderAccepted {
+            responseGoal = "Briefly welcome the visitor back, keep counter service accepted, and ask only what drink they want."
+        } else if snapshot.order.hasExplainedAccessBarrier {
+            responseGoal = "Briefly acknowledge that this is the same visitor and continue the unresolved counter-service discussion from the saved attempt count. Do not give a first-visit kiosk greeting."
+        } else {
+            responseGoal = "Briefly welcome the visitor back and naturally remind them that ordering normally starts at the kiosk."
+        }
+
+        return """
+        # Conversation stage
+        This is a later encounter with the same visitor in the same immersive visit.
+
+        \(snapshot.promptGuide)
+
+        # Response goal
+        \(responseGoal)
+
+        # Boundaries
+        Use one or two short natural Korean sentences. Do not use a fixed stock script or call a tool.
+        Preserve known relationship and order state. Stop after the greeting and wait for the visitor.
         """
     }
 

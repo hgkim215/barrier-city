@@ -167,11 +167,15 @@ final class PromptBuilderTests: XCTestCase {
             climate: SocialClimate()
         )
 
-        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("# Conversation stage"))
-        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("# Response goal"))
-        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("direct them to use the kiosk"))
-        XCTAssertTrue(RealtimeConversationGuide.openingInstructions.contains("Do not use a fixed stock script"))
-        XCTAssertFalse(RealtimeConversationGuide.openingInstructions.contains("Speak ONLY this exact"))
+        let opening = RealtimeConversationGuide.openingInstructions(
+            snapshot: RealtimeMissionCoordinator().snapshot,
+            isReturningEncounter: false
+        )
+        XCTAssertTrue(opening.contains("# Conversation stage"))
+        XCTAssertTrue(opening.contains("# Response goal"))
+        XCTAssertTrue(opening.contains("direct them to use the kiosk"))
+        XCTAssertTrue(opening.contains("Do not use a fixed stock script"))
+        XCTAssertFalse(opening.contains("Speak ONLY this exact"))
         XCTAssertTrue(guide.contains("# Required conversation flow"))
         XCTAssertTrue(guide.contains("private scene context"))
         XCTAssertTrue(guide.contains("explaining an access barrier"))

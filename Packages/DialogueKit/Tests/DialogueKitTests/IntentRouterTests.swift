@@ -110,6 +110,38 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
+    func test_realtimeMissionCoordinator_encounterCleanup_preservesOrderProgress() {
+        var coordinator = RealtimeMissionCoordinator(personality: .blunt)
+        coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
+        coordinator.observe(userTranscript: "그래도 직접 주문 받아주세요")
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 스무디 주세요"),
+            .askQuantity
+        )
+
+        coordinator.clearEncounterTransientState()
+
+        XCTAssertTrue(coordinator.snapshot.order.counterOrderAccepted)
+        XCTAssertTrue(coordinator.snapshot.order.hasMissionItem)
+        XCTAssertEqual(coordinator.observe(userTranscript: "한 잔이요"), .completeOrder)
+    }
+
+    func test_realtimeReturningOpening_usesSavedOrderState() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(
+            userTranscript: "키오스크가 높아서 손이 안 닿으니 레인보우 스무디 주세요"
+        )
+
+        let opening = RealtimeConversationGuide.openingInstructions(
+            snapshot: coordinator.snapshot,
+            isReturningEncounter: true
+        )
+
+        XCTAssertTrue(opening.contains("same visitor"))
+        XCTAssertTrue(opening.contains("ask only how many cups"))
+        XCTAssertFalse(opening.contains("first greeting before"))
+    }
+
     func test_realtimeMissionCoordinator_fullMacaronOrder_completesImmediately() {
         var coordinator = RealtimeMissionCoordinator(personality: .blunt)
         coordinator.observe(userTranscript: "키오스크가 너무 높아서 손이 안 닿아요")
