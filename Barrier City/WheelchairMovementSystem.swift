@@ -46,11 +46,13 @@ struct WheelchairMovementSystem: System {
     private static let stepBlock: Float = 0.03
 
     // 덜컹/흔들림
+    // 감쇠비(damp / 2√spring)가 1 미만이면 언더댐프라 한 번의 킥에도 여러 번 출렁인다.
+    // bumpDamp/surgeDamp는 각각 ζ≈0.9로 맞춰 한 번의 충격에 한 번만 부드럽게 가라앉게 한다.
     private static let bumpSpring: Float = 110
-    private static let bumpDamp: Float = 7
+    private static let bumpDamp: Float = 19
     private static let bumpKick: Float = -1.6
     private static let surgeSpring: Float = 80
-    private static let surgeDamp: Float = 8
+    private static let surgeDamp: Float = 16
     private static let surgeGain: Float = 0.36
     /// 실제 조작에서 흔한 약 1.3m/s를 최대 충격 음량 기준으로 사용한다.
     /// 물리 안전 상한(maxSpeed=5)을 기준으로 하면 보통 속도의 충돌음이 지나치게 작다.
