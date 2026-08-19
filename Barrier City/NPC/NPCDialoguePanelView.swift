@@ -12,12 +12,13 @@ private enum CafePalette {
 
 /// Barista 머리 위를 따라다니는 단일 공간 UI.
 /// 대화 전에는 말 걸기 버튼, 대화 중에는 NPC 자막과 현재 듣기 상태를 보여준다.
+/// 장식보다 가독성을 우선하는 단순한 말풍선 스타일을 유지한다.
 struct NPCDialoguePanelView: View {
     let controller: NPCDialogueController
     let clerk: NPCClerkController
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 20) {
             RapportHeartGauge(rapport: controller.rapport)
 
             Group {
@@ -30,7 +31,7 @@ struct NPCDialoguePanelView: View {
                 }
             }
         }
-        .frame(width: 640)
+        .frame(width: 760)
         .animation(.easeInOut(duration: 0.2), value: controller.isEncounterActive)
         .animation(.easeInOut(duration: 0.3), value: controller.rapport)
     }
@@ -39,49 +40,29 @@ struct NPCDialoguePanelView: View {
         Button {
             clerk.startConversation()
         } label: {
-            HStack(spacing: 18) {
-                ZStack {
-                    Circle()
-                        .fill(CafePalette.cream.opacity(0.18))
-                    Image(systemName: clerk.isTalkAvailable
-                          ? "cup.and.saucer.fill"
-                          : "figure.walk")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(CafePalette.cream)
-                }
-                .frame(width: 54, height: 54)
+            HStack(spacing: 20) {
+                Image(systemName: clerk.isTalkAvailable
+                      ? "cup.and.saucer.fill"
+                      : "figure.walk")
+                    .font(.title.weight(.semibold))
+                    .foregroundStyle(CafePalette.cream)
+                    .frame(width: 54)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(clerk.isTalkAvailable ? "직원과 대화하기" : "직원에게 가까이 가세요")
-                        .font(.title2.bold())
-                    Text(clerk.isTalkAvailable ? "편하게 말을 걸어 보세요" : "대화 가능한 거리로 이동해 주세요")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(CafePalette.cream.opacity(0.76))
-                }
+                Text(clerk.isTalkAvailable ? "직원과 대화하기" : "직원에게 가까이 가세요")
+                    .font(.title.bold())
+                    .foregroundStyle(CafePalette.foam)
 
                 Spacer(minLength: 12)
 
                 Image(systemName: "chevron.right")
-                    .font(.headline.bold())
+                    .font(.title2.bold())
                     .foregroundStyle(CafePalette.cream.opacity(0.82))
             }
-            .foregroundStyle(CafePalette.foam)
-            .padding(.horizontal, 26)
-            .padding(.vertical, 20)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 24)
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    colors: [CafePalette.roast, CafePalette.espresso],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(CafePalette.cream.opacity(0.34), lineWidth: 1.5)
-            }
-            .shadow(color: CafePalette.espresso.opacity(0.3), radius: 18, y: 10)
+            .background(CafePalette.espresso,
+                        in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!clerk.isTalkAvailable)
@@ -92,23 +73,26 @@ struct NPCDialoguePanelView: View {
     }
 
     private var subtitleCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            dialogueHeader
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("직원")
+                    .font(.title2.bold())
+                    .foregroundStyle(CafePalette.espresso)
 
-            Divider()
-                .overlay(CafePalette.roast.opacity(0.18))
+                Spacer()
+
+                if controller.status == .listening {
+                    ListeningIndicator()
+                }
+            }
 
             Text(displayedSubtitle)
-                .font(.system(size: 29, weight: .semibold, design: .rounded))
+                .font(.system(size: 36, weight: .semibold, design: .rounded))
                 .foregroundStyle(CafePalette.espresso)
                 .multilineTextAlignment(.leading)
-                .lineSpacing(7)
+                .lineSpacing(8)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-
-            if controller.status == .listening {
-                listeningIndicator
-            }
+                .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
 
             userTranscript
 
@@ -118,114 +102,28 @@ struct NPCDialoguePanelView: View {
                 .foregroundStyle(CafePalette.roast.opacity(0.5))
 #endif
         }
-        .padding(.horizontal, 34)
-        .padding(.vertical, 28)
-        .background {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [CafePalette.foam.opacity(0.92), CafePalette.cream.opacity(0.78)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(CafePalette.foam.opacity(0.72), lineWidth: 1.5)
-        }
-        .shadow(color: CafePalette.espresso.opacity(0.24), radius: 22, y: 12)
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 30,
-                                                     style: .continuous))
-    }
-
-    private var dialogueHeader: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(CafePalette.roast)
-                Image(systemName: "cup.and.saucer.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(CafePalette.cream)
-            }
-            .frame(width: 50, height: 50)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("CAFE STAFF")
-                    .font(.caption.weight(.bold))
-                    .tracking(1.4)
-                    .foregroundStyle(CafePalette.caramel)
-                Label(statusTitle, systemImage: statusIcon)
-                    .font(.headline.bold())
-                    .foregroundStyle(CafePalette.espresso)
-            }
-
-            Spacer()
-
-            Circle()
-                .fill(statusAccent)
-                .frame(width: 13, height: 13)
-                .shadow(color: statusAccent.opacity(0.55), radius: 6)
-        }
-    }
-
-    private var listeningIndicator: some View {
-        Label(
-            controller.realtimeSpeechDetected
-                ? "음성을 인식하고 있어요"
-                : "말씀을 기다리고 있어요",
-            systemImage: controller.realtimeSpeechDetected
-                ? "waveform"
-                : "mic.fill"
-        )
-        .font(.body.weight(.semibold))
-        .foregroundStyle(controller.realtimeSpeechDetected
-                         ? Color.green
-                         : CafePalette.roast)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-            (controller.realtimeSpeechDetected ? Color.green : CafePalette.caramel)
-                .opacity(0.12),
-            in: Capsule()
-        )
+        .padding(.horizontal, 36)
+        .padding(.vertical, 30)
+        .background(CafePalette.foam.opacity(0.96),
+                    in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
     }
 
     @ViewBuilder
     private var userTranscript: some View {
         let transcript = controller.visibleUserTranscript
         if !transcript.isEmpty {
-            HStack(alignment: .top, spacing: 13) {
-                Image(systemName: controller.userTranscriptIsFinal
-                      ? "checkmark.circle.fill"
-                      : "waveform")
-                    .font(.title3)
-                    .foregroundStyle(controller.userTranscriptIsFinal
-                                     ? Color.green
-                                     : CafePalette.caramel)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(controller.userTranscriptIsFinal ? "나" : "인식 중")
-                        .font(.caption.bold())
-                        .foregroundStyle(CafePalette.caramel)
-                    Text(transcript)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(CafePalette.espresso)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(5)
-                }
+            HStack(alignment: .top, spacing: 12) {
+                Text("나")
+                    .font(.title3.bold())
+                    .foregroundStyle(CafePalette.caramel)
+                Text(transcript)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(CafePalette.roast)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(5)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CafePalette.roast.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(CafePalette.roast.opacity(0.1), lineWidth: 1)
-            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(controller.userTranscriptIsFinal
                                 ? "내 확정 발화"
@@ -253,32 +151,23 @@ struct NPCDialoguePanelView: View {
                 : controller.npcSubtitle
         }
     }
+}
 
-    private var statusTitle: String {
-        switch controller.status {
-        case .speaking: "직원이 말하는 중"
-        case .listening: "말씀하세요"
-        case .thinking: "생각하는 중"
-        case .idle: "대화 중"
-        }
-    }
+/// 듣고 있음을 알리는 최소한의 표시. 초록불이 천천히 깜빡이는 것만으로 충분하다.
+private struct ListeningIndicator: View {
+    @State private var isDim = false
 
-    private var statusIcon: String {
-        switch controller.status {
-        case .speaking: "speaker.wave.2.fill"
-        case .listening: "waveform"
-        case .thinking: "ellipsis.bubble.fill"
-        case .idle: "bubble.left.fill"
-        }
-    }
-
-    private var statusAccent: Color {
-        switch controller.status {
-        case .speaking: CafePalette.caramel
-        case .listening: .green
-        case .thinking: .orange
-        case .idle: CafePalette.roast.opacity(0.55)
-        }
+    var body: some View {
+        Circle()
+            .fill(Color.green)
+            .frame(width: 18, height: 18)
+            .opacity(isDim ? 0.25 : 1)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isDim = true
+                }
+            }
+            .accessibilityLabel("듣고 있어요")
     }
 }
 
@@ -286,7 +175,7 @@ struct NPCDialoguePanelView: View {
 private struct RapportHeartGauge: View {
     let rapport: Float
 
-    private static let gaugeWidth: CGFloat = 205
+    private static let gaugeWidth: CGFloat = 220
     private static let heartCount = 5
 
     private var progress: CGFloat {
@@ -299,14 +188,9 @@ private struct RapportHeartGauge: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            HStack(spacing: 8) {
-                Image(systemName: "heart.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(CafePalette.berry)
-                Text("호감도")
-                    .font(.headline.bold())
-                    .foregroundStyle(CafePalette.espresso)
-            }
+            Text("호감도")
+                .font(.title3.bold())
+                .foregroundStyle(CafePalette.espresso)
 
             ZStack(alignment: .leading) {
                 heartRow
@@ -317,26 +201,16 @@ private struct RapportHeartGauge: View {
                     .frame(width: Self.gaugeWidth * progress, alignment: .leading)
                     .clipped()
             }
-            .frame(width: Self.gaugeWidth, height: 34, alignment: .leading)
+            .frame(width: Self.gaugeWidth, height: 36, alignment: .leading)
 
             Text("\(percentage)%")
-                .font(.headline.monospacedDigit().bold())
+                .font(.title3.monospacedDigit().bold())
                 .foregroundStyle(CafePalette.roast)
-                .frame(minWidth: 52, alignment: .trailing)
+                .frame(minWidth: 56, alignment: .trailing)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
-        .background {
-            Capsule()
-                .fill(.ultraThinMaterial)
-            Capsule()
-                .fill(CafePalette.cream.opacity(0.84))
-        }
-        .overlay {
-            Capsule()
-                .stroke(CafePalette.foam.opacity(0.78), lineWidth: 1.5)
-        }
-        .shadow(color: CafePalette.espresso.opacity(0.18), radius: 14, y: 8)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(CafePalette.cream.opacity(0.9), in: Capsule())
         .glassBackgroundEffect(in: Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("직원 호감도")
@@ -347,7 +221,7 @@ private struct RapportHeartGauge: View {
         HStack(spacing: 8) {
             ForEach(0..<Self.heartCount, id: \.self) { _ in
                 Image(systemName: "heart.fill")
-                    .frame(width: 33, height: 33)
+                    .frame(width: 36, height: 36)
             }
         }
         .font(.title2)
