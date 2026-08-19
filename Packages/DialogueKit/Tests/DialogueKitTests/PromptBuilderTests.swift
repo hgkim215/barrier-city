@@ -108,8 +108,8 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(guide.contains("Assume the standard kiosk process"))
         XCTAssertTrue(guide.contains("personality-specific acceptance timing"))
-        XCTAssertTrue(guide.contains("There is no order"))
-        XCTAssertTrue(guide.contains("completion tool"))
+        XCTAssertTrue(guide.contains("Call place_order only when"))
+        XCTAssertTrue(guide.contains("never claim placement before success"))
         XCTAssertTrue(guide.contains("never call it for silence"))
         XCTAssertTrue(guide.contains("Do not call any tool for greetings"))
     }

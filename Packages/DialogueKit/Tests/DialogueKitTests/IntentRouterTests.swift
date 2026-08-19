@@ -171,6 +171,52 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertNil(coordinator.takeCompletedEvent())
     }
 
+    func test_orderToolShadow_matchesLocallyCompleteOrder() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(
+            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
+        )
+        _ = coordinator.register(
+            name: "place_order",
+            callID: "call-order",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+
+        XCTAssertEqual(
+            coordinator.finishOrderToolEvaluation(),
+            .init(
+                outcome: .agreement,
+                localOrderReady: true,
+                modelProposedOrder: true,
+                argumentsValid: true
+            )
+        )
+    }
+
+    func test_orderToolShadow_reportsPrematureProposalWithoutTranscript() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(userTranscript: "레인보우 스무디 주세요")
+        _ = coordinator.register(
+            name: "place_order",
+            callID: "call-premature",
+            arguments: #"{"item":"rainbow_smoothie","quantity":1}"#
+        )
+
+        let evaluation = coordinator.finishOrderToolEvaluation()
+        XCTAssertEqual(evaluation?.outcome, .prematureProposal)
+        XCTAssertFalse(evaluation?.localOrderReady ?? true)
+        XCTAssertTrue(evaluation?.modelProposedOrder ?? false)
+    }
+
+    func test_orderToolShadow_reportsMissedProposal() {
+        var coordinator = RealtimeMissionCoordinator(personality: .hurried)
+        coordinator.observe(
+            userTranscript: "키오스크가 높아 손이 안 닿으니 레인보우 스무디 한 잔 주세요"
+        )
+
+        XCTAssertEqual(coordinator.finishOrderToolEvaluation()?.outcome, .missedProposal)
+    }
+
     func test_onlyCompletedOrderEndsConversationAfterResponse() {
         XCTAssertFalse(RainbowSmoothieOrderDecision.continueConversation.endsConversationAfterResponse)
         XCTAssertFalse(RainbowSmoothieOrderDecision.askItem.endsConversationAfterResponse)

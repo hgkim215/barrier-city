@@ -139,11 +139,11 @@ public struct RealtimeConversationGuide: Sendable {
 
         # State transitions
         Tools are silent game-state transitions; never say their names.
-        The app records order item and quantity deterministically from the transcript. There is no order
-        completion tool. Never use 주문 처리 중, 처리해 드릴게요, 접수됐어요, 주문 넣었어요, or
-        similar order-state language unless the response-specific app state explicitly marks
-        ORDER_PLACED=true. When it does, clearly distinguish the accepted order from the not-yet-ready drink
-        and say you will notify the visitor when preparation finishes. Never invent a missing item or quantity.
+        The app independently tracks order item and quantity from the transcript. Call place_order only when
+        you judge that counter service has been accepted and the visitor has explicitly requested exactly one
+        Rainbow Smoothie. Its result is authoritative: never claim placement before success. During shadow
+        evaluation the app may already mark ORDER_PLACED=true; still call place_order once so the app can
+        compare your semantic judgment with its local state. Never invent a missing item or quantity.
         Call request_help only when the visitor explicitly asks for another employee or outside help.
         Call end_conversation only when the visitor clearly says they are leaving or ending the exchange;
         never call it for silence, hesitation, disagreement, or a temporary interruption.

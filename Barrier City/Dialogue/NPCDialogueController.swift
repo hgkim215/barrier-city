@@ -17,6 +17,10 @@ final class NPCDialogueController {
         subsystem: "com.Television.Barrier-City",
         category: "ConversationLifecycle"
     )
+    private static let orderToolLogger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "OrderToolEvaluation"
+    )
 
     enum Status: String { case idle = "대기", listening = "듣는 중", thinking = "생각 중", speaking = "말하는 중" }
 
@@ -309,7 +313,7 @@ final class NPCDialogueController {
                             for: self.climate,
                             orderDecision: orderDecision
                         ),
-                        toolChoice: orderDecision.disablesTools ? .none : .auto
+                        toolChoice: .auto
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -426,6 +430,13 @@ final class NPCDialogueController {
         realtimeInputTurnIsActive = false
         realtimeSuppressesCurrentInputTurn = false
         requestAnimation(.idle)
+        if let evaluation = realtimeMission.finishOrderToolEvaluation() {
+#if DEBUG
+            Self.orderToolLogger.notice(
+                "[ORDER_TOOL_SHADOW] outcome=\(evaluation.outcome.rawValue, privacy: .public) localReady=\(evaluation.localOrderReady, privacy: .public) proposed=\(evaluation.modelProposedOrder, privacy: .public) argumentsValid=\(String(describing: evaluation.argumentsValid), privacy: .public)"
+            )
+#endif
+        }
         if let functionCall = realtimeMission.takeFunctionCall() {
             realtimeCanAcceptInput = false
             realtimeMicrophoneIsReady = false
@@ -581,6 +592,25 @@ final class NPCDialogueController {
     }
 
     private static let realtimeTools: [RealtimeFunctionTool] = [
+        .init(
+            name: "place_order",
+            description: "Call once only when counter service is accepted and the visitor explicitly requested exactly one Rainbow Smoothie. The app validates the action before any confirmation.",
+            parameters: [
+                .init(
+                    name: "item",
+                    type: .string,
+                    description: "Canonical requested menu item.",
+                    allowedStringValues: ["rainbow_smoothie"]
+                ),
+                .init(
+                    name: "quantity",
+                    type: .integer,
+                    description: "Explicitly requested number of cups.",
+                    minimumIntegerValue: 1,
+                    maximumIntegerValue: 1
+                ),
+            ]
+        ),
         .init(name: "request_help",
               description: "Call only when the visitor explicitly asks for another employee or assistance."),
         .init(name: "end_conversation",
