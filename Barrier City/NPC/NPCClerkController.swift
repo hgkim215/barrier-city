@@ -56,7 +56,8 @@ enum NPCClerkTuning {
     /// Blender에서 제작된 Barista의 시각적 정면(+Z)을 RealityKit 이동 정면(-Z)에 맞춘다.
     static let baristaForwardYawOffset: Float = .pi
 
-    static let dialogueHeight: Float = 1.55
+    /// 1.5m Barista와 확장된 대화 카드가 겹치지 않도록 머리 위 여백을 확보한다.
+    static let dialogueHeight: Float = 1.92
 
     static let fallbackStaffHome = SIMD2<Float>(0, 5.2)
     static let fallbackServicePoint = SIMD2<Float>(0, 3.1)
@@ -111,7 +112,7 @@ final class NPCClerkController {
     func installInteractionBubble(_ panel: Entity, in worldRoot: Entity) {
         panel.removeFromParent()
         panel.isEnabled = false
-        panel.scale = SIMD3(repeating: 0.9)
+        panel.scale = SIMD3(repeating: 1.05)
         worldRoot.addChild(panel)
         interactionBubble = panel
     }
@@ -213,8 +214,8 @@ final class NPCClerkController {
         ]
         if let bubble = interactionBubble {
             // 월드 좌표를 매 프레임 추종하지 않고 NPC 이동 wrapper에 직접 결합한다.
-            // 위치와 회전이 동일한 transform 계층에서 갱신되므로 추종 지연이 없고,
-            // 사용자의 시선을 향한 별도 forward/yaw 보정도 적용하지 않는다.
+            // 위치는 같은 transform 계층에서 지연 없이 추종하고, 로컬 회전만 매 프레임
+            // 상쇄해 NPC의 보행 방향과 관계없이 패널 앞면이 사용자를 향하게 한다.
             bubble.removeFromParent()
             locomotion.addChild(bubble)
             bubble.position = [0, NPCClerkTuning.dialogueHeight, 0]
@@ -240,6 +241,7 @@ final class NPCClerkController {
 
         let dt = min(max(rawDeltaTime, 0), 1.0 / 15.0)
         let player = SIMD2<Float>(appModel.motion.positionX, appModel.motion.positionZ)
+        defer { faceInteractionBubble(toward: player) }
         // 대화 감지는 계산대의 고정 좌표가 아니라 현재 돌아다니는 NPC의 실제 위치를 쓴다.
         // 이전에는 BarTable에서 계산한 customerPoint가 어긋나면 가까이 가도 인사가 시작되지 않았다.
         let playerDistance = simd_distance(player, currentClerkPosition)
@@ -608,6 +610,19 @@ final class NPCClerkController {
     }
 
     // MARK: - Spatial interaction bubble
+
+    /// NPC가 업무 중 어느 방향으로 걷더라도 공간 UI의 앞면은 항상 사용자를 향한다.
+    private func faceInteractionBubble(toward player: SIMD2<Float>) {
+        guard let root = locomotionRoot,
+              let bubble = interactionBubble,
+              bubble.parent === root else { return }
+        let delta = player - currentClerkPosition
+        guard simd_length(delta) > 0.001 else { return }
+
+        let worldYaw = atan2(delta.x, delta.y)
+        let worldFacing = simd_quatf(angle: worldYaw, axis: [0, 1, 0])
+        bubble.orientation = root.orientation.inverse * worldFacing
+    }
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible
