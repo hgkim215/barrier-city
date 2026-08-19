@@ -31,6 +31,10 @@ final class WheelchairMotionState {
     var bumpVelocity: Float = 0
     var surgeOffset: Float = 0
     var surgeVelocity: Float = 0
+    /// 지면 높이 격차(dy)가 stepBlock을 넘는 동안 bump 신호를 한 번만 내보내기 위한 래치.
+    /// 격차가 한 프레임에 다 흡수되지 않으면 여러 프레임 동안 dy가 계속 임계값을 넘는데,
+    /// 이 래치가 없으면 매 프레임 bump 사운드가 재발화돼 "덜덜덜"거리는 버즈음이 난다.
+    var isBumpSettling = false
 
     var hasFallen = false
     var fallDirectionPitch: Float = 0
@@ -71,6 +75,7 @@ final class WheelchairMotionState {
         bumpVelocity = 0
         surgeOffset = 0
         surgeVelocity = 0
+        isBumpSettling = false
         hasFallen = false
         fallDirectionPitch = 0
         fallDirectionRoll = 0

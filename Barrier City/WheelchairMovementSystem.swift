@@ -307,12 +307,20 @@ struct WheelchairMovementSystem: System {
                 // 지면 위/근처: 즉시 스냅 대신 부드럽게 따라가 미세 요철을 흡수.
                 let dy = g - motion.chairHeight
                 if dy > Self.stepBlock {
-                    motion.bumpVelocity = Self.bumpKick * 0.6
-                    ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                    // dy는 한 프레임에 다 흡수되지 않고 여러 프레임에 걸쳐 줄어들 수 있다.
+                    // 래치로 이 구간에서 사운드/킥을 한 번만 내보내 매 프레임 재발화를 막는다.
+                    if !motion.isBumpSettling {
+                        motion.isBumpSettling = true
+                        motion.bumpVelocity = Self.bumpKick * 0.6
+                        ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                    }
+                } else {
+                    motion.isBumpSettling = false
                 }
                 motion.chairHeight += dy * min(1, 18 * dt)
                 motion.fallVelocity = 0
             } else {
+                motion.isBumpSettling = false
                 motion.fallVelocity -= Self.fallGravityY * dt
                 motion.chairHeight += motion.fallVelocity * dt
                 let g = centerGround ?? -1000
