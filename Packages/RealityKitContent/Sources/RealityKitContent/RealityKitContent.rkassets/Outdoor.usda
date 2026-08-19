@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["door", "Collision", "building", "Outdoor", "Door", "Timeline"]
+    reorder nameChildren = ["Collision", "building", "Outdoor", "Timeline", "Cube", "Tile", "Wall"]
     def Material "building"
     {
         token outputs:mtlx:surface
@@ -47,13 +47,126 @@ def Xform "Root"
             customData = {
                 float3 rotationEulerHint = (0, 0, 3.1415927)
             }
-            prepend references = @Furnitures/Door.usdz@
+            references = @Furnitures/Door.usdz@
         )
         {
             quatf xformOp:orient = (-4.371139e-8, 0, 0, 1)
             float3 xformOp:scale = (2, 2, 2)
-            float3 xformOp:translate = (-1.8626453e-8, 6.067553, -1.39698395e-8)
+            float3 xformOp:translate = (-1.0989607e-7, 6.0676, 0.18409584)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "Stair" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wall_1> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_002" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Tile> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Floor" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wall> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            quatf xformOp:orient = (1, 0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (6.8000006675720215, -43.2044563293457, 0.09999991208314896)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            def Xform "Floor" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+                prepend references = </Root/Outdoor/Floor>
+            )
+            {
+                rel material:binding = </Root/Wall>
+                float2 ui:nodegraph:node:pos = (89.95117, 127.68164)
+                int ui:nodegraph:node:stackingOrder = 1
+                custom string userProperties:blender:object_name = "Floor"
+                quatf xformOp:orient = (0.99999994, -2.980232e-8, 0, 0)
+                float3 xformOp:rotateXYZ = (0, 0, 0)
+                float3 xformOp:scale = (0.9999998, 0.9999998, 0.9999998)
+                double3 xformOp:translate = (0, 0, 0)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Mesh "Plane_001" (
+                    active = true
+                )
+                {
+                    float3[] extent = [(-14.6, -1, 0), (1, 10.6, 0.1)]
+                    int[] faceVertexCounts = [6, 6, 4, 4, 4, 4, 4, 4]
+                    int[] faceVertexIndices = [4, 8, 11, 10, 9, 3, 2, 0, 1, 6, 7, 5, 5, 7, 11, 8, 1, 0, 3, 9, 0, 2, 4, 3, 6, 1, 9, 10, 7, 6, 10, 11, 2, 5, 8, 4]
+                    normal3f[] normals = [(0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (-1, -8.349788e-8, 0), (-1, -8.349788e-8, 0), (-1, -8.349788e-8, 0), (-1, -8.349788e-8, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0)] (
+                        interpolation = "faceVarying"
+                    )
+                    point3f[] points = [(-14.6, -1, 0), (1, -1, 0), (-14.6, 9.200001, 0), (-14.6, -1, 0.1), (-14.6, 9.200001, 0.1), (-11.6, 9.200001, 0), (0.99999905, 10.6, 0), (-11.6, 10.6, 0), (-11.6, 9.200001, 0.1), (1, -1, 0.1), (0.99999905, 10.6, 0.1), (-11.6, 10.6, 0.1)]
+                    texCoord2f[] primvars:st = [(-4.4631325e-9, 0.66382974), (0.9914894, 0.66382974), (0.9957448, 0.5361702), (4.5654616e-8, -2.536364e-9), (0.99148947, -1.2356571e-9), (1, 0.49361697), (0.43404254, 0.66382974), (0.9957448, 0.9702127), (0.0042553283, 0.6638298), (0.49361703, -3.3148335e-9), (0.98723406, 0.66382974), (0.9914895, 0.5361702), (0.9276596, 2.9454466e-8), (0.99148947, 0.9702127), (9.486882e-9, 0.6638298), (0.43404254, 0.5361702), (0.008510651, 0.66382974), (0.0042553185, 0.79148936), (0.49361703, 7.531256e-8), (1, -5.6658607e-9), (0.99574465, 0.5361701), (0.493617, 0.5361702), (0.008510646, 0.7234042), (0.9957447, -5.9871295e-9), (0.9276596, 0.12765959), (0.004255332, 0.66382974), (-1.5114561e-10, 0.79148936), (0.49361697, 0.66382974), (0.9872341, -1.5569248e-9), (0.9957447, 0.49361697), (0.98723394, 0.66382974), (0.9957447, -5.9871286e-9), (0.99148935, 0.5361701), (0.987234, 0.12765959), (0.0042553274, 0.7234042), (0.9914894, -6.3083974e-9)] (
+                        interpolation = "faceVarying"
+                    )
+                    int[] primvars:st:indices = [12, 24, 33, 30, 27, 9, 6, 0, 3, 18, 21, 15, 16, 22, 34, 25, 4, 1, 10, 28, 2, 7, 13, 11, 19, 5, 29, 31, 23, 20, 32, 35, 8, 17, 26, 14]
+                    uniform token subdivisionScheme = "none"
+                    custom string userProperties:blender:data_name = "Plane.001"
+                }
+            }
+        }
+
+        over "BaseFloor" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wall_1> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            float3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        over "Ramp" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wall_1> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "FloweBed1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Tile> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_003" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Tile> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+        }
+
+        over "Cube_001" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </Root/Wall_1> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
         }
     }
 
@@ -62,7 +175,7 @@ def Xform "Root"
     )
     {
         reorder nameChildren = ["Cube", "Cube_1"]
-        float3 xformOp:translate = (0, 0, 18.738884)
+        float3 xformOp:translate = (0, 20, 18.738884)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def Cube "Cube" (
@@ -112,6 +225,100 @@ def Xform "Root"
         float3 xformOp:scale = (100, 1, 100)
         float3 xformOp:translate = (0, -0.28807914, 2.3210807)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def Material "Tile"
+    {
+        token outputs:mtlx:surface.connect = </Root/Tile/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Tile/TiledImage.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+            int ui:nodegraph:node:stackingOrder = 1
+        }
+
+        def Shader "TiledImage"
+        {
+            uniform token info:id = "ND_tiledimage_color3"
+            asset inputs:file = @textures/OutdoorTile.jpeg@
+            float2 inputs:realworldimagesize = (0.1, 0.1)
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-140.84766, 128.86328)
+            int ui:nodegraph:node:stackingOrder = 8
+        }
+    }
+
+    def Material "Wall"
+    {
+        token outputs:mtlx:surface.connect = </Root/Wall/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (116.88093, 154.9319)
+        int ui:nodegraph:node:stackingOrder = 1
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Wall/TiledImage.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+            int ui:nodegraph:node:stackingOrder = 1
+        }
+
+        def Shader "TiledImage"
+        {
+            uniform token info:id = "ND_tiledimage_color3"
+            asset inputs:file = @textures/FT.png@
+            float2 inputs:realworldimagesize = (0.1, 0.1)
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-140.84766, 128.86328)
+            int ui:nodegraph:node:stackingOrder = 9
+        }
+    }
+
+    def Material "Wall_1"
+    {
+        token outputs:mtlx:surface.connect = </Root/Wall_1/PreviewSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:node:pos = (136.88092, 174.9319)
+        int ui:nodegraph:node:stackingOrder = 2
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (335.25, 100.5)
+
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+            color3f inputs:diffuseColor.connect = </Root/Wall_1/TiledImage.outputs:out>
+            float inputs:metallic
+            float3 inputs:normal
+            float inputs:opacity
+            float inputs:roughness
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (93.5, 100.5)
+            int ui:nodegraph:node:stackingOrder = 1
+        }
+
+        def Shader "TiledImage"
+        {
+            uniform token info:id = "ND_tiledimage_color3"
+            asset inputs:file = @textures/Wall.png@
+            float2 inputs:realworldimagesize = (0.1, 0.1)
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-140.84766, 128.86328)
+            int ui:nodegraph:node:stackingOrder = 10
+        }
     }
 }
 

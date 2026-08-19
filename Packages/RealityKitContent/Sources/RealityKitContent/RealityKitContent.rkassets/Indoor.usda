@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -4869,12 +4869,12 @@ def Xform "Root"
         }
     }
 
-    def "Default" (
+    def "Barista" (
         active = true
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        prepend references = @NPC/Barista/Default.usdz@
+        references = @NPC/Barista/Default.usdz@
     )
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
