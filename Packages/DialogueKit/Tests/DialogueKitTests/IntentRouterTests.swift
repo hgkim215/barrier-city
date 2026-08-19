@@ -96,7 +96,7 @@ final class IntentRouterTests: XCTestCase {
         XCTAssertEqual(correctedQuantity.observe(userTranscript: "한 잔이요"), .completeOrder)
     }
 
-    func test_realtimeMissionCoordinator_keepsOrdinaryConversationToolFree() {
+    func test_realtimeMissionCoordinator_keepsSmallTalkToolFree_andRedirectsFirstOrder() {
         var coordinator = RealtimeMissionCoordinator()
 
         XCTAssertEqual(
@@ -105,9 +105,10 @@ final class IntentRouterTests: XCTestCase {
         )
         XCTAssertEqual(
             coordinator.observe(userTranscript: "아메리카노 한 잔 주세요"),
-            .ordinaryConversation
+            .initialKioskRefusal
         )
-        XCTAssertTrue(coordinator.snapshot.isPristine)
+        XCTAssertTrue(coordinator.snapshot.hasRedirectedFirstOrderToKiosk)
+        XCTAssertFalse(coordinator.snapshot.hasMissionItem)
     }
 
     func test_realtimeMissionCoordinator_requiresExactMacaronItem() {
@@ -115,7 +116,7 @@ final class IntentRouterTests: XCTestCase {
 
         XCTAssertEqual(
             coordinator.observe(userTranscript: "레인보우 스무디 한 잔 주세요"),
-            .ordinaryConversation
+            .initialKioskRefusal
         )
         XCTAssertEqual(
             coordinator.observe(userTranscript: "레인보우 마카롱 스무디 맛있어요?"),
@@ -130,22 +131,32 @@ final class IntentRouterTests: XCTestCase {
     func test_realtimeMissionCoordinator_distinguishesCorrectionFromCancellation() {
         var correction = RealtimeMissionCoordinator()
         XCTAssertEqual(
+            correction.observe(userTranscript: "주문할게요"),
+            .initialKioskRefusal
+        )
+        XCTAssertEqual(
             correction.observe(userTranscript: "아니, 레인보우 마카롱 스무디 한 잔 주세요"),
             .missionOrderCandidate
         )
 
         var cancellation = RealtimeMissionCoordinator()
         cancellation.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
+        cancellation.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
         XCTAssertEqual(
             cancellation.observe(userTranscript: "레인보우 마카롱 스무디 말고 라떼 주세요"),
-            .ordinaryConversation
+            .unavailableMenuRefusal
         )
-        XCTAssertTrue(cancellation.snapshot.isPristine)
+        XCTAssertFalse(cancellation.snapshot.hasMissionItem)
+        XCTAssertNil(cancellation.snapshot.requestedQuantity)
     }
 
     func test_realtimeMissionCoordinator_itemThenQuantity_exposesToolOnlyWhenComplete() {
         var coordinator = RealtimeMissionCoordinator()
 
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요"),
+            .initialKioskRefusal
+        )
         XCTAssertEqual(
             coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요"),
             .partialMissionOrder
@@ -161,6 +172,7 @@ final class IntentRouterTests: XCTestCase {
 
     func test_placeMissionOrder_validatesJSONAndPublishesExactlyOnce() {
         var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         let arguments = #"{"item":"rainbow_macaron_smoothie","quantity":1}"#
         _ = coordinator.register(
@@ -185,6 +197,7 @@ final class IntentRouterTests: XCTestCase {
     func test_placeMissionOrder_rejectsInvalidJSONWithoutMissionEvent() {
         var coordinator = RealtimeMissionCoordinator()
         coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         _ = coordinator.register(
             name: "place_mission_order",
             callID: "call-invalid",
@@ -198,6 +211,7 @@ final class IntentRouterTests: XCTestCase {
 
     func test_encounterCleanup_preservesMissionSlotsAndPendingCompletion() {
         var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
         coordinator.observe(userTranscript: "레인보우 마카롱 스무디 주세요")
         coordinator.clearEncounterTransientState()
         XCTAssertTrue(coordinator.snapshot.hasMissionItem)
@@ -216,6 +230,7 @@ final class IntentRouterTests: XCTestCase {
     func test_immersiveReset_clearsMissionProgress() {
         var coordinator = RealtimeMissionCoordinator()
         coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         _ = coordinator.register(
             name: "place_mission_order",
             callID: "call-reset",
@@ -231,6 +246,7 @@ final class IntentRouterTests: XCTestCase {
 
     func test_orderToolEvaluation_comparesCandidateAndFunctionCall() {
         var coordinator = RealtimeMissionCoordinator()
+        coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         coordinator.observe(userTranscript: "레인보우 마카롱 스무디 한 잔 주세요")
         _ = coordinator.register(
             name: "place_mission_order",
@@ -251,9 +267,27 @@ final class IntentRouterTests: XCTestCase {
 
     func test_onlyCompletedOrderEndsConversationAfterResponse() {
         XCTAssertFalse(RainbowSmoothieOrderDecision.continueConversation.endsConversationAfterResponse)
+        XCTAssertFalse(RainbowSmoothieOrderDecision.rejectUnavailableItem.endsConversationAfterResponse)
         XCTAssertFalse(RainbowSmoothieOrderDecision.askItem.endsConversationAfterResponse)
         XCTAssertFalse(RainbowSmoothieOrderDecision.askQuantity.endsConversationAfterResponse)
         XCTAssertTrue(RainbowSmoothieOrderDecision.completeOrder.endsConversationAfterResponse)
+    }
+
+    func test_realtimeMissionCoordinator_rejectsDifferentMenuWithoutAlternativeRoute() {
+        var coordinator = RealtimeMissionCoordinator()
+
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "아메리카노 한 잔 주세요"),
+            .initialKioskRefusal
+        )
+        XCTAssertEqual(
+            coordinator.observe(userTranscript: "그럼 라떼 한 잔 주세요"),
+            .unavailableMenuRefusal
+        )
+        let guide = RealtimeMissionRoutingDecision.unavailableMenuRefusal.promptGuide
+        XCTAssertTrue(guide.contains("insufficient beans"))
+        XCTAssertTrue(guide.contains("Do not offer, recommend, or ask about another"))
+        XCTAssertTrue(guide.contains("Do not suggest the kiosk"))
     }
 
     func test_oneCupSpeechTranscriptionVariants_completeTheKnownItem() {

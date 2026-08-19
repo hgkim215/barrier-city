@@ -19,13 +19,13 @@ public enum Tone: String, Sendable {
     var promptRule: String {
         switch self {
         case .supportive:
-            "Be openly respectful: validate the barrier, apologize when appropriate, and offer one concrete action after asking consent."
+            "Be more cooperative and respectful, but remain dry and restrained. Do not become cheerful, eager, or excessively apologetic."
         case .warm:
-            "Be friendly and cooperative. Acknowledge the barrier and offer one practical next step."
+            "Soften slightly and cooperate, while keeping a tired, unsentimental manner."
         case .neutral:
-            "Be procedural and emotionally distant. Give only the minimum necessary response."
+            "Be curt, procedural, and emotionally distant. Let mild inconvenience show when extra work is requested."
         case .dismissive:
-            "Be visibly dismissive. Never use apology words such as 죄송 or 미안. Minimize the access problem and mechanically repeat store procedure instead of accommodating the customer."
+            "Be visibly reluctant, skeptical, and a little rude. Never use apology words such as 죄송 or 미안; show annoyance naturally without insults."
         case .hostile:
             "Be openly exclusionary and impatient. Prioritize store rules and convenience over equal service, without slurs, threats, or violence."
         }

@@ -3,6 +3,8 @@ import Foundation
 /// 한 사용자 턴에 주문 도구를 노출할지 결정한다. 대화의 내용이나 말투는 결정하지 않는다.
 public enum RealtimeMissionRoutingDecision: Equatable, Sendable {
     case ordinaryConversation
+    case initialKioskRefusal
+    case unavailableMenuRefusal
     case partialMissionOrder
     case missionOrderCandidate
 
@@ -14,8 +16,23 @@ public enum RealtimeMissionRoutingDecision: Equatable, Sendable {
         switch self {
         case .ordinaryConversation:
             "Continue the conversation naturally. No function is available for this response."
+        case .initialKioskRefusal:
+            """
+            This is the visitor's first explicit attempt to order from you. Refuse the order and tell them
+            curtly that orders must be placed at the kiosk. Use exactly two short, natural Korean sentences.
+            Do not ask what they want, accept any item, mention the kiosk's accessibility problem, apologize,
+            offer help, or suggest another ordering method. No function is available for this response.
+            """
+        case .unavailableMenuRefusal:
+            """
+            The visitor explicitly ordered a menu item other than the Rainbow Macaron Smoothie. Refuse it
+            with one brief, ordinary operational reason such as insufficient beans or unavailable ingredients.
+            Use exactly two short, natural Korean sentences. Do not offer, recommend, or ask about another
+            menu item. Do not suggest the kiosk, counter ordering, another ordering method, or any next step.
+            No function is available for this response.
+            """
         case .partialMissionOrder:
-            "The visitor may be forming an order, but the exact mission item and one-cup quantity are not both established. Respond naturally and clarify only if it fits the conversation. No function is available for this response."
+            "The visitor may be forming an order, but the exact mission item and one-cup quantity are not both established. Respond in exactly two short, natural Korean sentences and clarify only if it fits the conversation. No function is available for this response."
         case .missionOrderCandidate:
             "The app found explicit evidence that the visitor is ordering exactly one Rainbow Macaron Smoothie. Call place_mission_order with the canonical item and quantity. Do not announce placement before the function result succeeds."
         }
@@ -43,9 +60,11 @@ public struct RealtimeMissionCoordinator: Sendable {
         public let hasMissionItem: Bool
         public let requestedQuantity: Int?
         public let orderPlaced: Bool
+        public let hasRedirectedFirstOrderToKiosk: Bool
 
         public var isPristine: Bool {
             !hasMissionItem && requestedQuantity == nil && !orderPlaced
+                && !hasRedirectedFirstOrderToKiosk
         }
 
         public var promptGuide: String {
@@ -55,6 +74,7 @@ public struct RealtimeMissionCoordinator: Sendable {
             - EXACT_ITEM=\(hasMissionItem ? "Rainbow Macaron Smoothie" : "missing")
             - QUANTITY=\(quantity)
             - ORDER_PLACED=\(orderPlaced)
+            - FIRST_ORDER_REDIRECTED_TO_KIOSK=\(hasRedirectedFirstOrderToKiosk)
             This state is authoritative only for the mission order. It must not constrain ordinary conversation.
             """
         }
@@ -70,6 +90,7 @@ public struct RealtimeMissionCoordinator: Sendable {
     private var requestedQuantity: Int?
     private var isAwaitingMissionQuantity = false
     private var orderWasPlaced = false
+    private var hasRedirectedFirstOrderToKiosk = false
     private var hasPendingOrderCompletion = false
     private var pendingFunctionCall: FunctionCall?
     private var localOrderReadyForCurrentTurn: Bool?
@@ -83,6 +104,7 @@ public struct RealtimeMissionCoordinator: Sendable {
         requestedQuantity = nil
         isAwaitingMissionQuantity = false
         orderWasPlaced = false
+        hasRedirectedFirstOrderToKiosk = false
         hasPendingOrderCompletion = false
         pendingFunctionCall = nil
         clearOrderToolEvaluation()
@@ -99,7 +121,8 @@ public struct RealtimeMissionCoordinator: Sendable {
         Snapshot(
             hasMissionItem: hasMissionItem,
             requestedQuantity: requestedQuantity,
-            orderPlaced: orderWasPlaced
+            orderPlaced: orderWasPlaced,
+            hasRedirectedFirstOrderToKiosk: hasRedirectedFirstOrderToKiosk
         )
     }
 
@@ -122,10 +145,29 @@ public struct RealtimeMissionCoordinator: Sendable {
         let quantity = RainbowSmoothieMissionOrder.requestedQuantity(in: transcript)
         let explicitOrderIntent = Self.expressesOrderIntent(transcript)
         let bareItemAnswer = exactItemMentioned && Self.looksLikeBareItemAnswer(transcript)
+        let differentItemOrder = RainbowSmoothieMissionOrder.mentionsDifferentItem(in: transcript)
+            && explicitOrderIntent
 
-        if Self.cancelsMissionOrder(transcript)
-            || (RainbowSmoothieMissionOrder.mentionsDifferentItem(in: transcript)
-                && explicitOrderIntent) {
+        // 첫 명시적 주문은 메뉴와 무관하게 반드시 키오스크로 돌려보낸다. 이 턴의
+        // 메뉴·수량은 저장하지 않아 같은 응답에서 주문이 접수되는 경로를 차단한다.
+        if explicitOrderIntent && !hasRedirectedFirstOrderToKiosk {
+            hasRedirectedFirstOrderToKiosk = true
+            hasMissionItem = false
+            requestedQuantity = nil
+            isAwaitingMissionQuantity = false
+            localOrderReadyForCurrentTurn = false
+            return .initialKioskRefusal
+        }
+
+        if differentItemOrder {
+            hasMissionItem = false
+            requestedQuantity = nil
+            isAwaitingMissionQuantity = false
+            localOrderReadyForCurrentTurn = false
+            return .unavailableMenuRefusal
+        }
+
+        if Self.cancelsMissionOrder(transcript) {
             hasMissionItem = false
             requestedQuantity = nil
             isAwaitingMissionQuantity = false
@@ -176,14 +218,15 @@ public struct RealtimeMissionCoordinator: Sendable {
             output = #"{"success":true,"item":"rainbow_macaron_smoothie","quantity":1}"#
             followUpInstructions = """
               The app validated and placed exactly one Rainbow Macaron Smoothie order. Confirm it briefly
-              in natural Korean and say the visitor will be notified when it is ready. Do not say the drink
-              itself is already ready and do not mention functions or JSON.
+              in exactly two short, natural Korean sentences and say the visitor will be notified when it is
+              ready. Do not say the drink itself is already ready and do not mention functions or JSON.
               """
         } else {
             output = #"{"success":false,"message":"mission order validation failed"}"#
             followUpInstructions = """
-              The app did not place an order. Continue naturally in Korean without exposing technical
-              details or claiming success. Ask for the exact item or one-cup quantity only if needed.
+              The app did not place an order. Continue in exactly two short, natural Korean sentences without
+              exposing technical details or claiming success. Ask for the exact item or one-cup quantity only
+              if needed.
               """
         }
 

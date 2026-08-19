@@ -15,6 +15,9 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(sys.contains("live face-to-face conversation"))
         XCTAssertTrue(sys.contains("Ask at most one relevant follow-up question"))
         XCTAssertTrue(sys.contains("Do not restart the greeting"))
+        XCTAssertTrue(sys.contains("at least two complete sentences"))
+        XCTAssertTrue(sys.contains("under 35 Korean words"))
+        XCTAssertTrue(sys.contains("real tired person"))
     }
 
     func test_dismissiveTone_isInjectedIntoSystem() {
@@ -153,9 +156,9 @@ final class PromptBuilderTests: XCTestCase {
         )
 
         XCTAssertTrue(messages.first!.content.contains("Clerk personality: chatty"))
-        XCTAssertTrue(messages.first!.content.contains("sociable and expressive"))
+        XCTAssertTrue(messages.first!.content.contains("tired and a little nosy"))
         XCTAssertTrue(realtime.contains("Clerk personality: chatty"))
-        XCTAssertTrue(realtime.contains("Sociable, expressive, and curious"))
+        XCTAssertTrue(realtime.contains("Talkative but tired and a little nosy"))
     }
 
     func test_realtimeGuide_opensWithoutForcingAnOrderFlow() {
@@ -173,6 +176,8 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertFalse(opening.contains("direct them to use the kiosk"))
         XCTAssertTrue(guide.contains("Do not repeatedly steer the visitor"))
         XCTAssertTrue(guide.contains("when the visitor brings them up"))
+        XCTAssertTrue(guide.contains("at least two complete sentences"))
+        XCTAssertTrue(opening.contains("exactly two short sentences"))
     }
 
     func test_collectionDecision_separatesBarrierAcceptance_item_andQuantity() {
@@ -196,7 +201,7 @@ final class PromptBuilderTests: XCTestCase {
         ).first!.content
 
         XCTAssertTrue(askQuantity.contains("QUANTITY=missing"))
-        XCTAssertTrue(askQuantity.contains("Ask naturally how many cups"))
+        XCTAssertTrue(askQuantity.contains("ask naturally how many cups"))
         XCTAssertTrue(askQuantity.contains("Barrier explanation only opens counter ordering"))
         XCTAssertTrue(askQuantity.contains("주문 처리 중"))
         XCTAssertTrue(complete.contains("ORDER_PLACED=true"))
@@ -211,6 +216,15 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertFalse(complete.contains("주문 완료됐습니다"))
     }
 
+    func test_differentMenuDecision_refusesWithoutOfferingAlternatives() {
+        let prompt = RainbowSmoothieOrderDecision.rejectUnavailableItem.promptGuide
+
+        XCTAssertTrue(prompt.contains("insufficient beans"))
+        XCTAssertTrue(prompt.contains("exactly two short"))
+        XCTAssertTrue(prompt.contains("Do not offer, recommend, or ask about another menu item"))
+        XCTAssertTrue(prompt.contains("Do not suggest the kiosk"))
+    }
+
     func test_realtimeReadyOrder_requiresValidatedToolBeforeConfirmation() {
         let guide = RealtimeMissionRoutingDecision.missionOrderCandidate.promptGuide
 
@@ -222,10 +236,10 @@ final class PromptBuilderTests: XCTestCase {
 
     func test_realtimeGuide_definesDistinctFreeConversationStyles() {
         let expectedRules: [(ClerkPersonality, String)] = [
-            (.hurried, "Fast, practical, and slightly distracted"),
-            (.chatty, "Sociable, expressive, and curious"),
-            (.cautious, "Careful and reserved"),
-            (.blunt, "Direct and terse"),
+            (.hurried, "Fast, clipped, visibly busy"),
+            (.chatty, "Talkative but tired and a little nosy"),
+            (.cautious, "Guarded, skeptical, and reluctant"),
+            (.blunt, "Blunt, emotionally dry, and visibly impatient"),
         ]
 
         for (personality, expected) in expectedRules {
@@ -243,6 +257,18 @@ final class PromptBuilderTests: XCTestCase {
 
             XCTAssertTrue(guide.contains(expected), "Missing rule for \(personality)")
         }
+    }
+
+    func test_orderRoutingPrompts_enforceKioskFirst_andNoAlternativeForOtherMenus() {
+        let firstOrder = RealtimeMissionRoutingDecision.initialKioskRefusal.promptGuide
+        XCTAssertTrue(firstOrder.contains("first explicit attempt"))
+        XCTAssertTrue(firstOrder.contains("must be placed at the kiosk"))
+        XCTAssertTrue(firstOrder.contains("Do not ask what they want"))
+
+        let unavailable = RealtimeMissionRoutingDecision.unavailableMenuRefusal.promptGuide
+        XCTAssertTrue(unavailable.contains("unavailable ingredients"))
+        XCTAssertTrue(unavailable.contains("Do not offer, recommend, or ask about another"))
+        XCTAssertTrue(unavailable.contains("another ordering method"))
     }
 
     func test_legacyPrompt_keepsPersonalityTimingAboveWarmRapport() {

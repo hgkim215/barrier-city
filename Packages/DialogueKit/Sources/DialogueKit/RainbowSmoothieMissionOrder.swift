@@ -107,6 +107,7 @@ public enum RainbowSmoothieMissionOrder: Sendable {
 /// 접근 장벽 수용과 주문 슬롯 수집을 분리한 한 턴의 결정이다.
 public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
     case continueConversation
+    case rejectUnavailableItem
     case askItem
     case askQuantity
     case completeOrder
@@ -130,6 +131,20 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             - Never say or imply 주문 처리 중, 처리해 드릴게요, 접수됐어요, 주문 넣었어요,
               준비 중, 주문 완료, or any equivalent claim.
             """
+        case .rejectUnavailableItem:
+            """
+            ## Authoritative app state
+            - ORDER_COMPLETE=false
+            - DIFFERENT_MENU_ITEM_UNAVAILABLE=true
+            ## Required response action
+            - Refuse the requested item with one brief everyday reason, such as insufficient beans or
+              unavailable ingredients.
+            ## Boundaries
+            - Use exactly two short, natural Korean sentences.
+            - Do not offer, recommend, or ask about another menu item.
+            - Do not suggest the kiosk, counter service, another ordering method, or any next step.
+            - Do not apologize at length or imply that any order was placed.
+            """
         case .askItem:
             """
             ## Authoritative app state
@@ -140,7 +155,7 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             ## Required response action
             - Naturally acknowledge that you will take the order, then ask what drink they want.
             ## Boundaries and forbidden claims
-            - Ask only one short question.
+            - Use exactly two short sentences, with the second sentence asking only one short question.
             - Do not suggest the mission item, invent an item or quantity, or imply completion.
             - Never say or imply 주문 처리 중, 접수됐어요, 주문 넣었어요, 준비 중, or equivalent.
             - Keep the assigned personality in the wording; do not recite a stock phrase.
@@ -153,7 +168,7 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             - QUANTITY=missing
             - ORDER_COMPLETE=false
             ## Required response action
-            - Ask naturally how many cups they want, using one concise Korean question.
+            - React briefly, then ask naturally how many cups they want in the second sentence.
             ## Boundaries and forbidden claims
             - Do not ask for the drink again.
             - Do not invent a quantity.
@@ -174,7 +189,7 @@ public enum RainbowSmoothieOrderDecision: Equatable, Sendable {
             - Briefly confirm in natural spoken Korean that the one-cup Rainbow Smoothie order was accepted.
             - Say naturally that you will let the visitor know when the drink is ready, then close the exchange.
             ## Boundaries and forbidden claims
-            - Use one or two short sentences and vary the wording; do not recite a fixed script.
+            - Use exactly two short sentences and vary the wording; do not recite a fixed script.
             - Do not ask a question, offer another action, or reopen the kiosk issue.
             - Do not claim the drink is ready, hand it over, or tell the visitor to collect it yet.
             - Do not vaguely say the order is still being checked or may have failed. The order itself is
@@ -309,6 +324,11 @@ public struct RainbowSmoothieMissionProgress: Sendable {
         } else if RainbowSmoothieMissionOrder.mentionsDifferentItem(in: userTranscript) {
             hasMissionItem = false
             requestedQuantity = nil
+            return trace(
+                decision: .rejectUnavailableItem,
+                transcript: userTranscript,
+                previousState: previousState
+            )
         } else if hasMissionItem,
                   let quantity = RainbowSmoothieMissionOrder.requestedQuantity(in: userTranscript) {
             requestedQuantity = quantity

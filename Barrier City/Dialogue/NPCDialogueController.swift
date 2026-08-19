@@ -32,7 +32,7 @@ final class NPCDialogueController {
         /// 응답 생성이나 도구 후속 응답이 시작되지 않을 때 무한 대기를 끊는 시간.
         static let generationTimeout: TimeInterval = 30
         static let inactivityRapportPenalty: Float = 0.1
-        static let inactivityFarewell = "필요하시면 다시 불러 주세요."
+        static let inactivityFarewell = "그럼 전 일하러 갈게요. 필요하면 다시 부르세요."
     }
 
     // 화면에 보여줄 상태
