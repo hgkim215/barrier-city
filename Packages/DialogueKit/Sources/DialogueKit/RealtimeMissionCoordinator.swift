@@ -97,7 +97,7 @@ public struct RealtimeMissionCoordinator: Sendable {
     private var orderToolWasProposed = false
     private var orderToolArgumentsWereValid: Bool?
 
-    public init(personality _: ClerkPersonality = .hurried) {}
+    public init() {}
 
     public mutating func resetImmersiveProgress() {
         hasMissionItem = false

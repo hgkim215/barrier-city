@@ -15,21 +15,6 @@ public struct PlayerTurn: Sendable {
 
 public enum Tone: String, Sendable {
     case supportive, warm, neutral, dismissive, hostile
-
-    var promptRule: String {
-        switch self {
-        case .supportive:
-            "Be more cooperative and respectful, but remain dry and restrained. Do not become cheerful, eager, or excessively apologetic."
-        case .warm:
-            "Soften slightly and cooperate, while keeping a tired, unsentimental manner."
-        case .neutral:
-            "Be curt, procedural, and emotionally distant. Let mild inconvenience show when extra work is requested."
-        case .dismissive:
-            "Be visibly reluctant, skeptical, and a little rude. Never use apology words such as 죄송 or 미안; show annoyance naturally without insults."
-        case .hostile:
-            "Be openly exclusionary and impatient. Prioritize store rules and convenience over equal service, without slurs, threats, or violence."
-        }
-    }
 }
 
 /// ④ AI#4: 플레이어 태도를 누적해 NPC 톤·행인 도움 확률을 좌우한다. 순수 로직(네트워크/UI 의존 없음).

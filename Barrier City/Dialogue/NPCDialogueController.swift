@@ -93,7 +93,7 @@ final class NPCDialogueController {
         let initialClimate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = resolvedPersonality
-        realtimeMission = RealtimeMissionCoordinator(personality: resolvedPersonality)
+        realtimeMission = RealtimeMissionCoordinator()
         climate = initialClimate
         rapport = initialClimate.rapport
         tone = initialClimate.tone
