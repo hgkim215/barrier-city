@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 
 /// 충격음 재생기. 오디오 파일 없이 코드로 합성한 짧은 소리를 쓴다.
 ///  - bump: 단차를 넘을 때 나는 낮은 "쿵"(덜컹).
@@ -19,6 +20,15 @@ final class ImpactAudio {
 
     private let sampleRate: Double = 44_100
     private lazy var format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+
+    /// 호출 측이 같은 충격을 여러 프레임에 걸쳐 반복 통지해도(예: 단차 높이 격차가
+    /// 한 프레임에 다 흡수되지 않는 경우) 소리는 한 버퍼 길이만큼만 나게 막는 쿨다운.
+    /// 이게 없으면 매 프레임 재생 위치가 처음(4ms 어택)으로 되감겨 "덜덜덜"거리는
+    /// 버즈음으로 들린다.
+    private static let bumpCooldown: TimeInterval = 0.22
+    private static let thunkCooldown: TimeInterval = 0.14
+    private var lastBumpTime: TimeInterval = -.infinity
+    private var lastThunkTime: TimeInterval = -.infinity
 
     private init() {}
 
@@ -50,11 +60,17 @@ final class ImpactAudio {
 
     /// 단차 덜컹 소리.
     func playBump(intensity: Float) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastBumpTime >= Self.bumpCooldown else { return }
+        lastBumpTime = now
         play(bumpPlayer, buffer: bumpBuffer, intensity: intensity)
     }
 
     /// 충돌 소리.
     func playThunk(intensity: Float) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastThunkTime >= Self.thunkCooldown else { return }
+        lastThunkTime = now
         play(thunkPlayer, buffer: thunkBuffer, intensity: intensity)
     }
 

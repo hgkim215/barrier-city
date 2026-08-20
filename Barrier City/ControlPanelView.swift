@@ -10,6 +10,7 @@ struct ControlPanelView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
     @State private var immersiveError: String?
     @State private var isCafeTransitioning = false
+    @State private var isNPCConversationStarting = false
     @AppStorage(DevelopmentOptions.simulatorMicrophoneKey)
     private var simulatorMicrophoneEnabled = false
 
@@ -134,8 +135,16 @@ struct ControlPanelView: View {
 
             Button {
                 openWindow(id: "npc-dialogue-test")
+                Task { @MainActor in
+                    await startNPCConversationForDevelopment()
+                }
             } label: {
-                Label("NPC와 대화 시작하기", systemImage: "person.wave.2.fill")
+                Label(
+                    isNPCConversationInProgress
+                        ? "NPC 대화 내용 보기"
+                        : (isNPCConversationStarting ? "NPC 대화 준비 중…" : "NPC와 대화 시작하기"),
+                    systemImage: "person.wave.2.fill"
+                )
             }
             .buttonStyle(.borderedProminent)
             .tint(.purple)
@@ -147,7 +156,7 @@ struct ControlPanelView: View {
                     isCafeTransitioning = true
                     immersiveError = nil
                     defer { isCafeTransitioning = false }
-                    await enterCafeForDevelopment()
+                    _ = await enterCafeForDevelopment()
                 }
             } label: {
                 Label(isCafeTransitioning ? "카페 준비 중…" : "개발: 카페 바로 시작",
@@ -174,22 +183,6 @@ struct ControlPanelView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 #endif
 
-            if model.isImmersive {
-                VStack(spacing: 8) {
-                    Text("NPC: \(model.npcClerk.phase.rawValue)"
-                         + (model.npcClerk.lastPlayedAnimation.isEmpty
-                            ? "" : " · \(model.npcClerk.lastPlayedAnimation)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        ForEach(NPCAnimationCue.allCases, id: \.rawValue) { cue in
-                            Button(cue.rawValue) { model.npcClerk.playForTesting(cue) }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .font(.caption)
-                }
-            }
 #endif
 
             Divider()
@@ -272,7 +265,11 @@ struct ControlPanelView: View {
             .frame(width: 460)
         }
         .frame(width: 460, height: 720)
-        .disabled(model.immersiveSessionState.isTransitioning || isCafeTransitioning)
+        .disabled(
+            model.immersiveSessionState.isTransitioning
+                || isCafeTransitioning
+                || isNPCConversationStarting
+        )
     }
 
     private func strokeLabel(_ title: String, _ symbol: String) -> some View {
@@ -295,15 +292,15 @@ struct ControlPanelView: View {
     /// `openImmersiveSpace` 반환 직후에는 RealityView의 worldRoot가 아직 준비 중일 수 있어
     /// 제한 시간 동안 기다린 뒤 기존 SceneSwitcher 경로를 그대로 호출한다.
     @MainActor
-    private func enterCafeForDevelopment() async {
-        guard await openImmersiveSpaceIfNeeded() else { return }
+    private func enterCafeForDevelopment() async -> Bool {
+        guard await openImmersiveSpaceIfNeeded() else { return false }
 
         for _ in 0..<100 where model.worldRoot == nil {
             try? await Task.sleep(for: .milliseconds(100))
         }
         guard model.worldRoot != nil else {
             immersiveError = "몰입 공간은 열렸지만 카페 씬 준비가 지연되고 있습니다. 다시 눌러 주세요."
-            return
+            return false
         }
 
         if InteractionModel.shared.scene == .outdoor {
@@ -315,6 +312,48 @@ struct ControlPanelView: View {
         if InteractionModel.shared.scene != .indoor {
             immersiveError = InteractionModel.shared.transitionError
                 ?? "카페 실내로 전환하지 못했습니다."
+            return false
+        }
+        return true
+    }
+
+    /// 거리와 현재 퀘스트 진행도에 관계없이 개발 패널에서 실제 NPC 대화를 재현한다.
+    /// 미션 상태는 공개된 정상 액션 순서로 세 번째 단계까지 맞춘 뒤, 점원 상태 머신의
+    /// 개발 진입점만 호출하므로 Realtime 세션·자막·미션 이벤트 처리는 실플레이와 같다.
+    @MainActor
+    private func startNPCConversationForDevelopment() async {
+        guard !isNPCConversationStarting else { return }
+        if isNPCConversationInProgress { return }
+
+        isNPCConversationStarting = true
+        immersiveError = nil
+        defer { isNPCConversationStarting = false }
+
+        guard await enterCafeForDevelopment() else { return }
+
+        let guide = GuideFlowModel.shared
+        guide.reset()
+        guide.skipOnboarding()
+        guide.confirmMission()
+        guide.handleQuestEvent(.enteredIndoor)
+        guide.confirmMission()
+        guide.handleQuestEvent(.kioskFailed)
+        guide.confirmMission()
+
+        guard guide.allowsNPCOrderConversation,
+              model.npcClerk.startConversationForDevelopment() else {
+            immersiveError = "NPC가 아직 준비되지 않았습니다. 잠시 후 다시 눌러 주세요."
+            return
+        }
+    }
+
+    private var isNPCConversationInProgress: Bool {
+        if model.npcDialogue.isEncounterActive { return true }
+        switch model.npcClerk.phase {
+        case .greeting, .conversing:
+            return true
+        case .unavailable, .working, .orderAccepted:
+            return false
         }
     }
 

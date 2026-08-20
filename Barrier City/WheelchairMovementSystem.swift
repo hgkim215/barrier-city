@@ -46,11 +46,13 @@ struct WheelchairMovementSystem: System {
     private static let stepBlock: Float = 0.03
 
     // 덜컹/흔들림
+    // 감쇠비(damp / 2√spring)가 1 미만이면 언더댐프라 한 번의 킥에도 여러 번 출렁인다.
+    // bumpDamp/surgeDamp는 각각 ζ≈0.9로 맞춰 한 번의 충격에 한 번만 부드럽게 가라앉게 한다.
     private static let bumpSpring: Float = 110
-    private static let bumpDamp: Float = 7
+    private static let bumpDamp: Float = 19
     private static let bumpKick: Float = -1.6
     private static let surgeSpring: Float = 80
-    private static let surgeDamp: Float = 8
+    private static let surgeDamp: Float = 16
     private static let surgeGain: Float = 0.36
     /// 실제 조작에서 흔한 약 1.3m/s를 최대 충격 음량 기준으로 사용한다.
     /// 물리 안전 상한(maxSpeed=5)을 기준으로 하면 보통 속도의 충돌음이 지나치게 작다.
@@ -307,12 +309,20 @@ struct WheelchairMovementSystem: System {
                 // 지면 위/근처: 즉시 스냅 대신 부드럽게 따라가 미세 요철을 흡수.
                 let dy = g - motion.chairHeight
                 if dy > Self.stepBlock {
-                    motion.bumpVelocity = Self.bumpKick * 0.6
-                    ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                    // dy는 한 프레임에 다 흡수되지 않고 여러 프레임에 걸쳐 줄어들 수 있다.
+                    // 래치로 이 구간에서 사운드/킥을 한 번만 내보내 매 프레임 재발화를 막는다.
+                    if !motion.isBumpSettling {
+                        motion.isBumpSettling = true
+                        motion.bumpVelocity = Self.bumpKick * 0.6
+                        ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                    }
+                } else {
+                    motion.isBumpSettling = false
                 }
                 motion.chairHeight += dy * min(1, 18 * dt)
                 motion.fallVelocity = 0
             } else {
+                motion.isBumpSettling = false
                 motion.fallVelocity -= Self.fallGravityY * dt
                 motion.chairHeight += motion.fallVelocity * dt
                 let g = centerGround ?? -1000
@@ -350,7 +360,12 @@ struct WheelchairMovementSystem: System {
             // 법선 평균 → 경사(가끔 격자 구멍을 때려도 평균이라 매끈).
             var nSum = SIMD3<Float>(0, 0, 0)
             for h in [hRL, hRR, hFL, hFR, hC] { if let h { nSum += h.1 } }
-            let navg = simd_length(nSum) > 0.001 ? simd_normalize(nSum) : SIMD3<Float>(0, 1, 0)
+            let navgRaw = simd_length(nSum) > 0.001 ? simd_normalize(nSum) : SIMD3<Float>(0, 1, 0)
+            // 5점 공간 평균은 한 프레임 안의 격자 노이즈만 지운다. 겹치는 콜라이더나 메시
+            // 이음매 근처에서 매 프레임 다른 표면이 걸리는 시간축 떨림은 저역통과로 흡수한다.
+            let normalBlend = min(1, 18 * dt)
+            motion.groundNormal = simd_normalize(simd_mix(motion.groundNormal, navgRaw, SIMD3(repeating: normalBlend)))
+            let navg = motion.groundNormal
             let ny = max(navg.y, 0.15)
             let slopePitch = atan(-(navg.x * dirX + navg.z * dirZ) / ny) * Self.tiltGain
             let slopeRoll  = atan(-(navg.x * rightX + navg.z * rightZ) / ny) * Self.tiltGain

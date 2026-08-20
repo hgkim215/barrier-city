@@ -22,24 +22,8 @@
     "required": ["OPENAI_API_KEY"]
   },
 
-  // namespace_id는 Cloudflare 계정 전체에서 고유해야 한다. 기존 namespace와 겹치면
-  // 배포 전에 다른 양의 정수 문자열로 변경한다.
+  // namespace_id는 Cloudflare 계정 전체에서 고유해야 한다.
   "ratelimits": [
-    {
-      "name": "CHAT_RATE_LIMITER",
-      "namespace_id": "26081001",
-      "simple": { "limit": 30, "period": 60 }
-    },
-    {
-      "name": "TTS_RATE_LIMITER",
-      "namespace_id": "26081002",
-      "simple": { "limit": 20, "period": 60 }
-    },
-    {
-      "name": "EMBEDDINGS_RATE_LIMITER",
-      "namespace_id": "26081003",
-      "simple": { "limit": 20, "period": 60 }
-    },
     {
       "name": "REALTIME_RATE_LIMITER",
       "namespace_id": "26081004",

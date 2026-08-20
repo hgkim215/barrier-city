@@ -173,14 +173,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = H2WD8C55D7;
+				DEVELOPMENT_TEAM = PNDHN9YB2X;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=xrsimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "손으로 휠체어 바퀴를 잡고 굴리기 위해 손 추적을 사용합니다.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -193,8 +192,8 @@
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 7;
@@ -209,14 +208,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = H2WD8C55D7;
+				DEVELOPMENT_TEAM = PNDHN9YB2X;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=xrsimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "손으로 휠체어 바퀴를 잡고 굴리기 위해 손 추적을 사용합니다.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "휠체어 이용자와의 음성 대화를 위해 마이크를 사용합니다.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "음성을 텍스트로 변환해 NPC와 대화하기 위해 음성 인식을 사용합니다.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "몰입 공간에서 주변 공간을 인식하기 위해 사용합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -229,8 +227,8 @@
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 7;

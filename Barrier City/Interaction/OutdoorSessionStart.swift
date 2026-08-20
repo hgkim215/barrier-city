@@ -18,7 +18,9 @@ enum OutdoorSessionStart {
         doorCenter: SIMD2<Float>,
         cafeCenter: SIMD2<Float>,
         fallbackDoorCenter: SIMD2<Float>,
-        groundHalfExtent: Float,
+        groundMinimum: SIMD2<Float>,
+        groundMaximum: SIMD2<Float>,
+        preferredDistance: Float,
         safetyMargin: Float
     ) -> SIMD2<Float> {
         var outward = doorCenter - cafeCenter
@@ -30,29 +32,13 @@ enum OutdoorSessionStart {
         }
         outward = simd_normalize(outward)
 
-        let safeExtent = max(0, groundHalfExtent - max(0, safetyMargin))
-        let clampedDoor = SIMD2<Float>(
-            max(-safeExtent, min(safeExtent, doorCenter.x)),
-            max(-safeExtent, min(safeExtent, doorCenter.y)))
-        guard clampedDoor == doorCenter else { return clampedDoor }
-
-        var exitDistance: Float?
-        if abs(outward.x) > 0.000001 {
-            let boundary = outward.x > 0 ? safeExtent : -safeExtent
-            let candidate = (boundary - doorCenter.x) / outward.x
-            if candidate >= 0 {
-                exitDistance = candidate
-            }
-        }
-        if abs(outward.y) > 0.000001 {
-            let boundary = outward.y > 0 ? safeExtent : -safeExtent
-            let candidate = (boundary - doorCenter.y) / outward.y
-            if candidate >= 0 {
-                exitDistance = min(exitDistance ?? candidate, candidate)
-            }
-        }
-        guard let exitDistance else { return clampedDoor }
-        return doorCenter + outward * exitDistance
+        let margin = max(0, safetyMargin)
+        let safeMinimum = groundMinimum + margin
+        let safeMaximum = groundMaximum - margin
+        let target = doorCenter + outward * max(0, preferredDistance)
+        return SIMD2<Float>(
+            max(safeMinimum.x, min(safeMaximum.x, target.x)),
+            max(safeMinimum.y, min(safeMaximum.y, target.y)))
     }
 
     nonisolated static func pose(

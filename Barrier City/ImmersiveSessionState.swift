@@ -69,3 +69,14 @@ struct ImmersiveSessionState: Equatable {
         return true
     }
 }
+
+/// generation별 초기화를 정확히 한 번만 허용하고 늦게 도착한 이전 generation을 거른다.
+struct ImmersiveGenerationResetGate: Equatable {
+    private(set) var latestResetGeneration: Int?
+
+    mutating func shouldReset(for generation: Int) -> Bool {
+        guard generation > (latestResetGeneration ?? 0) else { return false }
+        latestResetGeneration = generation
+        return true
+    }
+}

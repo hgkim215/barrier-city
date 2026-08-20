@@ -94,6 +94,14 @@ enum SceneSwitcher {
         app.motion.positionZ = layout.spawn.y
         app.motion.heading = layout.heading
         app.motion.collisionShapeCount = prepared.collisionShapeCount
+        // restart()가 chairHeight를 0으로 되돌리지만, 실내는 아직 자체 바닥 콜리전이 없어
+        // 상주하는 Outdoor 접지 fallback 높이를 그대로 쓴다(위 prepareIndoorScene 주석 참고).
+        // 재동기화하지 않으면 첫 프레임들에서 0과 실제 접지 높이 사이 격차가 커서 단차 보정이
+        // 반복 트리거되며 "덜덜덜" 소리와 시각적 튐이 났다.
+        if let groundHeight = im.outdoorGroundLayout?.height {
+            app.motion.chairHeight = groundHeight
+            app.motion.groundHeight = groundHeight
+        }
 
         im.scene = .indoor
         im.visibleMap = prepared.visible
