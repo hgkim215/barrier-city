@@ -26,6 +26,8 @@ final class AppModel {
     /// 테스트 창과 몰입 공간이 서로 다른 호감도/대화를 갖는 문제를 방지한다.
     let npcDialogue: NPCDialogueController
     let npcClerk: NPCClerkController
+    /// 배경으로 돌아다니는 손님 NPC들. 대화가 없는 순수 동선 담당이라 npcClerk와 분리했다.
+    let npcGuests = NPCGuestCoordinator()
     /// 주행 물리 상태는 입력·앱 수명 상태와 분리해 MovementSystem의 변경 범위를 제한한다.
     let motion = WheelchairMotionState()
     /// 캐릭터 캡슐 전체 높이(m). 바닥 접지 = 중심.y - charHeight/2.

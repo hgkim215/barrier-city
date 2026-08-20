@@ -84,6 +84,7 @@ enum SceneSwitcher {
                                      im.isCurrentTransition(token)
                                  })
         guard im.isCurrentTransition(token) else { return }
+        app.npcGuests.enterIndoor(worldRoot: worldRoot, indoorMap: prepared.visible)
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y

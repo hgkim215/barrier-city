@@ -51,6 +51,7 @@ enum InteractionSetup {
         im.dismissedTriggerID = nil
         im.transitionError = nil
         appModel.npcClerk.tearDownForOutdoor()
+        appModel.npcGuests.tearDownForOutdoor()
 
         // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.
         if let panel = attachments.entity(for: "entryPrompt") {
@@ -175,6 +176,10 @@ enum InteractionSetup {
         }
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+        app.npcGuests.update(deltaTime: deltaTime,
+                             appModel: app,
+                             isOrdering: isNearKiosk,
+                             kioskCenter: isNearKiosk ? im.activeTrigger?.center : nil)
     }
 
     /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).
