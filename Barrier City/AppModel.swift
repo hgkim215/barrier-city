@@ -38,6 +38,14 @@ final class AppModel {
     /// 캐릭터 캡슐(다른 그룹)을 바닥으로 오인하지 않게 한다.
     static let groundGroup = CollisionGroup(rawValue: 1 << 5)
 
+    /// 손님 NPC/Barista 몸통 콜리전 그룹(Entity.applyNPCBodyCollision에서 코드로 직접
+    /// 부여). Indoor.usda에 RealityKit.Collider로 authoring된 값은 SceneEntityPreparation
+    /// 의 removePhysics()가 씬 로드 시 재귀적으로 걷어내 런타임에 전혀 반영되지 않는다.
+    /// 접지 판정(groundY/groundHit)에는 절대 섞지 않는다 — 섞으면 NPC 몸통을 바닥으로
+    /// 오인해 높이가 튈 수 있다. 벽 감지(wallDistance)에만 groundGroup과 함께 마스크로 써서
+    /// NPC도 막히게 한다.
+    static let npcGroup = CollisionGroup(rawValue: 1)
+
     /// 시점(눈) 높이 보정. 바닥+휠체어를 이만큼 위로 올려 체감 눈높이를 낮춘다.
     /// 0 = 바닥을 실제 바닥에 맞춤(앉아서 테스트 시 자연스러움).
     /// 서서 테스트해서 시야가 너무 높으면 0.3~0.5 정도로.

@@ -40,17 +40,19 @@ final class NPCGuestCoordinator {
         static let minimumSpawnSeparation: Float = 2.0
     }
 
-    private struct Spec {
-        let entityName: String
+    /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
+    /// 손님 6명은 코드에서 entity.clone(recursive:)로 이 원본을 복제해 만든다 —
+    /// usda에 직접 6개의 중복 def 블록을 추가하는 대신 단일 소스를 유지한다.
+    /// 콜리전은 원본 authoring과 무관하게 place()에서 매번 코드로 부여한다
+    /// (Entity.applyNPCBodyCollision 참고).
+    private struct GenderGroup {
+        let templateName: String
+        let displayNames: [String]
     }
 
-    private static let specs: [Spec] = [
-        Spec(entityName: "Guest_Female_1"),
-        Spec(entityName: "Guest_Female_2"),
-        Spec(entityName: "Guest_Female_3"),
-        Spec(entityName: "Guest_Male_1"),
-        Spec(entityName: "Guest_Male_2"),
-        Spec(entityName: "Guest_Male_3"),
+    private static let genderGroups: [GenderGroup] = [
+        GenderGroup(templateName: "Female", displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3"]),
+        GenderGroup(templateName: "MaleIdle", displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3"]),
     ]
 
     private var guests: [NPCGuestController] = []
@@ -71,13 +73,20 @@ final class NPCGuestCoordinator {
         guard let floorArea else { return }
 
         var spawnedPositions: [SIMD2<Float>] = []
-        for spec in Self.specs {
-            guard let entity = indoorMap.findEntity(named: spec.entityName) else { continue }
-            let guest = NPCGuestController(name: spec.entityName)
-            let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
-            spawnedPositions.append(spawn)
-            guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-            guests.append(guest)
+        for group in Self.genderGroups {
+            guard let template = indoorMap.findEntity(named: group.templateName) else { continue }
+            for (index, displayName) in group.displayNames.enumerated() {
+                // 첫 번째 손님은 원본 엔티티를 그대로 쓰고(place()가 removeFromParent로
+                // 떼어간다), 나머지는 원본을 복제한다. 복제를 먼저 해야 원본이 아직
+                // indoorMap에 붙어 있어 clone()이 콜리전을 포함한 컴포넌트를 그대로 상속한다.
+                let entity = index == 0 ? template : template.clone(recursive: true)
+                entity.name = displayName
+                let guest = NPCGuestController(name: displayName)
+                let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
+                spawnedPositions.append(spawn)
+                guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
+                guests.append(guest)
+            }
         }
     }
 

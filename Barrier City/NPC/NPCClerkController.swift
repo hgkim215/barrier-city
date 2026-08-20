@@ -256,6 +256,7 @@ final class NPCClerkController {
             bubble.position = [0, headHeight + NPCClerkTuning.dialogueHeadroom, 0]
             bubble.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
+        barista.applyNPCBodyCollision(group: AppModel.npcGroup)
         worldRoot.addChild(locomotion)
 
         locomotionRoot = locomotion

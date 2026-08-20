@@ -151,9 +151,11 @@ struct WheelchairMovementSystem: System {
                     let off = Self.bodyHalfWidth * fraction
                     let ox = fromX + px * off, oz = fromZ + pz * off
                     raycastCount += 1
+                    // NPC 콜리전(npcGroup)도 벽처럼 막되, 접지 판정용 groundGroup 레이는
+                    // 그대로 두어 NPC 몸통이 바닥으로 오인되지 않게 한다.
                     let hits = scene.raycast(origin: [ox, baseY + Self.wallRayY, oz],
                                              direction: [dxn, 0, dzn], length: dist,
-                                             query: .all, mask: AppModel.groundGroup)
+                                             query: .all, mask: [AppModel.groundGroup, AppModel.npcGroup])
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
                     for hit in hits where abs(hit.normal.y) < 0.5 {
                         let hitDistance = simd_distance(hit.position, SIMD3<Float>(ox, baseY + Self.wallRayY, oz))

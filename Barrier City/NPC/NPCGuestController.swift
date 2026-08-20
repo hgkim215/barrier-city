@@ -52,6 +52,8 @@ final class NPCGuestController {
         let bounds = entity.visualBounds(relativeTo: modelAlignment)
         modelAlignment.position = [-bounds.center.x, -bounds.min.y, -bounds.center.z]
 
+        entity.applyNPCBodyCollision(group: AppModel.npcGroup)
+
         worldRoot.addChild(locomotion)
         locomotionRoot = locomotion
         modelEntity = entity

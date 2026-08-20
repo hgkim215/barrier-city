@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["MaleIdle", "Female", "Barista", "WayPoint", "Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["Barista", "WayPoint", "Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -4951,170 +4951,6 @@ def Xform "Root"
         }
     }
 
-    def "Guest_Female_1" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Female/FemaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "Guest_Female_2" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Female/FemaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "Guest_Female_3" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Female/FemaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "Guest_Male_1" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Male/MaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Male/MaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "Guest_Male_2" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Male/MaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Male/MaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "Guest_Male_3" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Male/MaleIdle.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Male/MaleWalk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-    }
-
-    def "WayPoint" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @WayPoint.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (0.2, 0.2, 0.4)
-        float3 xformOp:translate = (6.524315, 0.5974773, 4.26385)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-
     def "Female" (
         active = true
         customData = {
@@ -5125,17 +4961,17 @@ def Xform "Root"
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
         float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (-1.8104781, 0, 4.4703484e-8)
+        float3 xformOp:translate = (0, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def RealityKitComponent "AnimationLibrary"
         {
             token info:id = "RealityKit.AnimationLibrary"
 
-            def RealityKitAnimationFile "FemaleWalk"
+            def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "FemaleWalk"
+                uniform string name = "Walk"
             }
         }
 
@@ -5170,18 +5006,18 @@ def Xform "Root"
     )
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.6, 1.6, 1.6)
-        float3 xformOp:translate = (-0.9748006, 4.0978193e-8, -0.4242318)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        float3 xformOp:translate = (0, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def RealityKitComponent "AnimationLibrary"
         {
             token info:id = "RealityKit.AnimationLibrary"
 
-            def RealityKitAnimationFile "MaleWalk"
+            def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @NPC/Male/MaleWalk.usdz@
-                uniform string name = "MaleWalk"
+                uniform string name = "Walk"
             }
         }
 
@@ -5204,5 +5040,20 @@ def Xform "Root"
             }
         }
     }
+
+    def "WayPoint" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @WayPoint.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (0.2, 0.2, 0.4)
+        float3 xformOp:translate = (6.524315, 0.5974773, 4.26385)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
 }
 
