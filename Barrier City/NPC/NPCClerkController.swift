@@ -44,6 +44,11 @@ enum NPCClerkTuning {
     static let workPauseRange: ClosedRange<Float> = 1.2...4.0
     /// 너무 짧은 이동을 반복하지 않도록 새 목적지와 현재 위치 사이에 두는 최소 거리.
     static let minimumRoamDistance: Float = 0.75
+    /// 가구 회피 레이 폭 방향 샘플 간격(콜리전 박스 절반 폭과 대략 맞춘다).
+    static let bodyHalfWidth: Float = 0.2
+    /// 원하는 이동 폭 대비 실제로 이동 가능한 폭이 이 비율보다 작으면 "막혔다"로
+    /// 보고 현재 업무 목적지를 버려 벽/가구 앞에서 제자리걸음하지 않게 한다.
+    static let blockedStepFraction: Float = 0.15
     /// AreaK 경계나 가구에 캐릭터가 겹치지 않도록 안쪽으로 줄이는 여백.
     static let workAreaMargin: Float = 0.45
     /// BarTable의 고객 쪽 경계에서 직원 구역 안/고객 쪽으로 떨어지는 거리.
@@ -308,7 +313,7 @@ final class NPCClerkController {
             break
 
         case .working:
-            updateWorkLoop(deltaTime: dt)
+            updateWorkLoop(deltaTime: dt, playerPosition: player)
 
         case .greeting, .conversing:
             if playerDistance > NPCClerkTuning.conversationExitRadius {
@@ -319,7 +324,7 @@ final class NPCClerkController {
             }
 
         case .orderAccepted:
-            updateWorkLoop(deltaTime: dt)
+            updateWorkLoop(deltaTime: dt, playerPosition: player)
         }
 
     }
@@ -452,7 +457,7 @@ final class NPCClerkController {
         return SIMD2(root.position.x, root.position.z)
     }
 
-    private func updateWorkLoop(deltaTime: Float) {
+    private func updateWorkLoop(deltaTime: Float, playerPosition: SIMD2<Float>) {
         if workPauseRemaining > 0 {
             workPauseRemaining = max(0, workPauseRemaining - deltaTime)
             playAnimation(.idle)
@@ -466,7 +471,7 @@ final class NPCClerkController {
             return
         }
         playAnimation(.walk)
-        if move(toward: workTarget, deltaTime: deltaTime) {
+        if move(toward: workTarget, deltaTime: deltaTime, playerPosition: playerPosition) {
             self.workTarget = nil
             workPauseRemaining = randomWorkPause()
             playAnimation(.idle)
@@ -493,7 +498,8 @@ final class NPCClerkController {
     }
 
     @discardableResult
-    private func move(toward target: SIMD2<Float>, deltaTime: Float) -> Bool {
+    private func move(toward target: SIMD2<Float>, deltaTime: Float,
+                      playerPosition: SIMD2<Float>) -> Bool {
         guard conversationAnchor == nil,
               let root = locomotionRoot else { return false }
         let current = SIMD2<Float>(root.position.x, root.position.z)
@@ -506,10 +512,23 @@ final class NPCClerkController {
         }
 
         let direction = delta / distance
-        let step = min(distance, NPCClerkTuning.moveSpeed * deltaTime)
+        let desiredStep = min(distance, NPCClerkTuning.moveSpeed * deltaTime)
+        var step = desiredStep
+        if let scene = root.scene {
+            step = NPCObstacleAvoidance.allowedStep(
+                scene: scene,
+                from: SIMD3(current.x, 0, current.y),
+                direction: SIMD3(direction.x, 0, direction.y),
+                desiredStep: desiredStep,
+                halfWidth: NPCClerkTuning.bodyHalfWidth,
+                playerPosition: playerPosition)
+        }
         root.position.x += direction.x * step
         root.position.z += direction.y * step
         face(direction: direction, deltaTime: deltaTime)
+        if step < desiredStep * NPCClerkTuning.blockedStepFraction {
+            workTarget = nil
+        }
         return step >= distance
     }
 
