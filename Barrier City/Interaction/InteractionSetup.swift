@@ -147,6 +147,10 @@ enum InteractionSetup {
                 isGuideLocked: true)
             updatePanel(im)
             app.npcClerk.setGuideInteractionLocked(true)
+            // 퀘스트 확인 패널이 떠 있는 동안(대화 시작은 allowsNPCOrderConversation이
+            // 별도로 막는다)에도 NPC는 계속 움직여야 카페가 살아있는 느낌이 든다.
+            app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+            app.npcGuests.update(deltaTime: deltaTime, appModel: app, isOrdering: false, kioskCenter: nil)
             return
         }
         guard !im.isTransitioning else { return }
