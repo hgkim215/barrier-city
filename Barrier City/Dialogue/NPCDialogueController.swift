@@ -113,7 +113,7 @@ final class NPCDialogueController {
         self.orderSession = orderSession
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = resolvedPersonality
-        realtimeMission = RealtimeMissionCoordinator(personality: resolvedPersonality)
+        realtimeMission = RealtimeMissionCoordinator()
         climate = initialClimate
         rapport = initialClimate.rapport
         tone = initialClimate.tone
