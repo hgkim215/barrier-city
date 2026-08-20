@@ -135,6 +135,10 @@ final class NPCGuestCoordinator {
 
         let playerPosition = SIMD2(appModel.motion.positionX, appModel.motion.positionZ)
         let orderedQueuers = queuerIndices.sorted()
+        // 프레임 시작 시 스냅샷을 만들어 업데이트 순서에 따라 뒤쪽 NPC만 더 강하게
+        // 반응하는 편향을 없앤다.
+        let positions = guests.map(\.currentPosition)
+        let anchors = guests.map(\.crowdAnchor)
 
         for (index, guest) in guests.enumerated() {
             var slot: SIMD2<Float>?
@@ -143,11 +147,20 @@ final class NPCGuestCoordinator {
                 slot = queueSlot(kioskCenter: kioskCenter, playerPosition: playerPosition, rank: rank + 1)
                 facing = kioskCenter
             }
+            let neighboringPositions = positions.enumerated().compactMap {
+                $0.offset == index ? nil : $0.element
+            }
+            let occupiedAnchors = anchors.enumerated().compactMap {
+                $0.offset == index ? nil : $0.element
+            }
             guest.update(deltaTime: deltaTime,
                         wanderArea: floorArea,
                         exclusions: exclusionAreas,
                         queueSlot: slot,
-                        facing: facing)
+                        facing: facing,
+                        playerPosition: playerPosition,
+                        neighboringPositions: neighboringPositions,
+                        occupiedAnchors: occupiedAnchors)
         }
     }
 
