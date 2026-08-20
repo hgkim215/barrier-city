@@ -134,7 +134,9 @@ struct WheelchairMovementSystem: System {
                               baseY: Float) -> Float? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
                 var nearest: Float?
-                for fraction: Float in [-1, -0.5, 0, 0.5, 1] {
+                // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
+                // 빠지지 않도록 폭 방향 샘플을 5개에서 9개로 촘촘히 한다.
+                for fraction: Float in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1] {
                     let off = Self.bodyHalfWidth * fraction
                     let ox = fromX + px * off, oz = fromZ + pz * off
                     raycastCount += 1
