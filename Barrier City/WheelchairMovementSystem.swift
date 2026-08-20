@@ -91,6 +91,17 @@ struct WheelchairMovementSystem: System {
             let motion = model.motion
             if GuideFlowModel.shared.isInteractionLocked {
                 model.discardGuideLockedInput()
+                // 잠금 중에도 실제 바닥 높이로 부드럽게 정착시킨다. 그렇지 않으면 씬 전환 때
+                // 잠시 빌려온 높이(outdoor 접지 fallback 등)로 굳어 카페 진입 직후 미션 확인
+                // 전까지 휠체어가 공중에 떠 보인다.
+                let hits = scene.raycast(origin: [motion.positionX, 4, motion.positionZ],
+                                         direction: [0, -1, 0], length: 8,
+                                         query: .nearest, mask: AppModel.groundGroup)
+                if let ground = hits.first {
+                    let dy = ground.position.y - motion.chairHeight
+                    motion.chairHeight += dy * min(1, 18 * dt)
+                    motion.groundHeight = ground.position.y
+                }
                 Self.applyWorld(worldRoot, model: model)
                 return
             }
