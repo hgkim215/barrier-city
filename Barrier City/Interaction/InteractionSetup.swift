@@ -53,6 +53,8 @@ enum InteractionSetup {
         appModel.npcClerk.tearDownForOutdoor()
         appModel.npcGuests.tearDownForOutdoor()
 
+        SceneFadeOverlay.shared.install(content: content)
+
         // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.
         if let panel = attachments.entity(for: "entryPrompt") {
             panel.isEnabled = false
@@ -128,6 +130,7 @@ enum InteractionSetup {
 
     /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치·빌보드.
     private static func tick(deltaTime: Float) {
+        SceneFadeOverlay.shared.update(deltaTime: deltaTime)
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
         let guide = GuideFlowModel.shared
