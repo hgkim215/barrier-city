@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Door", "DirectionalLight", "DirectionalLight_1", "Barista", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["MaleIdle", "Female", "Barista", "WayPoint", "Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -4930,6 +4930,25 @@ def Xform "Root"
                 uniform string name = "Walk"
             }
         }
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.38, 0.3, 0.99804723)
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                    float3 position = (4.4703484e-8, 5.5879354e-8, 0.49902344)
+                }
+            }
+        }
     }
 
     def "WayPoint" (
@@ -4937,13 +4956,103 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        prepend references = @WayPoint.usdz@
+        references = @WayPoint.usdz@
     )
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
         float3 xformOp:scale = (0.2, 0.2, 0.4)
         float3 xformOp:translate = (6.524315, 0.5974773, 4.26385)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def "Female" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @NPC/Female/FemaleIdle.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        float3 xformOp:translate = (-1.8104781, 0, 4.4703484e-8)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "FemaleWalk"
+            {
+                uniform asset file = @NPC/Female/FemaleWalk.usdz@
+                uniform string name = "FemaleWalk"
+            }
+        }
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.38, 0.3, 0.9980468)
+                float height = 0.18945347
+                float radius = 0.4990234
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                    float3 position = (0, 1.6391277e-7, 0.49902335)
+                }
+            }
+        }
+    }
+
+    def "MaleIdle" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        prepend references = @NPC/Male/MaleIdle.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.6, 1.6, 1.6)
+        float3 xformOp:translate = (-0.9748006, 4.0978193e-8, -0.4242318)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "MaleWalk"
+            {
+                uniform asset file = @NPC/Male/MaleWalk.usdz@
+                uniform string name = "MaleWalk"
+            }
+        }
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.38, 0.3, 0.9995116)
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                    float3 position = (4.4703484e-8, 1.6018748e-7, 0.4997558)
+                }
+            }
+        }
     }
 }
 
