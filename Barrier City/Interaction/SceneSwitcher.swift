@@ -145,6 +145,7 @@ enum SceneSwitcher {
         oldCollision.removeFromParent()
 
         GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)
+        BackgroundMusicController.shared.startIndoorLoop(worldRoot: worldRoot)
         didCommit = true
 
         // 손님 NPC가 Idle/Walk을 시작하고 휠체어가 실제 바닥 높이로 정착할 짧은 여유를

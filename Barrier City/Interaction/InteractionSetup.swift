@@ -52,6 +52,7 @@ enum InteractionSetup {
         im.transitionError = nil
         appModel.npcClerk.tearDownForOutdoor()
         appModel.npcGuests.tearDownForOutdoor()
+        BackgroundMusicController.shared.stopIndoorLoop()
 
         SceneFadeOverlay.shared.install(content: content)
 

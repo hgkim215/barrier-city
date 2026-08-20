@@ -224,6 +224,7 @@ struct ImmersiveView: View {
             QuestSetup.stop()
             model.npcClerk.tearDownForOutdoor()
             model.npcGuests.tearDownForOutdoor()
+            BackgroundMusicController.shared.stopIndoorLoop()
             ImpactAudio.shared.stop()
             handTracker.clearModelInput(model: model)
             InteractionModel.shared.tearDown()
