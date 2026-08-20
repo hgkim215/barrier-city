@@ -4895,62 +4895,6 @@ def Xform "Root"
         }
     }
 
-    def "Barista" (
-        active = true
-        customData = {
-            float3 rotationEulerHint = (-1.5707964, 0, 0)
-        }
-        references = @NPC/Barista/Default.usdz@
-    )
-    {
-        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (-0.19872952, 0, 0.47981215)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-        def RealityKitComponent "AnimationLibrary"
-        {
-            token info:id = "RealityKit.AnimationLibrary"
-
-            def RealityKitAnimationFile "Greet"
-            {
-                uniform asset file = @NPC/Barista/Greet.usdz@
-                uniform string name = "Greet"
-            }
-
-            def RealityKitAnimationFile "Angry"
-            {
-                uniform asset file = @NPC/Barista/Angry.usdz@
-                uniform string name = "Angry"
-            }
-
-            def RealityKitAnimationFile "Walk"
-            {
-                uniform asset file = @NPC/Barista/Walk.usdz@
-                uniform string name = "Walk"
-            }
-        }
-
-        def RealityKitComponent "Collider"
-        {
-            uint group = 1
-            uniform token info:id = "RealityKit.Collider"
-            uint mask = 4294967295
-            token type = "Default"
-
-            def RealityKitStruct "Shape"
-            {
-                float3 extent = (0.38, 0.3, 0.99804723)
-                token shapeType = "Box"
-
-                def RealityKitStruct "pose"
-                {
-                    float3 position = (4.4703484e-8, 5.5879354e-8, 0.49902344)
-                }
-            }
-        }
-    }
-
     def "Female" (
         active = true
         customData = {
@@ -4972,6 +4916,24 @@ def Xform "Root"
             {
                 uniform asset file = @NPC/Female/FemaleWalk.usdz@
                 uniform string name = "Walk"
+            }
+
+            def RealityKitAnimationFile "Sitting"
+            {
+                uniform asset file = @NPC/Male/Sitting.usdz@
+                uniform string name = "Sitting"
+            }
+
+            def RealityKitAnimationFile "Sit_to_Stand"
+            {
+                uniform asset file = @NPC/Male/Sit to Stand.usdz@
+                uniform string name = "Sit to Stand"
+            }
+
+            def RealityKitAnimationFile "Angry"
+            {
+                uniform asset file = @NPC/Male/Angry.usdz@
+                uniform string name = "Angry"
             }
         }
 
@@ -5002,22 +4964,42 @@ def Xform "Root"
         customData = {
             float3 rotationEulerHint = (-1.5707964, 0, 0)
         }
-        prepend references = @NPC/Male/MaleIdle.usdz@
+        references = @NPC/Male/MaleIdle.usdz@
     )
     {
         quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
-        float3 xformOp:scale = (1.5, 1.5, 1.5)
-        float3 xformOp:translate = (0, 0, 0)
+        float3 xformOp:scale = (1.6, 1.6, 1.6)
+        float3 xformOp:translate = (-0.82972836, 2.9802322e-8, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def RealityKitComponent "AnimationLibrary"
         {
+            reorder nameChildren = ["Walk", "Angry", "Sit_to_Stand", "Sitting", "x"]
             token info:id = "RealityKit.AnimationLibrary"
 
             def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @NPC/Male/MaleWalk.usdz@
                 uniform string name = "Walk"
+            }
+
+            def RealityKitAnimationFile "Sit_to_Stand"
+            {
+                uniform asset file = @NPC/Male/Sit to Stand.usdz@
+                uniform bool looping = 1
+                uniform string name = "Sit to Stand"
+            }
+
+            def RealityKitAnimationFile "Sitting"
+            {
+                uniform asset file = @NPC/Male/Sitting.usdz@
+                uniform string name = "Sitting"
+            }
+
+            def RealityKitAnimationFile "Angry"
+            {
+                uniform asset file = @NPC/Male/Angry.usdz@
+                uniform string name = "Angry"
             }
         }
 
@@ -5055,5 +5037,66 @@ def Xform "Root"
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
+    def "Barista" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @NPC/Barista/Default.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        float3 xformOp:translate = (-0.19872952, 0, 0.47981215)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "Greet"
+            {
+                uniform asset file = @NPC/Barista/Greet.usdz@
+                uniform string name = "Greet"
+            }
+
+            def RealityKitAnimationFile "Walk"
+            {
+                uniform asset file = @NPC/Barista/Walk.usdz@
+                uniform string name = "Walk"
+            }
+
+            def RealityKitAnimationFile "Work"
+            {
+                uniform asset file = @NPC/Barista/Work.usdz@
+                uniform string name = "Work"
+            }
+
+            def RealityKitAnimationFile "Angry"
+            {
+                uniform asset file = @NPC/Male/Angry.usdz@
+                uniform string name = "Angry"
+            }
+        }
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.38, 0.3, 0.99804723)
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                    float3 position = (4.4703484e-8, 5.5879354e-8, 0.49902344)
+                }
+            }
+        }
+    }
 }
 
