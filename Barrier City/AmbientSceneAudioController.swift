@@ -21,16 +21,11 @@ final class AmbientSceneAudioController {
     private var audioEntity: Entity?
     private var playback: AudioPlaybackController?
     private var loadTask: Task<Void, Never>?
-    /// AudioSessionCoordinator는 앱의 모든 AVAudioSession 활성화를 직렬화한다. 이걸 잡지
-    /// 않으면 세션이 다른 곳(예: 휠체어 충돌음)에서 처음 활성화되기 전까지 RealityKit
-    /// 오디오가 로드는 되지만 실제로는 들리지 않는다 — 튜토리얼을 넘기기 전까지는
-    /// 휠체어가 전혀 움직이지 않아 충돌음도 안 나서, 마치 배경음이 퀘스트 진행에
-    /// 묶인 것처럼 보였다.
     private var hasAudioSessionClaim = false
 
     private init() {}
 
-    /// 씬 진입 시 호출(Outdoor: 세션 시작, Indoor: switchToIndoor 커밋 시점).
+    /// 몰입 공간이 열릴 때(Outdoor) 또는 Indoor로 전환될 때 호출.
     /// 이미 같은 트랙이 재생 중이면 아무 것도 하지 않고, 다른 트랙이 재생 중이었다면
     /// 먼저 멈춘 뒤 새로 시작한다.
     func play(resource resourceName: String, worldRoot: Entity) {
@@ -53,10 +48,10 @@ final class AmbientSceneAudioController {
         audioEntity = entity
 
         loadTask = Task { [weak self] in
-            let resource = try? await AudioFileResource(
+            guard let resource = try? await AudioFileResource(
                 contentsOf: url,
-                configuration: .init(shouldLoop: true))
-            guard let self, let resource, self.audioEntity === entity else { return }
+                configuration: .init(shouldLoop: true)) else { return }
+            guard let self, self.audioEntity === entity else { return }
             let controller = entity.playAudio(resource)
             controller.gain = -60
             controller.fade(to: Tuning.targetGain, duration: Tuning.fadeInDuration)

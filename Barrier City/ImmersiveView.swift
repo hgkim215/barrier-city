@@ -61,6 +61,7 @@ struct ImmersiveView: View {
             worldRoot.components.set(WheelchairComponent())
             content.add(worldRoot)
             model.worldRoot = worldRoot
+            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
 
             do {
                 let outdoorVisible = try await Entity(

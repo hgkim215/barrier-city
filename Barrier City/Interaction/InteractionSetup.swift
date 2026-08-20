@@ -64,7 +64,6 @@ enum InteractionSetup {
 
         // 키오스크와 NPC attachment는 기존대로 맵과 함께 움직인다.
         if let worldRoot = appModel.worldRoot {
-            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
             if let kiosk = attachments.entity(for: "kioskScreen") {
                 kiosk.isEnabled = false
                 worldRoot.addChild(kiosk)
