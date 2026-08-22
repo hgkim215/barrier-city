@@ -419,12 +419,12 @@ def Xform "Root" (
 
     def Xform "DirectionalLight" (
         customData = {
-            float3 rotationEulerHint = (-1.6099541, 2.3823581e-7, -2.4775215e-7)
+            float3 rotationEulerHint = (-1.4791523, 2.3956312e-7, -2.4935113e-7)
         }
     )
     {
-        quatf xformOp:orient = (0.69312775, -0.7208147, 1.7185562e-7, 0)
-        float3 xformOp:translate = (0, 8.7248955, 0)
+        quatf xformOp:orient = (0.7387543, -0.6739749, 1.7251733e-7, -1.1374846e-8)
+        float3 xformOp:translate = (4.768372e-7, 8.921253, 3.424544)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def RealityKitComponent "DirectionalLight"
