@@ -91,6 +91,17 @@ struct WheelchairMovementSystem: System {
             let motion = model.motion
             if GuideFlowModel.shared.isInteractionLocked {
                 model.discardGuideLockedInput()
+                // 잠금 중에도 실제 바닥 높이로 부드럽게 정착시킨다. 그렇지 않으면 씬 전환 때
+                // 잠시 빌려온 높이(outdoor 접지 fallback 등)로 굳어 카페 진입 직후 미션 확인
+                // 전까지 휠체어가 공중에 떠 보인다.
+                let hits = scene.raycast(origin: [motion.positionX, 4, motion.positionZ],
+                                         direction: [0, -1, 0], length: 8,
+                                         query: .nearest, mask: AppModel.groundGroup)
+                if let ground = hits.first {
+                    let dy = ground.position.y - motion.chairHeight
+                    motion.chairHeight += dy * min(1, 18 * dt)
+                    motion.groundHeight = ground.position.y
+                }
                 Self.applyWorld(worldRoot, model: model)
                 return
             }
@@ -134,16 +145,37 @@ struct WheelchairMovementSystem: System {
                               baseY: Float) -> Float? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
                 var nearest: Float?
-                for fraction: Float in [-1, -0.5, 0, 0.5, 1] {
+                // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
+                // 빠지지 않도록 폭 방향 샘플을 5개에서 9개로 촘촘히 한다.
+                for fraction: Float in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1] {
                     let off = Self.bodyHalfWidth * fraction
                     let ox = fromX + px * off, oz = fromZ + pz * off
                     raycastCount += 1
-                    let hits = scene.raycast(origin: [ox, baseY + Self.wallRayY, oz],
+                    let logicalOrigin = SIMD3<Float>(ox, baseY + Self.wallRayY, oz)
+                    let logicalDirection = SIMD3<Float>(dxn, 0, dzn)
+                    let hits = scene.raycast(origin: logicalOrigin,
                                              direction: [dxn, 0, dzn], length: dist,
                                              query: .all, mask: AppModel.groundGroup)
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
                     for hit in hits where abs(hit.normal.y) < 0.5 {
-                        let hitDistance = simd_distance(hit.position, SIMD3<Float>(ox, baseY + Self.wallRayY, oz))
+                        let hitDistance = simd_distance(hit.position, logicalOrigin)
+                        nearest = min(nearest ?? hitDistance, hitDistance)
+                    }
+
+                    // 환경 콜리전은 고정된 논리 맵 좌표에 있지만 NPC는 렌더링용
+                    // worldRoot 아래에서 사용자 위치의 역변환을 함께 받는다. 같은 origin으로
+                    // 두 그룹을 쏘면 NPC가 이동할수록 좌표가 어긋나므로 별도로 변환한다.
+                    let mapToScene = worldRoot.transformMatrix(relativeTo: nil)
+                    let sceneOrigin4 = mapToScene * SIMD4(logicalOrigin, 1)
+                    let sceneDirection4 = mapToScene * SIMD4(logicalDirection, 0)
+                    let sceneOrigin = SIMD3(sceneOrigin4.x, sceneOrigin4.y, sceneOrigin4.z)
+                    let sceneDirection = simd_normalize(
+                        SIMD3(sceneDirection4.x, sceneDirection4.y, sceneDirection4.z))
+                    let npcHits = scene.raycast(origin: sceneOrigin,
+                                                direction: sceneDirection, length: dist,
+                                                query: .all, mask: AppModel.npcGroup)
+                    for hit in npcHits {
+                        let hitDistance = simd_distance(hit.position, sceneOrigin)
                         nearest = min(nearest ?? hitDistance, hitDistance)
                     }
                 }

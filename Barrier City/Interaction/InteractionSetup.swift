@@ -52,6 +52,9 @@ enum InteractionSetup {
         im.transitionError = nil
         appModel.rainbowSmoothieServing.resetForOutdoor()
         appModel.npcClerk.tearDownForOutdoor()
+        appModel.npcGuests.tearDownForOutdoor()
+
+        SceneFadeOverlay.shared.install(content: content)
 
         // 1) 문 선택 패널은 사용자 기준 content root에 두어 문과 분리한다.
         if let panel = attachments.entity(for: "entryPrompt") {
@@ -128,6 +131,7 @@ enum InteractionSetup {
 
     /// 매 프레임: 판정 → activeTrigger 갱신 → 패널 표시·배치·빌보드.
     private static func tick(deltaTime: Float) {
+        SceneFadeOverlay.shared.update(deltaTime: deltaTime)
         guard let app = AppModel.current else { return }
         let im = InteractionModel.shared
         let guide = GuideFlowModel.shared
@@ -144,6 +148,10 @@ enum InteractionSetup {
                 isGuideLocked: true)
             updatePanel(im)
             app.npcClerk.setGuideInteractionLocked(true)
+            // 퀘스트 확인 패널이 떠 있는 동안(대화 시작은 allowsNPCOrderConversation이
+            // 별도로 막는다)에도 NPC는 계속 움직여야 카페가 살아있는 느낌이 든다.
+            app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+            app.npcGuests.update(deltaTime: deltaTime, appModel: app, isOrdering: false, kioskCenter: nil)
             return
         }
         guard !im.isTransitioning else { return }
@@ -176,6 +184,10 @@ enum InteractionSetup {
         }
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+        app.npcGuests.update(deltaTime: deltaTime,
+                             appModel: app,
+                             isOrdering: isNearKiosk,
+                             kioskCenter: isNearKiosk ? im.activeTrigger?.center : nil)
     }
 
     /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).

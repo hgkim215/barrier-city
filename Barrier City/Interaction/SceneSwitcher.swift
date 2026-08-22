@@ -40,6 +40,13 @@ enum SceneSwitcher {
         guard im.isCurrentTransition(token), im.scene == .outdoor,
               let app = AppModel.current, let worldRoot = app.worldRoot else { return }
 
+        // 애셋 로드·정착이 끝날 때까지 화면을 가려 준비 과정을 자연스럽게 숨긴다.
+        // 실패로 중간에 빠져나가는 경로는 여기서 바로 되돌리고, 성공 경로는 NPC가
+        // 움직이기 시작한 뒤 fadeIn을 호출한다(아래 didCommit 처리부 참고).
+        SceneFadeOverlay.shared.fadeOut()
+        var didCommit = false
+        defer { if !didCommit { SceneFadeOverlay.shared.fadeIn() } }
+
         // 1) 새 시각·콜리전 엔티티를 기존 장면 밖에서 모두 준비한다. 이 구간에서는
         //    현재 맵, 플레이어 포즈, 인터랙션 상태를 전혀 변경하지 않는다.
         let prepared: PreparedIndoorScene
@@ -89,6 +96,7 @@ enum SceneSwitcher {
             smoothie: prepared.smoothie,
             in: prepared.visible)
         app.rainbowSmoothieServing.enterIndoor()
+        app.npcGuests.enterIndoor(worldRoot: worldRoot, indoorMap: prepared.visible)
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y
@@ -142,6 +150,14 @@ enum SceneSwitcher {
         oldCollision.removeFromParent()
 
         GuideFlowModel.shared.handleQuestEvent(.enteredIndoor)
+        AmbientSceneAudioController.shared.play(resource: "background_music_indoor", worldRoot: worldRoot)
+        didCommit = true
+
+        // 손님 NPC가 Idle/Walk을 시작하고 휠체어가 실제 바닥 높이로 정착할 짧은 여유를
+        // 준 뒤에 화면을 밝힌다. 씬이 "짠" 하고 정적으로 나타나지 않게 하기 위함이다.
+        try? await Task.sleep(for: .seconds(0.3))
+        guard im.isCurrentTransition(token) else { return }
+        SceneFadeOverlay.shared.fadeIn()
     }
 
     /// 모든 실패 가능 작업을 현재 장면과 분리된 엔티티에서 끝낸다.
