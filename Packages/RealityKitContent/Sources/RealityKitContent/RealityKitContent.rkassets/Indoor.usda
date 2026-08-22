@@ -4847,7 +4847,7 @@ def Xform "Root"
         {
             float3 color = (1, 0.84486926, 0.69660586)
             token info:id = "RealityKit.DirectionalLight"
-            float intensity = 4000
+            float intensity = 3000
 
             def RealityKitStruct "Shadow"
             {

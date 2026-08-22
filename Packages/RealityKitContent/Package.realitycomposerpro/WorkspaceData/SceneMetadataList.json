@@ -609,7 +609,27 @@
       [
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
+        "Indoor",
+        "Furnitures",
+        "Speaker"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
+        "Root",
         "wall"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
+        "Root",
+        "Indoor"
       ],
       {
         "isExpanded" : true,
@@ -706,6 +726,16 @@
         "Root",
         "collision",
         "Cube_6"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
+        "Root",
+        "Indoor",
+        "Furnitures"
       ],
       {
         "isExpanded" : true,
