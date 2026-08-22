@@ -624,7 +624,6 @@ final class NPCClerkController {
         switch dialogue.lastMissionEvent {
         case .orderPlaced:
             GuideFlowModel.shared.handleQuestEvent(.npcHelpDone)
-            smoothieServing.acceptOrder()
             pendingOrderConversationEnd = true
             finishAcceptedOrderPresentationIfReady()
         case .exited:
