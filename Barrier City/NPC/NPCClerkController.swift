@@ -116,6 +116,7 @@ final class NPCClerkController {
     private(set) var isTalkAvailable = false
 
     let dialogue: NPCDialogueController
+    private let smoothieServing: RainbowSmoothieServingController
 
     @ObservationIgnored private var locomotionRoot: Entity?
     @ObservationIgnored private var baristaEntity: Entity?
@@ -141,8 +142,12 @@ final class NPCClerkController {
     /// 개발 패널에서 시작한 세션은 사용자가 NPC 반경 밖에 있어도 종료하지 않는다.
     private var isRemoteDevelopmentConversation = false
 
-    init(dialogue: NPCDialogueController) {
+    init(
+        dialogue: NPCDialogueController,
+        smoothieServing: RainbowSmoothieServingController
+    ) {
         self.dialogue = dialogue
+        self.smoothieServing = smoothieServing
     }
 
     /// ImmersiveView가 생성될 때 attachment를 맵 루트에 한 번 연결한다.
@@ -156,9 +161,12 @@ final class NPCClerkController {
 
     func setGuideInteractionLocked(_ locked: Bool) {
         isGuideInteractionLocked = locked
-        interactionBubble?.isEnabled = isInteractionBubbleVisible
-            && !locked
-            && GuideFlowModel.shared.allowsNPCOrderConversation
+        interactionBubble?.isEnabled = dialogue.orderReadyAnnouncementPresentation
+            .interactionAttachmentIsVisible(
+                isNormallyVisible: isInteractionBubbleVisible,
+                isGuideLocked: locked,
+                allowsConversation: GuideFlowModel.shared.allowsNPCConversation
+            )
         if locked { isTalkAvailable = false }
     }
 
@@ -274,6 +282,8 @@ final class NPCClerkController {
     /// SceneEvents.Update에서 호출한다. Entity.move를 매 프레임 재시작하지 않고
     /// deltaTime 기반으로 직접 보간해 일정한 속도로 움직인다.
     func update(deltaTime rawDeltaTime: Float, appModel: AppModel) {
+        dialogue.deliverPendingOrderReadyAnnouncementIfPossible()
+
         guard phase != .unavailable, locomotionRoot != nil else {
             interactionBubble?.isEnabled = false
             isTalkAvailable = false
@@ -304,9 +314,12 @@ final class NPCClerkController {
             return
         }
 
-        isTalkAvailable = (phase == .working || phase == .orderAccepted)
-            && playerDistance <= NPCClerkTuning.detectionRadius
-            && GuideFlowModel.shared.allowsNPCOrderConversation
+        isTalkAvailable = NPCConversationAccessPolicy.canOfferTalk(
+            clerkPhaseAllowsConversation: phase == .working || phase == .orderAccepted,
+            isPlayerNear: playerDistance <= NPCClerkTuning.detectionRadius,
+            guideAllowsConversation: GuideFlowModel.shared.allowsNPCConversation,
+            isDialogueBusy: dialogue.isBusy,
+            isReadyAnnouncementBlocking: dialogue.blocksConversationForOrderReadyAnnouncement)
 
         switch phase {
         case .unavailable:
@@ -332,7 +345,12 @@ final class NPCClerkController {
     /// Barista 위의 공간 버튼에서 호출한다. 자동 근접 인사 대신 사용자의 명시적인
     /// 선택으로만 대화를 시작해 NPC가 갑자기 말을 거는 느낌을 없앤다.
     func startConversation() {
-        guard isTalkAvailable else { return }
+        guard isTalkAvailable,
+              !dialogue.isBusy,
+              !dialogue.blocksConversationForOrderReadyAnnouncement else {
+            isTalkAvailable = false
+            return
+        }
         _ = beginGreeting(isRemoteDevelopmentConversation: false)
     }
 
@@ -559,8 +577,9 @@ final class NPCClerkController {
 
     @discardableResult
     private func beginGreeting(isRemoteDevelopmentConversation: Bool) -> Bool {
-        guard phase == .working || phase == .orderAccepted,
-              GuideFlowModel.shared.allowsNPCOrderConversation else { return false }
+        guard NPCConversationAccessPolicy.canBeginGreeting(
+            clerkPhaseAllowsConversation: phase == .working || phase == .orderAccepted,
+            guideAllowsConversation: GuideFlowModel.shared.allowsNPCConversation) else { return false }
         // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
         self.isRemoteDevelopmentConversation = isRemoteDevelopmentConversation
         conversationAnchor = currentClerkPosition
@@ -722,9 +741,12 @@ final class NPCClerkController {
 
     private func setInteractionBubbleVisible(_ visible: Bool) {
         isInteractionBubbleVisible = visible
-        interactionBubble?.isEnabled = visible
-            && !isGuideInteractionLocked
-            && GuideFlowModel.shared.allowsNPCOrderConversation
+        interactionBubble?.isEnabled = dialogue.orderReadyAnnouncementPresentation
+            .interactionAttachmentIsVisible(
+                isNormallyVisible: visible,
+                isGuideLocked: isGuideInteractionLocked,
+                allowsConversation: GuideFlowModel.shared.allowsNPCConversation
+            )
     }
 
 }

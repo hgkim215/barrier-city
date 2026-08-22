@@ -2,18 +2,18 @@ import SwiftUI
 
 struct ExperienceGuideView: View {
     let model: GuideFlowModel
+    let serving: RainbowSmoothieServingController?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: GuideFlowModel) {
+    init(model: GuideFlowModel = .shared, serving: RainbowSmoothieServingController? = nil) {
         self.model = model
-    }
-
-    @MainActor
-    init() {
-        self.init(model: .shared)
+        self.serving = serving
     }
 
     var body: some View {
+        let activeServing = serving ?? AppModel.current?.rainbowSmoothieServing
+        let remainingSeconds = activeServing?.remainingPreparationSeconds ?? 0
+
         Group {
             switch model.phase {
             case .introduction:
@@ -38,17 +38,22 @@ struct ExperienceGuideView: View {
                 MissionListView(
                     steps: QuestModel.shared.steps,
                     visibleCount: model.visibleMissionCount,
-                    allCompleted: false
+                    allCompleted: false,
+                    remainingPreparationSeconds: remainingSeconds
                 )
             case .postOrderPending:
-                // 음료 준비 알림·수령·착석 UI가 구현될 때 이 상태에 연결한다.
-                EmptyView()
+                MissionListView(
+                    steps: QuestModel.shared.steps,
+                    visibleCount: model.visibleMissionCount,
+                    allCompleted: false,
+                    remainingPreparationSeconds: remainingSeconds
+                )
             case .completionAnnouncement:
                 ExperienceCompletionView(onConfirm: model.confirmCompletion)
             case .completed:
                 MissionListView(
                     steps: QuestModel.shared.steps,
-                    visibleCount: 3,
+                    visibleCount: model.visibleMissionCount,
                     allCompleted: true
                 )
             }

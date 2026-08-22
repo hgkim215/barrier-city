@@ -28,7 +28,8 @@ public struct RealtimeConversationGuide: Sendable {
     public func instructions(
         persona: NPCPersona,
         climate: SocialClimate,
-        memory: ConversationMemory? = nil
+        memory: ConversationMemory? = nil,
+        fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed
     ) -> String {
         let memorySection = memory.map { """
         # Conversation memory
@@ -66,6 +67,9 @@ public struct RealtimeConversationGuide: Sendable {
         about the item do not qualify. The app exposes place_mission_order only on a response where local transcript
         evidence indicates an explicit one-cup order. Even then, never claim the order was placed until the function
         result says success. Once ORDER_PLACED is true, do not place it again.
+
+        # App-owned fulfillment state
+        \(fulfillmentContext.promptGuide)
 
         \(memorySection)
         """

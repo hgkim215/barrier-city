@@ -121,6 +121,7 @@ struct ImmersiveView: View {
                 chairRoot.orientation = simd_quatf(angle: Self.chairYaw, axis: [0, 1, 0])
                 chairRoot.position = SIMD3(Self.chairOffset.x, 0, Self.chairOffset.z)
                 content.add(chairRoot)
+                model.characterBody = chairRoot
 
                 // 뒷바퀴 노드를 찾아 굴림 대상으로 보관(X축이 축 → X축 회전이 굴림).
                 let wl = chair.findEntity(named: "Roda_Traseira_L")
@@ -204,7 +205,7 @@ struct ImmersiveView: View {
             }
             // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
-                ExperienceGuideView()
+                ExperienceGuideView(model: .shared, serving: model.rainbowSmoothieServing)
             }
             // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
             Attachment(id: "npcInteraction") {
@@ -223,6 +224,7 @@ struct ImmersiveView: View {
                 return
             }
             QuestSetup.stop()
+            model.rainbowSmoothieServing.resetForOutdoor()
             model.npcClerk.tearDownForOutdoor()
             model.npcGuests.tearDownForOutdoor()
             AmbientSceneAudioController.shared.stop()
@@ -243,6 +245,18 @@ struct ImmersiveView: View {
                 await handTracker.start(model: model)
             }
         }
+        .gesture(
+            SpatialTapGesture()
+                .targetedToAnyEntity()
+                .onEnded { value in
+                    let target = value.entity
+                    guard let app = AppModel.current else { return }
+                    if let smoothie = app.rainbowSmoothiePresenter.smoothieEntity,
+                       target.isDescendant(of: smoothie) {
+                        app.pickupSmoothieIfReady()
+                    }
+                }
+        )
     }
 
     // MARK: - Helpers
@@ -288,4 +302,15 @@ struct ImmersiveView: View {
         }
     }
 
+}
+
+private extension Entity {
+    func isDescendant(of ancestor: Entity) -> Bool {
+        var current: Entity? = self
+        while let c = current {
+            if c === ancestor { return true }
+            current = c.parent
+        }
+        return false
+    }
 }

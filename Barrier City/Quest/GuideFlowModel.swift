@@ -20,6 +20,7 @@ final class GuideFlowModel {
     var isInteractionLocked: Bool { state.isInteractionLocked }
     var placement: GuidePlacement { state.placement }
     var visibleMissionCount: Int { state.visibleMissionCount }
+    var allowsNPCConversation: Bool { state.allowsNPCConversation }
     var allowsNPCOrderConversation: Bool { state.allowsNPCOrderConversation }
 
     func reset() {
@@ -32,7 +33,13 @@ final class GuideFlowModel {
     func previousTutorial() { apply(.previousTutorial) }
     func nextTutorial() { apply(.nextTutorial) }
     func skipOnboarding() { apply(.skipOnboarding) }
-    func confirmMission() { apply(.confirmMission) }
+    func confirmMission() {
+        let currentPhase = state.phase
+        apply(.confirmMission)
+        if case .missionAnnouncement(let index) = currentPhase, index == 3 {
+            AppModel.current?.rainbowSmoothieServing.acceptOrder()
+        }
+    }
     func confirmCompletion() { apply(.confirmCompletion) }
 
     func handleQuestEvent(_ event: QuestEvent) {

@@ -47,7 +47,7 @@ enum GuideContent {
     static let missions = [
         MissionNarrative(
             situation: "음료 한 잔이 마시고 싶다.\n앞에 보이는 카페로 들어가자.",
-            action: "휠체어를 이동하여 카페 입구로 이동하세요."
+            action: "휠체어를 조작하여 카페 내부로 들어가세요."
         ),
         MissionNarrative(
             situation: "이번에 신상으로 나온\n‘레인보우 마카롱 스무디’가 마시고 싶다.",
@@ -56,6 +56,18 @@ enum GuideContent {
         MissionNarrative(
             situation: "키오스크 화면이 너무 높아\n혼자 주문하기 어렵다.",
             action: "직원에게 직접 도움을 요청해 보세요."
+        ),
+        MissionNarrative(
+            situation: "직원이 주문을 접수하고 음료 제조를 시작했다.\n음료가 준비될 때까지 잠시 대기하자.",
+            action: "음료 제조가 완료될 때까지 카운터 앞에서 대기하세요."
+        ),
+        MissionNarrative(
+            situation: "주문한 음료가 카운터 위에 준비되었다.\n직원이 음료를 호출했다.",
+            action: "카운터 위의 쟁반에 놓인 레인보우 마카롱 스무디를 터치하여 수령하세요."
+        ),
+        MissionNarrative(
+            situation: "음료를 무사히 수령했다.\n휠체어로 편하게 머무를 수 있는 지정 좌석으로 이동하자.",
+            action: "파란색 WayPoint 마커가 표시된 지정 테이블 좌석으로 이동하세요."
         ),
     ]
 }
