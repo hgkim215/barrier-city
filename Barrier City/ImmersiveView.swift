@@ -121,6 +121,7 @@ struct ImmersiveView: View {
                 chairRoot.orientation = simd_quatf(angle: Self.chairYaw, axis: [0, 1, 0])
                 chairRoot.position = SIMD3(Self.chairOffset.x, 0, Self.chairOffset.z)
                 content.add(chairRoot)
+                model.characterBody = chairRoot
 
                 // 뒷바퀴 노드를 찾아 굴림 대상으로 보관(X축이 축 → X축 회전이 굴림).
                 let wl = chair.findEntity(named: "Roda_Traseira_L")

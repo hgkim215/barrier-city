@@ -63,14 +63,30 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
         smoothiePosition.y += anchorPosition.y - scaledBounds.min.y
         smoothie.setPosition(smoothiePosition, relativeTo: indoorMap)
 
-        // 탭 인터랙션을 위한 충돌체 및 인풋 타깃 설정
-        let collisionShape = ShapeResource.generateBox(
-            size: SIMD3<Float>(0.35, 0.45, 0.35)
-        )
-        smoothie.components.set(CollisionComponent(shapes: [collisionShape]))
-        smoothie.components.set(InputTargetComponent(allowedInputTypes: .all))
+        setupInteractivity(for: smoothie)
 
         return true
+    }
+
+    private func setupInteractivity(for smoothie: Entity) {
+        smoothie.generateCollisionShapes(recursive: true)
+
+        let localBounds = smoothie.visualBounds(relativeTo: smoothie)
+        if RainbowSmoothiePlacement.hasFiniteOrderedBounds(minimum: localBounds.min, maximum: localBounds.max) {
+            let boxShape = ShapeResource.generateBox(
+                size: SIMD3<Float>(localBounds.extents.x * 1.4, localBounds.extents.y * 1.4, localBounds.extents.z * 1.4)
+            ).offsetBy(translation: localBounds.center)
+            smoothie.components.set(CollisionComponent(shapes: [boxShape], isStatic: true))
+        }
+
+        func applyInputTargetRecursively(_ e: Entity) {
+            e.components.set(InputTargetComponent(allowedInputTypes: .all))
+            e.components.set(HoverEffectComponent())
+            for child in e.children {
+                applyInputTargetRecursively(child)
+            }
+        }
+        applyInputTargetRecursively(smoothie)
     }
 
     func revealAtCounter() -> Bool {
