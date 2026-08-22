@@ -295,24 +295,25 @@ struct ControlPanelView: View {
     private func enterCafeForDevelopment() async -> Bool {
         guard await openImmersiveSpaceIfNeeded() else { return false }
 
-        for _ in 0..<100 where model.worldRoot == nil {
+        let im = InteractionModel.shared
+        for _ in 0..<200 where !im.isInitialSceneReady || model.worldRoot == nil {
             try? await Task.sleep(for: .milliseconds(100))
         }
-        guard model.worldRoot != nil else {
-            immersiveError = "몰입 공간은 열렸지만 카페 씬 준비가 지연되고 있습니다. 다시 눌러 주세요."
+        guard model.worldRoot != nil, im.isInitialSceneReady else {
+            immersiveError = "몰입 공간은 열렸지만 초기 장면 준비가 지연되고 있습니다. 다시 눌러 주세요."
             return false
         }
 
-        if InteractionModel.shared.scene == .outdoor {
+        if im.scene == .outdoor {
             SceneSwitcher.requestIndoorTransition()
-            for _ in 0..<100 where InteractionModel.shared.isTransitioning {
+            for _ in 0..<200 where im.isTransitioning {
                 try? await Task.sleep(for: .milliseconds(100))
             }
         } else {
             SceneSwitcher.resetIndoorPose(app: model)
         }
-        if InteractionModel.shared.scene != .indoor {
-            immersiveError = InteractionModel.shared.transitionError
+        if im.scene != .indoor {
+            immersiveError = im.transitionError
                 ?? "카페 실내로 전환하지 못했습니다."
             return false
         }

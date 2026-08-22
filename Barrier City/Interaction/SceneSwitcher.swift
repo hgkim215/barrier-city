@@ -55,7 +55,10 @@ enum SceneSwitcher {
     private static func switchToIndoor(token: SceneTransitionToken) async {
         let im = InteractionModel.shared
         guard im.isCurrentTransition(token), im.scene == .outdoor,
-              let app = AppModel.current, let worldRoot = app.worldRoot else { return }
+              let app = AppModel.current, let worldRoot = app.worldRoot else {
+            im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
+            return
+        }
 
         // 애셋 로드·정착이 끝날 때까지 화면을 가려 준비 과정을 자연스럽게 숨긴다.
         // 실패로 중간에 빠져나가는 경로는 여기서 바로 되돌리고, 성공 경로는 NPC가
@@ -70,6 +73,7 @@ enum SceneSwitcher {
         do {
             prepared = try await prepareIndoorScene()
         } catch is CancellationError {
+            im.transitionError = "장면 전환이 취소되었습니다."
             return
         } catch {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
@@ -84,6 +88,7 @@ enum SceneSwitcher {
               let oldVisible = im.visibleMap,
               let oldCollision = im.collisionMap,
               let collisionParent = oldCollision.parent else {
+            im.transitionError = "장면 구성 준비가 완료되지 않았습니다. 잠시 후 다시 시도해 주세요."
             return
         }
 
