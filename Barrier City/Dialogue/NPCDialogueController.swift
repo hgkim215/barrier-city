@@ -6,56 +6,9 @@
 //
 
 import Foundation
-@preconcurrency import AVFoundation
 import OSLog
 import DialogueKit
 import DialogueKitOpenAI
-
-@MainActor
-final class OrderReadySpeaker: NSObject, AVSpeechSynthesizerDelegate {
-    private let synthesizer = AVSpeechSynthesizer()
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    override init() {
-        super.init()
-        synthesizer.delegate = self
-    }
-
-    func speak(text: String) async {
-        try? AudioSessionCoordinator.shared.acquire(.playback)
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "ko-KR")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        await withCheckedContinuation { cont in
-            self.continuation = cont
-            self.synthesizer.speak(utterance)
-        }
-        AudioSessionCoordinator.shared.release(.playback)
-    }
-
-    func stop() {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
-        continuation?.resume()
-        continuation = nil
-        AudioSessionCoordinator.shared.release(.playback)
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.continuation?.resume()
-            self.continuation = nil
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            self.continuation?.resume()
-            self.continuation = nil
-        }
-    }
-}
 
 @MainActor
 @Observable
@@ -132,7 +85,7 @@ final class NPCDialogueController {
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
     private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
-    private let orderReadySpeaker = OrderReadySpeaker()
+    private var orderReadyRealtimeSession: RealtimeNPCConversationSession?
     /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
     private var encounterCount = 0
 
@@ -225,13 +178,15 @@ final class NPCDialogueController {
         guard orderReadyAnnouncementTask == nil else { return }
         orderReadyAnnouncementTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let session = RealtimeNPCConversationSession()
+            self.orderReadyRealtimeSession = session
             let didComplete = await OrderReadyAnnouncementPresentationTiming.perform(
                 present: {
                     self.status = .speaking
                     self.npcSubtitle = OrderReadyAnnouncementContent.line
                 },
                 speak: {
-                    await self.orderReadySpeaker.speak(text: OrderReadyAnnouncementContent.line)
+                    await self.speakRealtimeOrderReadyAnnouncement(session: session)
                 },
                 waitForMinimumVisibility: {
                     try await Task.sleep(
@@ -239,16 +194,69 @@ final class NPCDialogueController {
                     )
                 }
             )
+            await session.stop()
+            self.orderReadyRealtimeSession = nil
             guard didComplete else { return }
             self.status = .idle
             self.orderReadyAnnouncementTask = nil
         }
     }
 
+    private func speakRealtimeOrderReadyAnnouncement(session: RealtimeNPCConversationSession) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var hasResumed = false
+            let resumeOnce: @MainActor () -> Void = {
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume()
+                }
+            }
+
+            Task { @MainActor in
+                do {
+                    try await session.start(
+                        instructions: """
+                        당신은 친절한 카페 바리스타 점원입니다.
+                        손님이 주문한 음료가 완성되었음을 카운터 너머로 밝고 명확하게 안내하세요.
+                        """,
+                        openingInstructions: """
+                        오직 다음 한 문장만 정확하고 밝게 외쳐서 말하세요:
+                        주문하신 레인보우 스무디 나왔습니다. 카운터에서 가져가 주세요.
+                        """,
+                        tools: []
+                    ) { [weak self] event in
+                        guard let self else { return }
+                        switch event {
+                        case .outputTranscriptDone(let text):
+                            self.npcSubtitle = text
+                        case .outputAudioStopped, .responseDone:
+                            resumeOnce()
+                        case .failure:
+                            resumeOnce()
+                        default:
+                            break
+                        }
+                    }
+                } catch {
+                    resumeOnce()
+                }
+            }
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(6))
+                resumeOnce()
+            }
+        }
+    }
+
     /// ImmersiveSpace가 실제로 닫히는 순간 네트워크 연결과 대화 문맥을 폐기한다.
     /// 미션·호감도 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
     func endImmersiveSession() {
-        orderReadySpeaker.stop()
+        let readySession = orderReadyRealtimeSession
+        orderReadyRealtimeSession = nil
+        Task { @MainActor in
+            await readySession?.stop()
+        }
         orderReadyAnnouncementTask?.cancel()
         orderReadyAnnouncementTask = nil
         orderReadyAnnouncementGate.reset()
