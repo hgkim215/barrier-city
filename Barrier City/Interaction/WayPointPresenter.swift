@@ -8,10 +8,10 @@ final class WayPointPresenter {
 
     /// 지정 좌석 목적지 좌표 (Indoor 맵 좌표계 - 카페 창가 테이블 앞 좌석 공간)
     static let destinationPosition = SIMD3<Float>(2.2, 0.02, -1.6)
-    /// 도착 판정 반경 (WayPoint 에셋 원형 마커 내부 진입 시에만 판정: 0.45m)
-    static let arrivalRadius: Float = 0.45
-    /// WayPoint 기본 스케일
-    static let baseScale: Float = 0.12
+    /// 도착 판정 반경 (자연스러운 휠체어 진입 허용 반경: 0.85m)
+    static let arrivalRadius: Float = 0.85
+    /// WayPoint 기본 스케일 (직경 약 0.93m)
+    static let baseScale: Float = 0.15
 
     var isInstalled: Bool {
         waypointEntity != nil && waypointEntity?.parent != nil
