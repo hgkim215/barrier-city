@@ -79,8 +79,8 @@ struct RainbowSmoothiePresenterRuntimeTests {
         }
         expect(smoothie.parent === lapAnchor, "smoothie rests on wheelchair tray anchor")
         expectNear(lapAnchor.position.x, 0.0, "tray is horizontally centered on wheelchair")
-        expectNear(lapAnchor.position.y, 0.45, "tray sits at seated lap height")
-        expectNear(lapAnchor.position.z, -0.38, "tray is in front of the rider")
+        expectNear(lapAnchor.position.y, 0.58, "tray sits at eye-level lap height")
+        expectNear(lapAnchor.position.z, -0.48, "tray is placed forward in front of rider")
 
         // WayPoint 프레젠터 테스트
         let waypoint = try Entity.load(

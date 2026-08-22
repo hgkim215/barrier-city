@@ -4,6 +4,7 @@ import RealityKit
 final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
     private(set) var smoothieEntity: Entity?
     private var servingAnchor: Entity?
+    private var authoredOrientation: simd_quatf = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
 
     var isInstalled: Bool {
         smoothieEntity != nil && servingAnchor?.parent != nil
@@ -16,6 +17,7 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
               let barTable = indoorMap.findEntity(named: ImmersiveSceneCatalog.barTable) else {
             return false
         }
+        authoredOrientation = smoothie.orientation
 
         let barBounds = barTable.visualBounds(relativeTo: indoorMap)
         let posEntity = indoorMap.findEntity(named: "Payment")
@@ -114,7 +116,7 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
 
         smoothieEntity.removeFromParent()
         smoothieEntity.position = .zero
-        smoothieEntity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+        smoothieEntity.orientation = authoredOrientation
         lapAnchor.addChild(smoothieEntity)
         smoothieEntity.isEnabled = true
 

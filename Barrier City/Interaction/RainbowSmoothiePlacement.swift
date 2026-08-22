@@ -6,8 +6,8 @@ enum ServingPlacementTuning {
     static let counterDepthFraction: Float = 0.174
     static let surfaceClearance: Float = 0.01
     static let targetSmoothieHeight: Float = 0.28
-    /// 휠체어 탑승자 무릎/시야 하단 앞쪽 쟁반 로컬 위치 (X: 중앙, Y: 무릎 위, Z: 몸 앞쪽)
-    static let wheelchairTrayPosition = SIMD3<Float>(0.0, 0.45, -0.38)
+    /// 휠체어 탑승자 무릎/시야 앞쪽 쟁반 로컬 위치 (X: 중앙, Y: 시야 높이 앞, Z: 휠체어 전방)
+    static let wheelchairTrayPosition = SIMD3<Float>(0.0, 0.58, -0.48)
 }
 
 enum RainbowSmoothiePlacement {
