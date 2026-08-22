@@ -18,9 +18,16 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
         }
 
         let barBounds = barTable.visualBounds(relativeTo: indoorMap)
+        let posEntity = indoorMap.findEntity(named: "Payment")
+        let showcaseEntity = indoorMap.findEntity(named: "Showcase_1") ?? indoorMap.findEntity(named: "Showcase")
+        let posBounds = posEntity.map { $0.visualBounds(relativeTo: indoorMap) }
+        let showcaseBounds = showcaseEntity.map { $0.visualBounds(relativeTo: indoorMap) }
+
         guard let anchorPosition = RainbowSmoothiePlacement.counterPosition(
-            minimum: barBounds.min,
-            maximum: barBounds.max) else {
+            barMinimum: barBounds.min,
+            barMaximum: barBounds.max,
+            posBounds: posBounds.map { (min: $0.min, max: $0.max) },
+            showcaseBounds: showcaseBounds.map { (min: $0.min, max: $0.max) }) else {
             return false
         }
         let anchor = Entity()

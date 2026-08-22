@@ -61,6 +61,8 @@ struct RainbowSmoothiePresenterRuntimeTests {
         expect(anchor.parent === barTable, "anchor remains parented under BarTable")
         expect(presenter.smoothieEntity === smoothie, "presenter owns the supplied entity")
         expect(!smoothie.isEnabled, "installed smoothie starts hidden")
+        expect(anchorPosition.x > -0.34 && anchorPosition.x < 0.76, "anchor is between showcase and POS machine")
+        expect(anchorPosition.z > 2.2 && anchorPosition.z < 2.6, "anchor is on the front table counter")
         expectNear(anchorPosition.y, targetSurfaceY, "anchor uses the visible counter top")
         expectNear(smoothieBounds.min.y, targetSurfaceY, "smoothie rests on the visible counter top")
         expectNear(
