@@ -43,7 +43,7 @@ struct ExperienceGuideView: View {
             case .postOrderPending:
                 MissionListView(
                     steps: QuestModel.shared.steps,
-                    visibleCount: 4,
+                    visibleCount: model.visibleMissionCount,
                     allCompleted: false,
                     remainingPreparationSeconds: remainingSeconds
                 )
@@ -52,7 +52,7 @@ struct ExperienceGuideView: View {
             case .completed:
                 MissionListView(
                     steps: QuestModel.shared.steps,
-                    visibleCount: 3,
+                    visibleCount: model.visibleMissionCount,
                     allCompleted: true
                 )
             }

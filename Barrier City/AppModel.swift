@@ -62,6 +62,7 @@ final class AppModel {
             presenter: presenter,
             onReady: { [weak dialogue] in
                 dialogue?.requestOrderReadyAnnouncement()
+                GuideFlowModel.shared.handleQuestEvent(.drinkReady)
             })
 
         cafeOrderSession = orderSession

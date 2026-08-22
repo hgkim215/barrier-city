@@ -51,7 +51,8 @@ struct GuideFlowState: Equatable {
     var visibleMissionCount: Int {
         switch phase {
         case .missionAnnouncement(let index), .missionActive(let index): index + 1
-        case .postOrderPending, .completionAnnouncement, .completed: 3
+        case .postOrderPending(let index): index + 1
+        case .completionAnnouncement, .completed: 6
         case .introduction, .tutorial: 0
         }
     }
