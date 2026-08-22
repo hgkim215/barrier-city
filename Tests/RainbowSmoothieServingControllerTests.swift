@@ -159,7 +159,7 @@ struct RainbowSmoothieServingControllerTests {
         let controller = RainbowSmoothieServingController(
             session: session,
             presenter: presenter,
-            preparationDelay: .seconds(10),
+            preparationDelay: .seconds(1),
             sleep: {
                 await delayRecorder.sleep(for: $0)
                 await successSleeper.sleep()
@@ -176,10 +176,10 @@ struct RainbowSmoothieServingControllerTests {
         controller.acceptOrder()
         let recordedDelay = await delayRecorder.waitForReceived()
         await successSleeper.waitUntilSleepEntered()
-        expect(recordedDelay == .seconds(10), "controller requests ten seconds")
-        expect(session.phase == .preparing, "order remains preparing before ten-second release")
-        expect(presenter.revealCount == 0, "smoothie stays hidden before ten-second release")
-        expect(readyCount == 0, "ready announcement waits for ten-second release")
+        expect(recordedDelay == .seconds(1), "controller requests one second per tick")
+        expect(session.phase == .preparing, "order remains preparing before release")
+        expect(presenter.revealCount == 0, "smoothie stays hidden before release")
+        expect(readyCount == 0, "ready announcement waits for release")
         await successSleeper.finish()
         let readyState = await readyStateRecorder.waitForState()
         expect(readyState == .readyAtCounter, "successful delay completes in the ready state")
@@ -222,6 +222,7 @@ struct RainbowSmoothieServingControllerTests {
         let cancellable = RainbowSmoothieServingController(
             session: cancellationSession,
             presenter: cancellationPresenter,
+            preparationDelay: .seconds(1),
             sleep: { _ in await controlledSleeper.sleep() },
             onReady: { cancelledReadyCount += 1 })
         cancellable.enterIndoor()
@@ -243,6 +244,7 @@ struct RainbowSmoothieServingControllerTests {
         let reentryController = RainbowSmoothieServingController(
             session: reentrySession,
             presenter: reentryPresenter,
+            preparationDelay: .seconds(1),
             sleep: { _ in await reentrySleeper.sleep() },
             onReady: {
                 reentryReadyCount += 1

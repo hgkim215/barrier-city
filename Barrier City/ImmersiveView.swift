@@ -204,7 +204,7 @@ struct ImmersiveView: View {
             }
             // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
-                ExperienceGuideView()
+                ExperienceGuideView(model: .shared, serving: model.rainbowSmoothieServing)
             }
             // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
             Attachment(id: "npcInteraction") {

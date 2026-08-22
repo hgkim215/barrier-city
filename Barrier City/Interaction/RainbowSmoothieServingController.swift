@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 @MainActor
 protocol RainbowSmoothiePresenting: AnyObject {
@@ -8,6 +9,7 @@ protocol RainbowSmoothiePresenting: AnyObject {
 }
 
 @MainActor
+@Observable
 final class RainbowSmoothieServingController {
     typealias Sleeper = @Sendable (Duration) async throws -> Void
     typealias ReadyHandler = @MainActor @Sendable () -> Void
@@ -18,6 +20,7 @@ final class RainbowSmoothieServingController {
     private let sleep: Sleeper
     private let onReady: ReadyHandler
     private var preparationTask: Task<Void, Never>?
+    private(set) var remainingPreparationSeconds: Int = 0
 
     init(
         session: CafeOrderSession,
@@ -36,6 +39,7 @@ final class RainbowSmoothieServingController {
     func enterIndoor() {
         preparationTask?.cancel()
         preparationTask = nil
+        remainingPreparationSeconds = 0
         let generation = session.beginIndoorSession()
         if !presenter.isInstalled {
             session.markFailed(generation: generation)
@@ -46,13 +50,34 @@ final class RainbowSmoothieServingController {
         guard presenter.isInstalled,
               let generation = session.acceptOrder() else { return }
         preparationTask?.cancel()
+        let totalSeconds = Int(preparationDelay.components.seconds)
+        remainingPreparationSeconds = max(1, totalSeconds)
         preparationTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            do {
-                try await self.sleep(self.preparationDelay)
-            } catch {
-                return
+            if totalSeconds > 1 {
+                for remaining in stride(from: totalSeconds, through: 1, by: -1) {
+                    self.remainingPreparationSeconds = remaining
+                    do {
+                        try await self.sleep(.seconds(1))
+                    } catch {
+                        self.remainingPreparationSeconds = 0
+                        return
+                    }
+                    guard !Task.isCancelled,
+                          generation == self.session.generation else {
+                        self.remainingPreparationSeconds = 0
+                        return
+                    }
+                }
+            } else {
+                do {
+                    try await self.sleep(self.preparationDelay)
+                } catch {
+                    self.remainingPreparationSeconds = 0
+                    return
+                }
             }
+            self.remainingPreparationSeconds = 0
             guard !Task.isCancelled,
                   generation == self.session.generation else { return }
             guard self.presenter.revealAtCounter() else {
@@ -69,6 +94,7 @@ final class RainbowSmoothieServingController {
     func resetForOutdoor() {
         preparationTask?.cancel()
         preparationTask = nil
+        remainingPreparationSeconds = 0
         presenter.reset()
         session.resetForOutdoor()
     }
