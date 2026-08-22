@@ -6,10 +6,10 @@ final class WayPointPresenter {
     private(set) var waypointEntity: Entity?
     private var highlightTask: Task<Void, Never>?
 
-    /// 지정 좌석 목적지 좌표 (Indoor 맵 좌표계)
-    static let destinationPosition = SIMD3<Float>(1.5, 0.02, -0.8)
-    /// 도착 판정 반경 (미터)
-    static let arrivalRadius: Float = 1.2
+    /// 지정 좌석 목적지 좌표 (Indoor 맵 좌표계 - 카페 창가 테이블 앞 좌석 공간)
+    static let destinationPosition = SIMD3<Float>(2.2, 0.02, -1.6)
+    /// 도착 판정 반경 (WayPoint 에셋 원형 마커 내부 진입 시에만 판정: 0.45m)
+    static let arrivalRadius: Float = 0.45
     /// WayPoint 기본 스케일
     static let baseScale: Float = 0.12
 
