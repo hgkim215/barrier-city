@@ -4851,6 +4851,8 @@ def Xform "Root"
 
             def RealityKitStruct "Shadow"
             {
+                bool isEnabled = 1
+                float maximumDistance = 5
             }
         }
     }

@@ -30,7 +30,7 @@ def Xform "Root" (
     {
         reorder nameChildren = ["Ramp", "Stair", "Ground_1", "Cube", "Cube_1", "Cube_2", "Cube_3", "Cube_4", "Cube_5", "Cube_6", "Cube_7"]
         quatf xformOp:orient = (1, 0, 0, 0)
-        float3 xformOp:translate = (0, 0, 0)
+        float3 xformOp:translate = (0, -2, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def "Stair" (
@@ -435,6 +435,9 @@ def Xform "Root" (
 
             def RealityKitStruct "Shadow"
             {
+                token cullMode = "Default"
+                bool isEnabled = 1
+                float maximumDistance = 20
             }
         }
     }
