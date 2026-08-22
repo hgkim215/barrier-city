@@ -26,6 +26,8 @@ final class AppModel {
     /// 테스트 창과 몰입 공간이 서로 다른 호감도/대화를 갖는 문제를 방지한다.
     let npcDialogue: NPCDialogueController
     let npcClerk: NPCClerkController
+    /// 배경으로 돌아다니는 손님 NPC들. 대화가 없는 순수 동선 담당이라 npcClerk와 분리했다.
+    let npcGuests = NPCGuestCoordinator()
     /// 주행 물리 상태는 입력·앱 수명 상태와 분리해 MovementSystem의 변경 범위를 제한한다.
     let motion = WheelchairMotionState()
     /// 캐릭터 캡슐 전체 높이(m). 바닥 접지 = 중심.y - charHeight/2.
@@ -35,6 +37,14 @@ final class AppModel {
     /// 바닥/벽 콜리전 전용 충돌 그룹. 기울기용 광선이 '이 그룹만' 때려서
     /// 캐릭터 캡슐(다른 그룹)을 바닥으로 오인하지 않게 한다.
     static let groundGroup = CollisionGroup(rawValue: 1 << 5)
+
+    /// 손님 NPC/Barista 몸통 콜리전 그룹(Entity.applyNPCBodyCollision에서 코드로 직접
+    /// 부여). Indoor.usda에 RealityKit.Collider로 authoring된 값은 SceneEntityPreparation
+    /// 의 removePhysics()가 씬 로드 시 재귀적으로 걷어내 런타임에 전혀 반영되지 않는다.
+    /// 접지 판정(groundY/groundHit)에는 절대 섞지 않는다 — 섞으면 NPC 몸통을 바닥으로
+    /// 오인해 높이가 튈 수 있다. 벽 감지(wallDistance)에만 groundGroup과 함께 마스크로 써서
+    /// NPC도 막히게 한다.
+    static let npcGroup = CollisionGroup(rawValue: 1)
 
     /// 시점(눈) 높이 보정. 바닥+휠체어를 이만큼 위로 올려 체감 눈높이를 낮춘다.
     /// 0 = 바닥을 실제 바닥에 맞춤(앉아서 테스트 시 자연스러움).

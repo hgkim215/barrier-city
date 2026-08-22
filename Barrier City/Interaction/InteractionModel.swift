@@ -85,7 +85,9 @@ enum InteractionTuning {
     /// 패널 표시 높이(m, 맵 좌표 y). 키오스크 빌보드 폴백에서 사용.
     static let panelHeight: Float = 1.7
     /// 문 선택 패널을 사용자 눈앞 정면에 두는 content-root 월드 좌표(m).
-    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.45, -1.2)
+    /// doorTriggerRadius(1.1)보다 가까워야 한다. 이전에 -1.2였을 때는 트리거가 뜨자마자
+    /// 문(도어) 메시가 패널보다 카메라에 더 가까워져 패널이 문 안쪽에 가려 보이지 않았다.
+    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.45, -0.6)
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
