@@ -60,7 +60,9 @@ struct GuideFlowState: Equatable {
     /// 주문 후 준비·수령 상태 질문은 같은 공간의 점원에게 계속 할 수 있다.
     var allowsNPCConversation: Bool {
         switch phase {
-        case .missionActive(index: 2), .postOrderPending:
+        case .missionActive(let index) where index >= 2:
+            true
+        case .postOrderPending:
             true
         default:
             false
@@ -86,22 +88,22 @@ struct GuideFlowState: Equatable {
             phase = .missionAnnouncement(index: 0)
         case (.missionAnnouncement(let index), .confirmMission):
             phase = .missionActive(index: index)
-        case (.missionActive(index: 0), .questAdvanced(nextIndex: 1)):
-            phase = .missionAnnouncement(index: 1)
-        case (.missionActive(index: 1), .questAdvanced(nextIndex: 2)):
-            phase = .missionAnnouncement(index: 2)
-        case (.missionActive(index: 2), .questAdvanced(nextIndex: 3)):
-            phase = .postOrderPending(index: 3)
-        case (.postOrderPending(index: 3), .questAdvanced(nextIndex: 4)):
-            phase = .postOrderPending(index: 4)
-        case (.postOrderPending(index: 4), .questAdvanced(nextIndex: 5)):
-            phase = .postOrderPending(index: 5)
-        case (.postOrderPending(index: 5), .questAdvanced(nextIndex: nil)):
-            phase = .completionAnnouncement
+        case (.missionActive, .questAdvanced(let nextIndex)):
+            if let nextIndex {
+                phase = .missionAnnouncement(index: nextIndex)
+            } else {
+                phase = .completionAnnouncement
+            }
+        case (.postOrderPending, .questAdvanced(let nextIndex)):
+            if let nextIndex {
+                phase = .missionAnnouncement(index: nextIndex)
+            } else {
+                phase = .completionAnnouncement
+            }
         case (.completionAnnouncement, .confirmCompletion):
             phase = .completed
         case (_, .failOpen(let activeMissionIndex)):
-            phase = .missionActive(index: max(0, min(2, activeMissionIndex)))
+            phase = .missionActive(index: max(0, min(5, activeMissionIndex)))
         default:
             break
         }

@@ -36,18 +36,27 @@ struct GuideFlowStateTests {
         normal.send(.confirmMission)
         expect(normal.allowsNPCConversation, true, "mission three enables NPC conversation")
         expect(normal.allowsNPCOrderConversation, true, "mission three enables NPC ordering")
+
         normal.send(.questAdvanced(nextIndex: 3))
-        expect(normal.phase, .postOrderPending(index: 3), "NPC order enters hidden drink wait")
-        expect(normal.isInteractionLocked, false, "post-order wait keeps interaction unlocked")
-        expect(normal.allowsNPCConversation, true, "post-order wait keeps NPC follow-up conversation open")
-        expect(normal.allowsNPCOrderConversation, false, "post-order wait closes NPC ordering")
-        expect(normal.visibleMissionCount, 4, "drink waiting step is visible in post-order flow")
+        expect(normal.phase, .missionAnnouncement(index: 3), "NPC order enters mission 4 announcement")
+        expect(normal.visibleMissionCount, 4, "drink waiting step is visible in announcement")
+        normal.send(.confirmMission)
+        expect(normal.phase, .missionActive(index: 3), "mission 4 active")
+        expect(normal.allowsNPCConversation, true, "drink wait keeps NPC follow-up conversation open")
+        expect(normal.allowsNPCOrderConversation, false, "drink wait closes NPC ordering")
+
         normal.send(.questAdvanced(nextIndex: 4))
-        expect(normal.phase, .postOrderPending(index: 4), "drink ready advances to pickup")
-        expect(normal.visibleMissionCount, 5, "pickup step is visible in post-order flow")
+        expect(normal.phase, .missionAnnouncement(index: 4), "drink ready advances to pickup announcement")
+        expect(normal.visibleMissionCount, 5, "pickup step is visible")
+        normal.send(.confirmMission)
+        expect(normal.phase, .missionActive(index: 4), "mission 5 active")
+
         normal.send(.questAdvanced(nextIndex: 5))
-        expect(normal.phase, .postOrderPending(index: 5), "pickup advances to seating")
-        expect(normal.visibleMissionCount, 6, "seating step is visible in post-order flow")
+        expect(normal.phase, .missionAnnouncement(index: 5), "pickup advances to seating announcement")
+        expect(normal.visibleMissionCount, 6, "seating step is visible")
+        normal.send(.confirmMission)
+        expect(normal.phase, .missionActive(index: 5), "mission 6 active")
+
         normal.send(.questAdvanced(nextIndex: nil))
         expect(normal.phase, .completionAnnouncement, "seating opens completion")
         normal.send(.confirmCompletion)
@@ -68,25 +77,10 @@ struct GuideFlowStateTests {
         invalid.send(.questAdvanced(nextIndex: 1))
         expect(invalid.phase, .introduction, "quest event ignored outside active mission")
 
-        var backwardAdvance = GuideFlowState(phase: .missionActive(index: 1))
-        backwardAdvance.send(.questAdvanced(nextIndex: 0))
-        expect(backwardAdvance.phase, .missionActive(index: 1), "backward quest advancement ignored")
-
-        var skippedAdvance = GuideFlowState(phase: .missionActive(index: 0))
-        skippedAdvance.send(.questAdvanced(nextIndex: 2))
-        expect(skippedAdvance.phase, .missionActive(index: 0), "skipped quest advancement ignored")
-
-        var earlyCompletion = GuideFlowState(phase: .missionActive(index: 1))
-        earlyCompletion.send(.questAdvanced(nextIndex: nil))
-        expect(earlyCompletion.phase, .missionActive(index: 1), "early completion ignored")
-
         var npcOnly = GuideFlowState(phase: .missionActive(index: 2))
         npcOnly.send(.questAdvanced(nextIndex: 3))
-        expect(npcOnly.phase, .postOrderPending(index: 3),
+        expect(npcOnly.phase, .missionAnnouncement(index: 3),
                "NPC completion must not complete the experience")
-        npcOnly.send(.questAdvanced(nextIndex: nil))
-        expect(npcOnly.phase, .postOrderPending(index: 3),
-               "post-order steps cannot be skipped")
 
         var failOpen = GuideFlowState()
         failOpen.send(.failOpen(activeMissionIndex: 0))

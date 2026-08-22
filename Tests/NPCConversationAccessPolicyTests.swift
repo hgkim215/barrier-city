@@ -24,7 +24,9 @@ struct NPCConversationAccessPolicyTests {
         expect(orderSession.acceptOrder() == generation, "mission order is accepted once")
 
         guide.send(.questAdvanced(nextIndex: 3))
-        expect(guide.phase == .postOrderPending(index: 3), "accepted order advances the guide")
+        expect(guide.phase == .missionAnnouncement(index: 3), "accepted order advances to mission 4 announcement")
+        guide.send(.confirmMission)
+        expect(guide.phase == .missionActive(index: 3), "confirmed mission 4 is active")
         expect(
             NPCConversationAccessPolicy.canOfferTalk(
                 clerkPhaseAllowsConversation: true,

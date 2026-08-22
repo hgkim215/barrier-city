@@ -6,9 +6,56 @@
 //
 
 import Foundation
+@preconcurrency import AVFoundation
 import OSLog
 import DialogueKit
 import DialogueKitOpenAI
+
+@MainActor
+final class OrderReadySpeaker: NSObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func speak(text: String) async {
+        try? AudioSessionCoordinator.shared.acquire(.playback)
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "ko-KR")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        await withCheckedContinuation { cont in
+            self.continuation = cont
+            self.synthesizer.speak(utterance)
+        }
+        AudioSessionCoordinator.shared.release(.playback)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        continuation?.resume()
+        continuation = nil
+        AudioSessionCoordinator.shared.release(.playback)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.continuation?.resume()
+            self.continuation = nil
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.continuation?.resume()
+            self.continuation = nil
+        }
+    }
+}
 
 @MainActor
 @Observable
@@ -85,6 +132,7 @@ final class NPCDialogueController {
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
     private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
+    private let orderReadySpeaker = OrderReadySpeaker()
     /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
     private var encounterCount = 0
 
@@ -182,7 +230,9 @@ final class NPCDialogueController {
                     self.status = .speaking
                     self.npcSubtitle = OrderReadyAnnouncementContent.line
                 },
-                speak: {},
+                speak: {
+                    await self.orderReadySpeaker.speak(text: OrderReadyAnnouncementContent.line)
+                },
                 waitForMinimumVisibility: {
                     try await Task.sleep(
                         for: OrderReadyAnnouncementPresentationTiming.minimumVisibleDuration
@@ -198,6 +248,7 @@ final class NPCDialogueController {
     /// ImmersiveSpace가 실제로 닫히는 순간 네트워크 연결과 대화 문맥을 폐기한다.
     /// 미션·호감도 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
     func endImmersiveSession() {
+        orderReadySpeaker.stop()
         orderReadyAnnouncementTask?.cancel()
         orderReadyAnnouncementTask = nil
         orderReadyAnnouncementGate.reset()
