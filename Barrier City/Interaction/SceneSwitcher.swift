@@ -33,6 +33,23 @@ enum SceneSwitcher {
         }
     }
 
+    /// 이미 실내에 있는 상태에서 개발 리스폰 시 시작 위치와 자세를 문 안쪽 스폰 좌표로 초기화한다.
+    static func resetIndoorPose(app: AppModel) {
+        let im = InteractionModel.shared
+        guard im.scene == .indoor,
+              let worldRoot = app.worldRoot,
+              let indoorVisible = im.visibleMap else { return }
+        let layout = resolveIndoorLayout(in: indoorVisible, relativeTo: worldRoot)
+        app.restart()
+        app.motion.positionX = layout.spawn.x
+        app.motion.positionZ = layout.spawn.y
+        app.motion.heading = layout.heading
+        if let groundHeight = im.outdoorGroundLayout?.height {
+            app.motion.chairHeight = groundHeight
+            app.motion.groundHeight = groundHeight
+        }
+    }
+
     /// "예" 선택 시 호출. Outdoor에서만 동작하며, 실패 시 Outdoor를 유지하고
     /// 패널에 안내 문구를 띄운다.
     private static func switchToIndoor(token: SceneTransitionToken) async {

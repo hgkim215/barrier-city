@@ -308,6 +308,8 @@ struct ControlPanelView: View {
             for _ in 0..<100 where InteractionModel.shared.isTransitioning {
                 try? await Task.sleep(for: .milliseconds(100))
             }
+        } else {
+            SceneSwitcher.resetIndoorPose(app: model)
         }
         if InteractionModel.shared.scene != .indoor {
             immersiveError = InteractionModel.shared.transitionError
