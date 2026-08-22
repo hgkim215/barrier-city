@@ -244,6 +244,18 @@ struct ImmersiveView: View {
                 await handTracker.start(model: model)
             }
         }
+        .gesture(
+            SpatialTapGesture()
+                .targetedToAnyEntity()
+                .onEnded { value in
+                    let target = value.entity
+                    guard let app = AppModel.current else { return }
+                    if let smoothie = app.rainbowSmoothiePresenter.smoothieEntity,
+                       target.isDescendant(of: smoothie) {
+                        app.pickupSmoothieIfReady()
+                    }
+                }
+        )
     }
 
     // MARK: - Helpers
@@ -289,4 +301,15 @@ struct ImmersiveView: View {
         }
     }
 
+}
+
+private extension Entity {
+    func isDescendant(of ancestor: Entity) -> Bool {
+        var current: Entity? = self
+        while let c = current {
+            if c === ancestor { return true }
+            current = c.parent
+        }
+        return false
+    }
 }

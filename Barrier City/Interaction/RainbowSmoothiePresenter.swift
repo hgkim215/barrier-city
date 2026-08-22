@@ -63,12 +63,45 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
         smoothiePosition.y += anchorPosition.y - scaledBounds.min.y
         smoothie.setPosition(smoothiePosition, relativeTo: indoorMap)
 
+        // 탭 인터랙션을 위한 충돌체 및 인풋 타깃 설정
+        let collisionShape = ShapeResource.generateBox(
+            size: SIMD3<Float>(0.35, 0.45, 0.35)
+        )
+        smoothie.components.set(CollisionComponent(shapes: [collisionShape]))
+        smoothie.components.set(InputTargetComponent(allowedInputTypes: .all))
+
         return true
     }
 
     func revealAtCounter() -> Bool {
         guard isInstalled, let smoothieEntity else { return false }
         smoothieEntity.isEnabled = true
+        return true
+    }
+
+    /// 사용자가 카운터의 쟁반/스무디를 탭했을 때 휠체어 무릎 앞쪽 트레이로 리페어런팅
+    @discardableResult
+    func pickupToWheelchair(wheelchair: Entity) -> Bool {
+        guard let smoothieEntity else { return false }
+
+        let lapAnchor: Entity
+        if let existing = wheelchair.findEntity(named: "WheelchairTrayAnchor") {
+            lapAnchor = existing
+        } else {
+            let anchor = Entity()
+            anchor.name = "WheelchairTrayAnchor"
+            wheelchair.addChild(anchor)
+            anchor.position = ServingPlacementTuning.wheelchairTrayPosition
+            anchor.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+            lapAnchor = anchor
+        }
+
+        smoothieEntity.removeFromParent()
+        smoothieEntity.position = .zero
+        smoothieEntity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+        lapAnchor.addChild(smoothieEntity)
+        smoothieEntity.isEnabled = true
+
         return true
     }
 

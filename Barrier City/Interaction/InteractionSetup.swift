@@ -182,6 +182,18 @@ enum InteractionSetup {
             im.kioskFailOpenSent = true
             guide.handleQuestEvent(.kioskFailed)
         }
+
+        // 미션 6 (지정 좌석으로 이동) 활성 시 WayPoint 도착 판정
+        if isIndoor, QuestModel.shared.currentIndex == 5 {
+            let dx = app.motion.positionX - WayPointPresenter.destinationPosition.x
+            let dz = app.motion.positionZ - WayPointPresenter.destinationPosition.z
+            let distance = sqrt(dx * dx + dz * dz)
+            if distance < WayPointPresenter.arrivalRadius {
+                guide.handleQuestEvent(.seatedAtTable)
+                app.waypointPresenter.hide()
+            }
+        }
+
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
         app.npcGuests.update(deltaTime: deltaTime,

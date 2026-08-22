@@ -70,6 +70,33 @@ struct RainbowSmoothiePresenterRuntimeTests {
             ServingPlacementTuning.targetSmoothieHeight,
             "smoothie height is normalized in the Indoor frame")
 
+        // 휠체어 수령 테스트
+        let characterBody = Entity()
+        characterBody.name = "CharacterBody"
+        expect(presenter.pickupToWheelchair(wheelchair: characterBody), "smoothie reparents to wheelchair")
+        guard let lapAnchor = characterBody.findEntity(named: "WheelchairTrayAnchor") else {
+            fail("wheelchair receives tray anchor")
+        }
+        expect(smoothie.parent === lapAnchor, "smoothie rests on wheelchair tray anchor")
+        expectNear(lapAnchor.position.x, 0.0, "tray is horizontally centered on wheelchair")
+        expectNear(lapAnchor.position.y, 0.45, "tray sits at seated lap height")
+        expectNear(lapAnchor.position.z, -0.38, "tray is in front of the rider")
+
+        // WayPoint 프레젠터 테스트
+        let waypoint = try Entity.load(
+            contentsOf: assetDirectory.appendingPathComponent("WayPoint.usdz"))
+        let waypointPresenter = WayPointPresenter()
+        expect(waypointPresenter.install(waypoint: waypoint, in: indoorMap), "waypoint installs in indoor map")
+        expect(!waypoint.isEnabled, "waypoint starts hidden")
+        waypointPresenter.showWithHighlight()
+        expect(waypoint.isEnabled, "waypoint becomes enabled on highlight")
+        expectNear(waypoint.position.x, 1.5, "waypoint is at table destination X")
+        expectNear(waypoint.position.z, -0.8, "waypoint is at table destination Z")
+        waypointPresenter.hide()
+        expect(!waypoint.isEnabled, "waypoint hides after arrival")
+        waypointPresenter.reset()
+        expect(waypointPresenter.waypointEntity == nil, "reset tears down waypoint")
+
         presenter.reset()
         expect(
             !presenter.install(smoothie: Entity(), in: indoorMap),

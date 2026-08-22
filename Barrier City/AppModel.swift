@@ -26,6 +26,7 @@ final class AppModel {
     let cafeOrderSession: CafeOrderSession
     let rainbowSmoothiePresenter: RainbowSmoothiePresenter
     let rainbowSmoothieServing: RainbowSmoothieServingController
+    let waypointPresenter = WayPointPresenter()
     let npcDialogue: NPCDialogueController
     let npcClerk: NPCClerkController
     /// 배경으로 돌아다니는 손님 NPC들. 대화가 없는 순수 동선 담당이라 npcClerk와 분리했다.
@@ -52,6 +53,14 @@ final class AppModel {
     /// 0 = 바닥을 실제 바닥에 맞춤(앉아서 테스트 시 자연스러움).
     /// 서서 테스트해서 시야가 너무 높으면 0.3~0.5 정도로.
     static let viewHeightOffset: Float = 0.0
+
+    /// 사용자가 카운터의 스무디 쟁반을 탭했을 때 수령 처리 및 WayPoint 마커 발동
+    func pickupSmoothieIfReady() {
+        guard QuestModel.shared.currentIndex == 4, let characterBody else { return }
+        rainbowSmoothiePresenter.pickupToWheelchair(wheelchair: characterBody)
+        GuideFlowModel.shared.handleQuestEvent(.drinkCollected)
+        waypointPresenter.showWithHighlight()
+    }
 
     init() {
         let orderSession = CafeOrderSession()

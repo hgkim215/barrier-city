@@ -3,4 +3,5 @@ enum ImmersiveSceneCatalog {
     static let indoor = "Indoor"
     static let rainbowSmoothie = "RainbowSmoothie"
     static let barTable = "BarTable"
+    static let wayPoint = "WayPoint"
 }
