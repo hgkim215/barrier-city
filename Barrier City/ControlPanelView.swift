@@ -314,6 +314,15 @@ struct ControlPanelView: View {
                 ?? "카페 실내로 전환하지 못했습니다."
             return false
         }
+
+        // 미션 2 (카페 내로 이동한 상태로 키오스크에서 음료를 주문해야 하는 상태)로 설정
+        let guide = GuideFlowModel.shared
+        guide.reset()
+        guide.skipOnboarding()
+        guide.confirmMission()
+        guide.handleQuestEvent(.enteredIndoor)
+        guide.confirmMission()
+
         return true
     }
 
@@ -332,11 +341,6 @@ struct ControlPanelView: View {
         guard await enterCafeForDevelopment() else { return }
 
         let guide = GuideFlowModel.shared
-        guide.reset()
-        guide.skipOnboarding()
-        guide.confirmMission()
-        guide.handleQuestEvent(.enteredIndoor)
-        guide.confirmMission()
         guide.handleQuestEvent(.kioskFailed)
         guide.confirmMission()
 
