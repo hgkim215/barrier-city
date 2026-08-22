@@ -185,10 +185,11 @@ enum InteractionSetup {
 
         // 미션 6 (지정 좌석으로 이동) 활성 시 WayPoint 도착 판정
         if isIndoor, QuestModel.shared.currentIndex == 5 {
-            let dx = app.motion.positionX - WayPointPresenter.destinationPosition.x
-            let dz = app.motion.positionZ - WayPointPresenter.destinationPosition.z
+            let dest = app.waypointPresenter.destinationPosition
+            let dx = app.motion.positionX - dest.x
+            let dz = app.motion.positionZ - dest.z
             let distance = sqrt(dx * dx + dz * dz)
-            if distance < WayPointPresenter.arrivalRadius {
+            if distance <= app.waypointPresenter.arrivalRadius {
                 guide.handleQuestEvent(.seatedAtTable)
                 app.waypointPresenter.hide()
             }

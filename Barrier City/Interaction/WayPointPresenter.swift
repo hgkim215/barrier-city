@@ -4,30 +4,39 @@ import Foundation
 @MainActor
 final class WayPointPresenter {
     private(set) var waypointEntity: Entity?
+    private(set) var destinationPosition: SIMD3<Float> = SIMD3<Float>(6.524, 0.02, 4.264)
     private var highlightTask: Task<Void, Never>?
+    private var baseScale: SIMD3<Float> = SIMD3<Float>(0.2, 0.2, 0.4)
 
-    /// 지정 좌석 목적지 좌표 (Indoor 맵 좌표계 - 카페 창가 테이블 앞 좌석 공간)
-    static let destinationPosition = SIMD3<Float>(2.2, 0.02, -1.6)
-    /// 도착 판정 반경 (자연스러운 휠체어 진입 허용 반경: 0.85m)
-    static let arrivalRadius: Float = 0.85
-    /// WayPoint 기본 스케일 (직경 약 0.93m)
-    static let baseScale: Float = 0.15
+    /// 도착 판정 반경 (1.24m 직경 비콘 마커 기준 자연스러운 휠체어 진입 허용 반경: 1.0m)
+    var arrivalRadius: Float = 1.0
 
     var isInstalled: Bool {
         waypointEntity != nil && waypointEntity?.parent != nil
     }
 
     @discardableResult
-    func install(waypoint: Entity?, in indoorMap: Entity) -> Bool {
+    func install(in indoorMap: Entity) -> Bool {
         reset()
-        guard let waypoint else { return false }
+        guard let waypoint = indoorMap.findEntity(named: "WayPoint") else {
+            return false
+        }
 
-        waypoint.scale = SIMD3(repeating: Self.baseScale)
-        waypoint.position = Self.destinationPosition
+        let bounds = waypoint.visualBounds(relativeTo: indoorMap)
+        destinationPosition = SIMD3<Float>(bounds.center.x, bounds.min.y, bounds.center.z)
+        baseScale = waypoint.scale
         waypoint.isEnabled = false
-        indoorMap.addChild(waypoint)
         waypointEntity = waypoint
         return true
+    }
+
+    /// 테스트용 호환 install 메소드
+    @discardableResult
+    func install(waypoint: Entity?, in indoorMap: Entity) -> Bool {
+        if let waypoint, waypoint.parent !== indoorMap {
+            indoorMap.addChild(waypoint)
+        }
+        return install(in: indoorMap)
     }
 
     /// 미션 6 시작 시 1.5초간 펄스/바운스 강조 연출 후 바닥 마커로 유지
@@ -38,15 +47,15 @@ final class WayPointPresenter {
 
         highlightTask = Task { @MainActor [weak self] in
             guard let self, let entity = self.waypointEntity else { return }
-            let base = Self.baseScale
+            let base = self.baseScale
             for step in 0..<15 {
                 let progress = Float(step) / 15.0
-                let pulse = base * (1.0 + 0.35 * sin(progress * .pi))
-                entity.scale = SIMD3(repeating: pulse)
+                let pulse = 1.0 + 0.35 * sin(progress * .pi)
+                entity.scale = base * pulse
                 try? await Task.sleep(for: .milliseconds(100))
                 guard !Task.isCancelled else { return }
             }
-            entity.scale = SIMD3(repeating: base)
+            entity.scale = base
             self.highlightTask = nil
         }
     }
@@ -60,7 +69,6 @@ final class WayPointPresenter {
     func reset() {
         highlightTask?.cancel()
         highlightTask = nil
-        waypointEntity?.removeFromParent()
         waypointEntity = nil
     }
 }

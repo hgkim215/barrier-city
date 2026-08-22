@@ -82,18 +82,16 @@ struct RainbowSmoothiePresenterRuntimeTests {
         expectNear(lapAnchor.position.y, 0.58, "tray sits at eye-level lap height")
         expectNear(lapAnchor.position.z, -0.48, "tray is placed forward in front of rider")
 
-        // WayPoint 프레젠터 테스트
-        let waypoint = try Entity.load(
-            contentsOf: assetDirectory.appendingPathComponent("WayPoint.usdz"))
+        // WayPoint 프레젠터 테스트 (Indoor.usda의 authored WayPoint 비콘 엔티티 연동)
         let waypointPresenter = WayPointPresenter()
-        expect(waypointPresenter.install(waypoint: waypoint, in: indoorMap), "waypoint installs in indoor map")
-        expect(!waypoint.isEnabled, "waypoint starts hidden")
+        expect(waypointPresenter.install(in: indoorMap), "waypoint installs from indoor map")
+        expect(!waypointPresenter.waypointEntity!.isEnabled, "waypoint starts hidden")
         waypointPresenter.showWithHighlight()
-        expect(waypoint.isEnabled, "waypoint becomes enabled on highlight")
-        expectNear(waypoint.position.x, 2.2, "waypoint is at table destination X")
-        expectNear(waypoint.position.z, -1.6, "waypoint is at table destination Z")
+        expect(waypointPresenter.waypointEntity!.isEnabled, "waypoint becomes enabled on highlight")
+        expectNear(waypointPresenter.destinationPosition.x, 6.524315, "waypoint is at authored beacon destination X")
+        expectNear(waypointPresenter.destinationPosition.z, 4.26385, "waypoint is at authored beacon destination Z")
         waypointPresenter.hide()
-        expect(!waypoint.isEnabled, "waypoint hides after arrival")
+        expect(!waypointPresenter.waypointEntity!.isEnabled, "waypoint hides after arrival")
         waypointPresenter.reset()
         expect(waypointPresenter.waypointEntity == nil, "reset tears down waypoint")
 

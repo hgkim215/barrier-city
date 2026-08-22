@@ -118,9 +118,7 @@ enum SceneSwitcher {
         app.rainbowSmoothiePresenter.install(
             smoothie: prepared.smoothie,
             in: prepared.visible)
-        app.waypointPresenter.install(
-            waypoint: prepared.waypoint,
-            in: prepared.visible)
+        app.waypointPresenter.install(in: prepared.visible)
         app.rainbowSmoothieServing.enterIndoor()
         app.npcGuests.enterIndoor(worldRoot: worldRoot, indoorMap: prepared.visible)
         app.restart()
