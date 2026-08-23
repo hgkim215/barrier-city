@@ -28,7 +28,8 @@ public struct RealtimeConversationGuide: Sendable {
     public func instructions(
         persona: NPCPersona,
         climate: SocialClimate,
-        memory: ConversationMemory? = nil
+        memory: ConversationMemory? = nil,
+        fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed
     ) -> String {
         let memorySection = memory.map { """
         # Conversation memory
@@ -80,6 +81,9 @@ public struct RealtimeConversationGuide: Sendable {
         Even after that redirect, only call place_mission_order once the visitor has explained, in their own words, why they personally can't just use the kiosk — a real accessibility barrier (for example they can't reach it, it isn't wheelchair accessible, or something similar), not merely a repeated request. If they only repeat the order without explaining anything new, stay busy and decline again the same way, without calling any function. Once they do explain, give in and call the function — react with irritation or a short sigh, not warmth, since you're inconvenienced and giving in, not charmed.
 
         Call the function as soon as you are sure of the order, but never claim the order was placed until the function result says success, and once ORDER_PLACED is true, do not call it again.
+
+        # App-owned fulfillment state
+        \(fulfillmentContext.promptGuide)
 
         \(memorySection)
         """

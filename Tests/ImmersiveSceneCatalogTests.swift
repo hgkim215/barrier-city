@@ -21,5 +21,19 @@ struct ImmersiveSceneCatalogTests {
         guard FileManager.default.fileExists(atPath: outdoorAsset.path) else {
             fail("configured outdoor scene has no USDA asset: \(outdoorAsset.path)")
         }
+
+        let indoorAsset = assetDirectory
+            .appendingPathComponent(ImmersiveSceneCatalog.indoor)
+            .appendingPathExtension("usda")
+        let smoothieAsset = assetDirectory
+            .appendingPathComponent(ImmersiveSceneCatalog.rainbowSmoothie)
+            .appendingPathExtension("usdz")
+        guard FileManager.default.fileExists(atPath: smoothieAsset.path) else {
+            fail("configured smoothie has no USDZ asset: \(smoothieAsset.path)")
+        }
+        guard let indoorSource = try? String(contentsOf: indoorAsset, encoding: .utf8),
+              indoorSource.contains("\"\(ImmersiveSceneCatalog.barTable)\"") else {
+            fail("Indoor scene does not preserve the named BarTable contract")
+        }
     }
 }

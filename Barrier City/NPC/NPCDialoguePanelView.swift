@@ -133,8 +133,10 @@ struct NPCDialoguePanelView: View {
     }
 
     private var showsTalkButton: Bool {
-        guard !controller.isEncounterActive else { return false }
-        return clerk.phase == .working || clerk.phase == .orderAccepted
+        controller.orderReadyAnnouncementPresentation.showsTalkButton(
+            isEncounterActive: controller.isEncounterActive,
+            clerkPhaseAllowsButton: clerk.phase == .working || clerk.phase == .orderAccepted
+        )
     }
 
     private var displayedSubtitle: String {
