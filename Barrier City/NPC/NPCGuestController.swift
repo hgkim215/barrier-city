@@ -21,14 +21,17 @@ enum NPCGuestAnimationCue: String {
     }
 }
 
-/// 손님 한 명이 대기줄/착석 행동에 참여하는 방식.
+/// 손님 한 명이 대기줄/착석 행동에 참여하는 방식. 세 역할은 서로 섞이지 않는
+/// 고정된 카테고리다.
 enum NPCGuestRole {
     /// 절대 앉지 않고 계속 배회한다. 대기줄 후보.
     case alwaysWandering
-    /// 배회↔착석↔기립을 반복한다. 배회 중일 때만 대기줄 후보.
+    /// 배회↔착석↔기립을 랜덤한 타이밍(손님마다 다른 확률·지속시간)으로 반복한다.
+    /// 배회 중일 때만 대기줄 후보.
     case cycler
-    /// 입장 시 가능하면 이미 앉은 채로 시작하고, 이후에도 배회↔착석↔기립을
-    /// 반복한다. 대기줄 후보에서는 항상 제외된다.
+    /// 입장 시 가능하면 이미 앉은 채로 시작하고, 한 번 앉으면 다시 일어나지 않는
+    /// "그냥 앉아만 있는" 손님이다. 좌석이 부족해 배회로 시작하더라도 자리를
+    /// 잡으면 그 뒤로는 영구히 앉아있는다. 대기줄 후보에서는 항상 제외된다.
     case seatedPool
 }
 
@@ -52,16 +55,9 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
-        /// 한 번 앉으면 이 범위의 랜덤 시간 동안 머문다(초). cycler 전용.
-        static let sittingDurationRange: ClosedRange<Float> = 8...20
-        /// seatedPool 역할은 "카페에 계속 앉아있는 손님"이라는 인상을 주기 위해
-        /// 훨씬 오래 머문다.
-        static let seatedPoolSittingDurationRange: ClosedRange<Float> = 90...240
         /// "Sit to Stand" 클립 재생으로 간주하는 시간(초). 애니메이션 완료 콜백 대신
         /// 다른 NPC 상태 전환과 동일하게 타이머 기반으로 처리한다.
         static let standingUpDuration: Float = 1.2
-        /// 배회 목적지에 도착할 때마다 착석을 시도할 확률(alwaysWandering 역할 제외).
-        static let sitDesireChance: Float = 0.35
     }
 
     private enum SeatState {
@@ -79,15 +75,23 @@ final class NPCGuestController {
         let personalSpace: Float
         let separationStrength: Float
         let separationSide: Float
+        /// 배회 목적지에 도착할 때마다 착석을 시도할 확률(cycler 개인차). 전원이 같은
+        /// 확률로 앉으면 기계적으로 보여, 손님마다 성향을 다르게 둔다.
+        let sitDesireChance: Float
+        /// 한 번 앉으면 머무는 시간(cycler 개인차).
+        let sittingDurationRange: ClosedRange<Float>
 
         static func random() -> MovementProfile {
             let pauseMinimum = Float.random(in: 0.7...2.2)
+            let sittingMinimum = Float.random(in: 5...12)
             return MovementProfile(
                 moveSpeed: Float.random(in: 0.68...1.02),
                 pauseRange: pauseMinimum...Float.random(in: 3.8...7.0),
                 personalSpace: Float.random(in: 0.62...0.82),
                 separationStrength: Float.random(in: 0.85...1.25),
-                separationSide: Bool.random() ? 1 : -1)
+                separationSide: Bool.random() ? 1 : -1,
+                sitDesireChance: Float.random(in: 0.2...0.55),
+                sittingDurationRange: sittingMinimum...Float.random(in: 16...30))
         }
     }
 
@@ -114,11 +118,6 @@ final class NPCGuestController {
         self.name = name
         self.role = role
         movementProfile = .random()
-    }
-
-    /// 역할에 따라 다른 착석 지속 시간 범위를 쓴다(seatedPool은 훨씬 오래 앉아있는다).
-    private var sittingDurationRange: ClosedRange<Float> {
-        role == .seatedPool ? NPCGuestTuning.seatedPoolSittingDurationRange : NPCGuestTuning.sittingDurationRange
     }
 
     /// 대기줄 후보 자격: 착석 지향(seatedPool) 역할이 아니고, 지금 이동/착석/기립
@@ -182,14 +181,14 @@ final class NPCGuestController {
     }
 
     /// 입장 시점부터 이미 지정된 좌석에 앉아있는 상태로 배치한다(seatedPool 역할용).
-    /// 걸어가는 과정 없이 좌석 위치/방향으로 바로 배치한다.
+    /// 걸어가는 과정 없이 좌석 위치/방향으로 바로 배치한다. seatedPool은 계속 앉아만
+    /// 있어야 하므로(updateSitting 참고) seatTimeRemaining은 쓰이지 않는다.
     func placeSeated(entity: Entity, worldRoot: Entity, seatIndex: Int, seat: GuestSeat) {
         setUpLocomotionRoot(entity: entity, worldRoot: worldRoot, at: seat.position)
         pauseRemaining = 0
         claimedSeatIndex = seatIndex
         claimedSeat = seat
         seatState = .sitting
-        seatTimeRemaining = Float.random(in: sittingDurationRange)
         face(direction: seat.facing, deltaTime: 999)
         playAnimation(.sitting)
     }
@@ -286,8 +285,9 @@ final class NPCGuestController {
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
             // 목적지 도착이라는 자연스러운 결정 지점에서만 착석 여부를 굴린다.
-            // alwaysWandering 역할은 절대 앉지 않는다.
-            if role != .alwaysWandering, Float.random(in: 0...1) < NPCGuestTuning.sitDesireChance {
+            // alwaysWandering 역할은 절대 앉지 않는다. 확률은 손님마다 달라(개인차) 전원이
+            // 기계적으로 같은 타이밍에 앉지 않게 한다.
+            if role != .alwaysWandering, Float.random(in: 0...1) < movementProfile.sitDesireChance {
                 pendingSeatRequest = true
             }
         }
@@ -306,13 +306,16 @@ final class NPCGuestController {
                 neighboringPositions: neighboringPositions,
                 separationScale: 0.5) {
             seatState = .sitting
-            seatTimeRemaining = Float.random(in: sittingDurationRange)
+            seatTimeRemaining = Float.random(in: movementProfile.sittingDurationRange)
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
         }
     }
 
     private func updateSitting(deltaTime: Float) {
+        // seatedPool은 한 번 앉으면 계속 앉아있는 "고정 착석" 손님이다. cycler만
+        // 시간이 지나면 일어나 다시 배회한다.
+        guard role != .seatedPool else { return }
         seatTimeRemaining -= deltaTime
         guard seatTimeRemaining <= 0 else { return }
         seatState = .standingUp
