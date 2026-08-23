@@ -27,6 +27,41 @@ enum SceneSwitcher {
         let heading: Float
     }
 
+    private static var preloadedIndoorScene: PreparedIndoorScene?
+    private static var preloadTask: Task<PreparedIndoorScene?, Never>?
+
+    /// 몰입 공간 진입 시(Outdoor를 보여주는 동안) 미리 호출해 Indoor 씬을 로드해
+    /// 캐시해둔다. 실제 "예" 선택 시(switchToIndoor) 이미 준비돼 있으면 그 순간의
+    /// 로딩 없이 바로 재사용한다. 실패해도 조용히 넘어가고, 전환 시점에 평소대로
+    /// 다시 시도한다.
+    static func preloadIndoorScene() async {
+        guard preloadedIndoorScene == nil else { return }
+        if let existing = preloadTask {
+            preloadedIndoorScene = await existing.value
+            return
+        }
+        let task = Task<PreparedIndoorScene?, Never> {
+            try? await prepareIndoorScene()
+        }
+        preloadTask = task
+        preloadedIndoorScene = await task.value
+        preloadTask = nil
+    }
+
+    /// 캐시된 프리로드 결과가 있으면 그걸 쓰고(한 번만), 없으면 지금 바로 새로
+    /// 로드한다.
+    private static func consumePreloadedIndoorScene() async throws -> PreparedIndoorScene {
+        if let cached = preloadedIndoorScene {
+            preloadedIndoorScene = nil
+            return cached
+        }
+        if let task = preloadTask {
+            preloadTask = nil
+            if let value = await task.value { return value }
+        }
+        return try await prepareIndoorScene()
+    }
+
     static func requestIndoorTransition() {
         let im = InteractionModel.shared
         im.startSceneTransition { token in
@@ -72,7 +107,7 @@ enum SceneSwitcher {
         //    현재 맵, 플레이어 포즈, 인터랙션 상태를 전혀 변경하지 않는다.
         let prepared: PreparedIndoorScene
         do {
-            prepared = try await prepareIndoorScene()
+            prepared = try await consumePreloadedIndoorScene()
         } catch is CancellationError {
             im.transitionError = "장면 전환이 취소되었습니다."
             return

@@ -145,7 +145,7 @@ enum InteractionSetup {
             app.npcGuests.update(deltaTime: deltaTime, appModel: app, isOrdering: false, kioskCenter: nil)
             return
         }
-        guard !im.isTransitioning else { return }
+        guard !im.isTransitioning, !im.isBootLoading else { return }
         app.npcClerk.setGuideInteractionLocked(false)
 
         let verdict = InteractionModel.evaluate(

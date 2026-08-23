@@ -177,6 +177,10 @@ final class InteractionModel {
     var dismissedTriggerID: String?
     /// 씬 전환 중(패널 버튼 비활성화 + 판정 일시 정지).
     var isTransitioning: Bool { transitionSession.isTransitioning }
+    /// 몰입 공간 진입 직후, Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지
+    /// 켜져 있는 부팅 로딩 상태(BootLoadingOverlay가 화면을 덮는 동안). 이 동안엔
+    /// isTransitioning과 동일하게 휠체어 입력·트리거 판정을 멈춘다.
+    var isBootLoading: Bool = false
     /// 전환 실패 등 패널에 표시할 안내 문구.
     var transitionError: String?
 
@@ -294,6 +298,7 @@ final class InteractionModel {
         dismissedTriggerID = nil
         transitionError = nil
         scene = .outdoor
+        isBootLoading = false
     }
 
     func processKioskScreenHandSample(

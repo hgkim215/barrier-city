@@ -63,6 +63,19 @@ struct ImmersiveView: View {
             model.worldRoot = worldRoot
             AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
 
+            // 로딩 화면: Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지 화면을
+            // 가린다. 휠체어 입력·문/키오스크 트리거 판정도 같이 멈춘다(isBootLoading).
+            BootLoadingOverlay.shared.install(
+                content: content,
+                textAttachment: attachments.entity(for: "bootLoading"))
+            InteractionModel.shared.isBootLoading = true
+
+            // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
+            // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
+            // 맨 끝에서 두 프리로드를 기다린 뒤에야 로딩 화면을 걷어낸다.
+            async let indoorPreload: Void = SceneSwitcher.preloadIndoorScene()
+            async let realtimePreconnect: Void = RealtimePreconnect.shared.preconnect()
+
             do {
                 let outdoorVisible = try await Entity(
                     named: ImmersiveSceneCatalog.outdoor,
@@ -180,6 +193,13 @@ struct ImmersiveView: View {
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
             InteractionSetup.install(content: content, attachments: attachments, appModel: model)
 
+            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor/Realtime
+            // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
+            _ = await indoorPreload
+            _ = await realtimePreconnect
+            BootLoadingOverlay.shared.remove()
+            InteractionModel.shared.isBootLoading = false
+
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
@@ -195,6 +215,11 @@ struct ImmersiveView: View {
                              shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
+            // Outdoor/Indoor/Realtime 프리로드가 끝날 때까지 보여주는 로딩 화면 문구
+            // (BootLoadingOverlay가 head-anchor 배치를 담당).
+            Attachment(id: "bootLoading") {
+                BootLoadingView()
+            }
             // [김현기] 사용자 눈앞 입장 패널(content-root 배치는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
                 EntryPromptView()

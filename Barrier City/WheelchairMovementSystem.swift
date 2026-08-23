@@ -94,7 +94,8 @@ struct WheelchairMovementSystem: System {
             // 아직 그대로 남아 있다. 이 창에서도 계속 입력을 받아 전진하면 아직 안 치워진
             // 문에 부딪혀 진입 도중 쿵/덜컹 소리가 반복해서 났다. 잠금과 동일하게 입력을
             // 버리고 높이만 정착시켜 전환이 끝날 때까지 제자리에서 멈춰 있게 한다.
-            if GuideFlowModel.shared.isInteractionLocked || InteractionModel.shared.isTransitioning {
+            if GuideFlowModel.shared.isInteractionLocked || InteractionModel.shared.isTransitioning
+                || InteractionModel.shared.isBootLoading {
                 model.discardGuideLockedInput()
                 // 잠금 중에도 실제 바닥 높이로 부드럽게 정착시킨다. 그렇지 않으면 씬 전환 때
                 // 잠시 빌려온 높이(outdoor 접지 fallback 등)로 굳어 카페 진입 직후 미션 확인

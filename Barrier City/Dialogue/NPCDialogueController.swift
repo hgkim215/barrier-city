@@ -341,7 +341,10 @@ final class NPCDialogueController {
             requestAnimation(.greet)
         }
 
-        let session = RealtimeNPCConversationSession()
+        // 몰입 공간 진입 시 미리 연결해둔 클라이언트가 있으면 재사용해 연결 지연 없이
+        // 바로 시작한다. 없으면(아직 준비 중이거나 프리커넥트 실패) 평소대로 새로 만든다.
+        let session = RealtimePreconnect.shared.takeClient().map(RealtimeNPCConversationSession.init)
+            ?? RealtimeNPCConversationSession()
         realtimeSession = session
         do {
             try await session.start(
