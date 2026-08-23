@@ -11,10 +11,11 @@ enum NPCGuestAnimationCue: String {
     case walk = "Walk"
     case sitting = "Sitting"
     case sitToStand = "Sit_to_Stand"
+    case angry = "Angry"
 
     var repeats: Bool {
         switch self {
-        case .idle, .walk, .sitting: true
+        case .idle, .walk, .sitting, .angry: true
         case .sitToStand: false
         }
     }
@@ -237,12 +238,14 @@ final class NPCGuestController {
         }
 
         if let queueSlot {
+            playAnimation(.walk)
             if move(toward: queueSlot, deltaTime: deltaTime,
                     arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                     playerPosition: playerPosition,
                     neighboringPositions: neighboringPositions,
                     separationScale: 0.35) {
-                playAnimation(.idle)
+                // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
+                playAnimation(.angry)
                 if let facingTarget { face(point: facingTarget, deltaTime: deltaTime) }
             }
             return
