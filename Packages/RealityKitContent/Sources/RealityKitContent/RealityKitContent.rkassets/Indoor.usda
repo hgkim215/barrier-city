@@ -834,7 +834,7 @@ def Xform "Root"
                                 int ui:nodegraph:node:stackingOrder = 1
                                 quatf xformOp:orient = (0.7071067, 0.70710677, 5.338509e-8, -5.338511e-8)
                                 float3 xformOp:scale = (1.2500001, 0.12499999, 1.2500001)
-                                float3 xformOp:translate = (0.002040863, -0.10487175, 0.55959636)
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
                                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
@@ -868,6 +868,7 @@ def Xform "Root"
                             over "SittingPoint"
                             {
                                 rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
                             }
                         }
 
@@ -1675,7 +1676,7 @@ def Xform "Root"
                                 int ui:nodegraph:node:stackingOrder = 2
                                 quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385097e-8, -5.3385094e-8)
                                 float3 xformOp:scale = (1.9999995, 0.19999993, 1.9999995)
-                                float3 xformOp:translate = (0.025774004, -0.0031034949, 0.9762739)
+                                float3 xformOp:translate = (0.02584553, -0.0030856135, 1.0543412)
                                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
