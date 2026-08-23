@@ -114,4 +114,20 @@ final class RealtimeConversationGuideTests: XCTestCase {
             XCTAssertTrue(guide.contains(expected), "Missing rule for \(personality)")
         }
     }
+
+    func test_fulfillmentContext_isInjectedIntoRealtimeInstructions() {
+        for (context, requiredFact) in [
+            (RainbowSmoothieFulfillmentContext.orderingAllowed, "FULFILLMENT=orderingAllowed"),
+            (.preparing, "FULFILLMENT=preparing"),
+            (.readyAtCounter, "FULFILLMENT=readyAtCounter"),
+            (.failed, "FULFILLMENT=failed"),
+        ] {
+            let guide = RealtimeConversationGuide().instructions(
+                persona: persona,
+                climate: SocialClimate(),
+                fulfillmentContext: context
+            )
+            XCTAssertTrue(guide.contains(requiredFact), "Missing fact \(requiredFact)")
+        }
+    }
 }

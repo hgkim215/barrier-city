@@ -61,6 +61,7 @@ final class NPCDialogueController {
     }
     var isBusy: Bool { status == .thinking || status == .speaking }
 
+    private let orderSession: CafeOrderSession
     private let accessibilityAttitude: AccessibilityAttitude
     private let clerkPersonality: ClerkPersonality
     private var climate: SocialClimate
@@ -71,6 +72,7 @@ final class NPCDialogueController {
     private var realtimeResponseTimeoutTask: Task<Void, Never>?
     private var realtimeGenerationTimeoutTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
+    private var orderReadyAnnouncementTask: Task<Void, Never>?
     private var cleanupGeneration = 0
     private var realtimeLiveText = ""
     private var realtimeMission = RealtimeMissionCoordinator()
@@ -82,15 +84,34 @@ final class NPCDialogueController {
     private var realtimeCanAcceptInput = false
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
+    private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
+    private var orderReadyRealtimeSession: RealtimeNPCConversationSession?
     /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
     private var encounterCount = 0
 
+    private var fulfillmentContext: RainbowSmoothieFulfillmentContext {
+        orderSession.phase.dialogueFulfillmentContext
+    }
+
+    var orderReadyAnnouncementPresentation: OrderReadyAnnouncementPresentationState {
+        OrderReadyAnnouncementPresentationState(
+            hasPendingAnnouncement: orderReadyAnnouncementGate.hasPendingAnnouncement,
+            hasActiveTask: orderReadyAnnouncementTask != nil
+        )
+    }
+
+    var blocksConversationForOrderReadyAnnouncement: Bool {
+        orderReadyAnnouncementPresentation.isPresented
+    }
+
     init(
+        orderSession: CafeOrderSession = CafeOrderSession(),
         accessibilityAttitude: AccessibilityAttitude = .ableist,
         clerkPersonality: ClerkPersonality? = nil
     ) {
         let resolvedPersonality = clerkPersonality ?? .random()
         let initialClimate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
+        self.orderSession = orderSession
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = resolvedPersonality
         realtimeMission = RealtimeMissionCoordinator()
@@ -113,6 +134,9 @@ final class NPCDialogueController {
 
     /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
     func resetImmersiveProgress() {
+        orderReadyAnnouncementTask?.cancel()
+        orderReadyAnnouncementTask = nil
+        orderReadyAnnouncementGate.reset()
         cancelEncounter()
         status = .idle
         userText = ""
@@ -134,9 +158,108 @@ final class NPCDialogueController {
         encounterCount = 0
     }
 
+    func requestOrderReadyAnnouncement() {
+        let busy = isEncounterActive || status != .idle || orderReadyAnnouncementTask != nil
+        switch orderReadyAnnouncementGate.request(isChannelBusy: busy) {
+        case .speakNow:
+            startOrderReadyAnnouncement()
+        case .queued, .ignored:
+            break
+        }
+    }
+
+    func deliverPendingOrderReadyAnnouncementIfPossible() {
+        let busy = isEncounterActive || status != .idle || orderReadyAnnouncementTask != nil
+        guard orderReadyAnnouncementGate.takePendingIfAvailable(isChannelBusy: busy) else { return }
+        startOrderReadyAnnouncement()
+    }
+
+    private func startOrderReadyAnnouncement() {
+        guard orderReadyAnnouncementTask == nil else { return }
+        orderReadyAnnouncementTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let session = RealtimeNPCConversationSession()
+            self.orderReadyRealtimeSession = session
+            let didComplete = await OrderReadyAnnouncementPresentationTiming.perform(
+                present: {
+                    self.status = .speaking
+                    self.npcSubtitle = OrderReadyAnnouncementContent.line
+                },
+                speak: {
+                    await self.speakRealtimeOrderReadyAnnouncement(session: session)
+                },
+                waitForMinimumVisibility: {
+                    try await Task.sleep(
+                        for: OrderReadyAnnouncementPresentationTiming.minimumVisibleDuration
+                    )
+                }
+            )
+            await session.stop()
+            self.orderReadyRealtimeSession = nil
+            guard didComplete else { return }
+            self.status = .idle
+            self.orderReadyAnnouncementTask = nil
+        }
+    }
+
+    private func speakRealtimeOrderReadyAnnouncement(session: RealtimeNPCConversationSession) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var hasResumed = false
+            let resumeOnce: @MainActor () -> Void = {
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume()
+                }
+            }
+
+            Task { @MainActor in
+                do {
+                    try await session.start(
+                        instructions: """
+                        당신은 친절한 카페 바리스타 점원입니다.
+                        손님이 주문한 음료가 완성되었음을 카운터 너머로 밝고 명확하게 안내하세요.
+                        """,
+                        openingInstructions: """
+                        오직 다음 한 문장만 정확하고 밝게 외쳐서 말하세요:
+                        주문하신 레인보우 스무디 나왔습니다. 카운터에서 가져가 주세요.
+                        """,
+                        tools: []
+                    ) { [weak self] event in
+                        guard let self else { return }
+                        switch event {
+                        case .outputTranscriptDone(let text):
+                            self.npcSubtitle = text
+                        case .outputAudioStopped, .responseDone:
+                            resumeOnce()
+                        case .failure:
+                            resumeOnce()
+                        default:
+                            break
+                        }
+                    }
+                } catch {
+                    resumeOnce()
+                }
+            }
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(6))
+                resumeOnce()
+            }
+        }
+    }
+
     /// ImmersiveSpace가 실제로 닫히는 순간 네트워크 연결과 대화 문맥을 폐기한다.
     /// 미션·호감도 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
     func endImmersiveSession() {
+        let readySession = orderReadyRealtimeSession
+        orderReadyRealtimeSession = nil
+        Task { @MainActor in
+            await readySession?.stop()
+        }
+        orderReadyAnnouncementTask?.cancel()
+        orderReadyAnnouncementTask = nil
+        orderReadyAnnouncementGate.reset()
         cancelEncounter()
         conversationMemory.reset()
         encounterCount = 0
@@ -292,7 +415,13 @@ final class NPCDialogueController {
                 return
             }
             conversationMemory.append(.user, text: transcript)
-            let routingDecision = realtimeMission.observe(userTranscript: transcript)
+            let routingDecision: RealtimeMissionRoutingDecision
+            if fulfillmentContext.allowsOrderCompletion {
+                routingDecision = realtimeMission.observe(userTranscript: transcript)
+            } else {
+                _ = realtimeMission.observe(userTranscript: transcript)
+                routingDecision = .ordinaryConversation
+            }
 #if DEBUG
             Self.lifecycleLogger.debug(
                 "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: routingDecision), privacy: .public) exposesTool=\(routingDecision.exposesMissionOrderTool, privacy: .public)"
@@ -315,7 +444,8 @@ final class NPCDialogueController {
                     try await realtimeSession.requestResponse(
                         instructions: self.realtimeInstructions(
                             for: self.climate,
-                            routingDecision: routingDecision
+                            routingDecision: routingDecision,
+                            memory: self.conversationMemory
                         ),
                         toolChoice: routingDecision.exposesMissionOrderTool ? .required : .none,
                         tools: routingDecision.exposesMissionOrderTool
@@ -398,6 +528,7 @@ final class NPCDialogueController {
                 conversationMemory.append(.assistant, text: npcSubtitle)
                 publishMissionEvent(.orderPlaced)
             } else {
+                status = .idle
                 npcSubtitle = "음성 연결 오류: \(message)"
                 publishMissionEvent(.exited)
             }
@@ -416,7 +547,8 @@ final class NPCDialogueController {
                 clerkPersonality: clerkPersonality
             ),
             climate: climate,
-            memory: memory
+            memory: memory,
+            fulfillmentContext: fulfillmentContext
         ))
 
         # App-owned order state for this response
@@ -434,7 +566,9 @@ final class NPCDialogueController {
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
-            climate: SocialClimate(rapport: rapport)
+            climate: SocialClimate(rapport: rapport),
+            memory: conversationMemory,
+            fulfillmentContext: fulfillmentContext
         ))
 
         \(realtimeMission.snapshot.promptGuide)

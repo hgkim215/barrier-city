@@ -210,6 +210,14 @@ final class InteractionModel {
     private var transitionSession = SceneTransitionSession()
     @ObservationIgnored private var transitionTask: Task<Void, Never>?
 
+    /// 초기 야외 장면 로드와 InteractionSetup.install이 모두 완료되었는지 여부.
+    var isInitialSceneReady: Bool {
+        visibleMap != nil
+            && collisionMap != nil
+            && collisionMap?.parent != nil
+            && updateSubscription != nil
+    }
+
     /// "아니요": 현재 패널을 닫고, 범위를 벗어났다 재진입하기 전까지 다시 띄우지 않는다.
     func dismissActive() {
         dismissedTriggerID = activeTrigger?.id

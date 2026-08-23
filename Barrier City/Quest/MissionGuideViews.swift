@@ -37,6 +37,7 @@ struct MissionListView: View {
     let steps: [QuestStep]
     let visibleCount: Int
     let allCompleted: Bool
+    var remainingPreparationSeconds: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -46,6 +47,11 @@ struct MissionListView: View {
 
             ForEach(Array(steps.prefix(visibleCount).enumerated()), id: \.element.id) { offset, step in
                 let isClear = allCompleted || offset < visibleCount - 1
+                let statusLabel: String = {
+                    if isClear { return "Clear" }
+                    if remainingPreparationSeconds > 0 { return "\(remainingPreparationSeconds)초" }
+                    return "Progress"
+                }()
 
                 HStack(spacing: 20) {
                     Text("\(offset + 1). \(step.title)")
@@ -53,7 +59,7 @@ struct MissionListView: View {
                         .foregroundStyle(isClear ? Color.secondary : Color.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text(isClear ? "Clear" : "Progress")
+                    Text(statusLabel)
                         .font(.caption2.bold())
                         .foregroundStyle(isClear ? Color.secondary : GuideTheme.accent)
                         .padding(.horizontal, 12)

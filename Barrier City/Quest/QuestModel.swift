@@ -68,7 +68,7 @@ final class QuestModel {
     /// 구현될 때 연결할 상태 계약이며, 그전까지 가이드 화면에는 표시하지 않는다.
     let steps: [QuestStep] = [
         QuestStep(id: "quest.reachCafe",
-                  title: "카페 입구로 이동하세요",
+                  title: "카페 내부로 이동하세요",
                   detail: "양손으로 바퀴를 잡고 앞으로 밀면 휠체어가 움직입니다",
                   completionEvent: .enteredIndoor),
         QuestStep(id: "quest.tryKiosk",

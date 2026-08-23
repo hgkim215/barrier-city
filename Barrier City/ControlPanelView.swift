@@ -166,6 +166,22 @@ struct ControlPanelView: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
 
+            Button {
+                Task { @MainActor in
+                    guard !isCafeTransitioning else { return }
+                    isCafeTransitioning = true
+                    immersiveError = nil
+                    defer { isCafeTransitioning = false }
+                    await startOrderPlacedScenarioForDevelopment()
+                }
+            } label: {
+                Label(isCafeTransitioning ? "카페 준비 중…" : "개발: 음료 주문 완료 시점 시작",
+                      systemImage: "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.teal)
+
 #if targetEnvironment(simulator)
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $simulatorMicrophoneEnabled) {
@@ -295,25 +311,37 @@ struct ControlPanelView: View {
     private func enterCafeForDevelopment() async -> Bool {
         guard await openImmersiveSpaceIfNeeded() else { return false }
 
-        for _ in 0..<100 where model.worldRoot == nil {
+        let im = InteractionModel.shared
+        for _ in 0..<200 where !im.isInitialSceneReady || model.worldRoot == nil {
             try? await Task.sleep(for: .milliseconds(100))
         }
-        guard model.worldRoot != nil else {
-            immersiveError = "몰입 공간은 열렸지만 카페 씬 준비가 지연되고 있습니다. 다시 눌러 주세요."
+        guard model.worldRoot != nil, im.isInitialSceneReady else {
+            immersiveError = "몰입 공간은 열렸지만 초기 장면 준비가 지연되고 있습니다. 다시 눌러 주세요."
             return false
         }
 
-        if InteractionModel.shared.scene == .outdoor {
+        if im.scene == .outdoor {
             SceneSwitcher.requestIndoorTransition()
-            for _ in 0..<100 where InteractionModel.shared.isTransitioning {
+            for _ in 0..<200 where im.isTransitioning {
                 try? await Task.sleep(for: .milliseconds(100))
             }
+        } else {
+            SceneSwitcher.resetIndoorPose(app: model)
         }
-        if InteractionModel.shared.scene != .indoor {
-            immersiveError = InteractionModel.shared.transitionError
+        if im.scene != .indoor {
+            immersiveError = im.transitionError
                 ?? "카페 실내로 전환하지 못했습니다."
             return false
         }
+
+        // 미션 2 (카페 내로 이동한 상태로 키오스크에서 음료를 주문해야 하는 상태)로 설정
+        let guide = GuideFlowModel.shared
+        guide.reset()
+        guide.skipOnboarding()
+        guide.confirmMission()
+        guide.handleQuestEvent(.enteredIndoor)
+        guide.confirmMission()
+
         return true
     }
 
@@ -332,11 +360,6 @@ struct ControlPanelView: View {
         guard await enterCafeForDevelopment() else { return }
 
         let guide = GuideFlowModel.shared
-        guide.reset()
-        guide.skipOnboarding()
-        guide.confirmMission()
-        guide.handleQuestEvent(.enteredIndoor)
-        guide.confirmMission()
         guide.handleQuestEvent(.kioskFailed)
         guide.confirmMission()
 
@@ -345,6 +368,20 @@ struct ControlPanelView: View {
             immersiveError = "NPC가 아직 준비되지 않았습니다. 잠시 후 다시 눌러 주세요."
             return
         }
+    }
+
+    /// 개발 패널에서 점원에게 주문이 접수된 직후의 시나리오를 시작한다.
+    /// 10초 카운트다운 후 스무디가 카운터에 나타나고 점원이 주문 완성 호출을 진행한다.
+    @MainActor
+    private func startOrderPlacedScenarioForDevelopment() async {
+        guard await enterCafeForDevelopment() else { return }
+
+        let guide = GuideFlowModel.shared
+        guide.handleQuestEvent(.kioskFailed)
+        guide.confirmMission()
+        guide.handleQuestEvent(.npcHelpDone)
+
+        model.rainbowSmoothieServing.acceptOrder()
     }
 
     private var isNPCConversationInProgress: Bool {

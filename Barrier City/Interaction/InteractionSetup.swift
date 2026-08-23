@@ -50,6 +50,7 @@ enum InteractionSetup {
         im.activeTrigger = nil
         im.dismissedTriggerID = nil
         im.transitionError = nil
+        appModel.rainbowSmoothieServing.resetForOutdoor()
         appModel.npcClerk.tearDownForOutdoor()
         appModel.npcGuests.tearDownForOutdoor()
 
@@ -181,6 +182,19 @@ enum InteractionSetup {
             im.kioskFailOpenSent = true
             guide.handleQuestEvent(.kioskFailed)
         }
+
+        // 미션 6 (지정 좌석으로 이동) 활성 시 WayPoint 도착 판정
+        if isIndoor, QuestModel.shared.currentIndex == 5 {
+            let dest = app.waypointPresenter.destinationPosition
+            let dx = app.motion.positionX - dest.x
+            let dz = app.motion.positionZ - dest.z
+            let distance = sqrt(dx * dx + dz * dz)
+            if distance <= app.waypointPresenter.arrivalRadius {
+                guide.handleQuestEvent(.seatedAtTable)
+                app.waypointPresenter.hide()
+            }
+        }
+
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
         app.npcGuests.update(deltaTime: deltaTime,

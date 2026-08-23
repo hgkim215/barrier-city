@@ -17,6 +17,8 @@ enum SceneSwitcher {
         let visible: Entity
         let collision: Entity
         let collisionShapeCount: Int
+        let smoothie: Entity?
+        let waypoint: Entity?
     }
 
     private struct IndoorLayout {
@@ -32,12 +34,32 @@ enum SceneSwitcher {
         }
     }
 
+    /// 이미 실내에 있는 상태에서 개발 리스폰 시 시작 위치와 자세를 문 안쪽 스폰 좌표로 초기화한다.
+    static func resetIndoorPose(app: AppModel) {
+        let im = InteractionModel.shared
+        guard im.scene == .indoor,
+              let worldRoot = app.worldRoot,
+              let indoorVisible = im.visibleMap else { return }
+        let layout = resolveIndoorLayout(in: indoorVisible, relativeTo: worldRoot)
+        app.restart()
+        app.motion.positionX = layout.spawn.x
+        app.motion.positionZ = layout.spawn.y
+        app.motion.heading = layout.heading
+        if let groundHeight = im.outdoorGroundLayout?.height {
+            app.motion.chairHeight = groundHeight
+            app.motion.groundHeight = groundHeight
+        }
+    }
+
     /// "예" 선택 시 호출. Outdoor에서만 동작하며, 실패 시 Outdoor를 유지하고
     /// 패널에 안내 문구를 띄운다.
     private static func switchToIndoor(token: SceneTransitionToken) async {
         let im = InteractionModel.shared
         guard im.isCurrentTransition(token), im.scene == .outdoor,
-              let app = AppModel.current, let worldRoot = app.worldRoot else { return }
+              let app = AppModel.current, let worldRoot = app.worldRoot else {
+            im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
+            return
+        }
 
         // 애셋 로드·정착이 끝날 때까지 화면을 가려 준비 과정을 자연스럽게 숨긴다.
         // 실패로 중간에 빠져나가는 경로는 여기서 바로 되돌리고, 성공 경로는 NPC가
@@ -52,6 +74,7 @@ enum SceneSwitcher {
         do {
             prepared = try await prepareIndoorScene()
         } catch is CancellationError {
+            im.transitionError = "장면 전환이 취소되었습니다."
             return
         } catch {
             im.transitionError = "지금은 들어갈 수 없어요. 잠시 후 다시 시도해 주세요."
@@ -66,6 +89,7 @@ enum SceneSwitcher {
               let oldVisible = im.visibleMap,
               let oldCollision = im.collisionMap,
               let collisionParent = oldCollision.parent else {
+            im.transitionError = "장면 구성 준비가 완료되지 않았습니다. 잠시 후 다시 시도해 주세요."
             return
         }
 
@@ -91,6 +115,11 @@ enum SceneSwitcher {
                                      im.isCurrentTransition(token)
                                  })
         guard im.isCurrentTransition(token) else { return }
+        app.rainbowSmoothiePresenter.install(
+            smoothie: prepared.smoothie,
+            in: prepared.visible)
+        app.waypointPresenter.install(in: prepared.visible)
+        app.rainbowSmoothieServing.enterIndoor()
         app.npcGuests.enterIndoor(worldRoot: worldRoot, indoorMap: prepared.visible)
         app.restart()
         app.motion.positionX = layout.spawn.x
@@ -163,12 +192,22 @@ enum SceneSwitcher {
         SceneEntityPreparation.prepareVisible(visible)
         let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)
         try Task.checkCancellation()
+        let smoothie = try? await Entity(
+            named: ImmersiveSceneCatalog.rainbowSmoothie,
+            in: realityKitContentBundle)
+        try Task.checkCancellation()
+        let waypoint = try? await Entity(
+            named: ImmersiveSceneCatalog.wayPoint,
+            in: realityKitContentBundle)
+        try Task.checkCancellation()
 
         // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
         // 공통 바닥 충돌이 접지를 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
         return PreparedIndoorScene(visible: visible,
                                    collision: collision,
-                                   collisionShapeCount: collisionShapeCount)
+                                   collisionShapeCount: collisionShapeCount,
+                                   smoothie: smoothie,
+                                   waypoint: waypoint)
     }
 
     /// 비활성 상태로 worldRoot에 연결된 Indoor 엔티티에서 트리거와 스폰 포즈를 계산한다.
