@@ -60,6 +60,13 @@ final class NPCGuestCoordinator {
     private var exclusionAreas: [NPCGuestArea] = []
     private var queuerIndices: Set<Int> = []
     private var wasOrdering = false
+    /// 줄서기 시작 순간에 고정하는 대기줄 기준선(키오스크 원점 + 방향 + 유저까지의
+    /// 거리). 매 프레임 라이브 유저 위치로 다시 계산하면 유저가 트리거 반경 안에서
+    /// 조금만 움직여도 줄 전체가 다시 정렬되며 흔들리므로, 시작 시점에만 캡처해
+    /// 이후에는 키오스크 기준으로 고정한다.
+    private var queueOrigin: SIMD2<Float>?
+    private var queueDirection: SIMD2<Float>?
+    private var queueBaseDistance: Float = 0
 
     /// Indoor 진입 시 손님 엔티티를 찾아 배치하고, "_floor"에서 배회 영역을,
     /// "AreaK"/"AreaB"에서 제외 영역을 계산한다.
@@ -117,6 +124,9 @@ final class NPCGuestCoordinator {
         exclusionAreas.removeAll()
         queuerIndices.removeAll()
         wasOrdering = false
+        queueOrigin = nil
+        queueDirection = nil
+        queueBaseDistance = 0
     }
 
     /// - Parameters:
@@ -125,15 +135,22 @@ final class NPCGuestCoordinator {
     func update(deltaTime: Float, appModel: AppModel, isOrdering: Bool, kioskCenter: SIMD2<Float>?) {
         guard let floorArea else { return }
 
+        let playerPosition = SIMD2(appModel.motion.positionX, appModel.motion.positionZ)
+
         if isOrdering, !wasOrdering {
             queuerIndices = Set(guests.indices.shuffled().prefix(min(2, guests.count)))
+            if let kioskCenter {
+                captureQueueLine(kioskCenter: kioskCenter, playerPosition: playerPosition)
+            }
         }
         if !isOrdering {
             queuerIndices.removeAll()
+            queueOrigin = nil
+            queueDirection = nil
+            queueBaseDistance = 0
         }
         wasOrdering = isOrdering
 
-        let playerPosition = SIMD2(appModel.motion.positionX, appModel.motion.positionZ)
         let orderedQueuers = queuerIndices.sorted()
         // 프레임 시작 시 스냅샷을 만들어 업데이트 순서에 따라 뒤쪽 NPC만 더 강하게
         // 반응하는 편향을 없앤다.
@@ -144,7 +161,7 @@ final class NPCGuestCoordinator {
             var slot: SIMD2<Float>?
             var facing: SIMD2<Float>?
             if isOrdering, let kioskCenter, let rank = orderedQueuers.firstIndex(of: index) {
-                slot = queueSlot(kioskCenter: kioskCenter, playerPosition: playerPosition, rank: rank + 1)
+                slot = queueSlot(rank: rank + 1)
                 facing = kioskCenter
             }
             let neighboringPositions = positions.enumerated().compactMap {
@@ -164,12 +181,24 @@ final class NPCGuestCoordinator {
         }
     }
 
-    /// 키오스크→유저 방향을 그대로 연장해 유저 뒤로 줄을 세운다.
-    private func queueSlot(kioskCenter: SIMD2<Float>, playerPosition: SIMD2<Float>, rank: Int) -> SIMD2<Float> {
+    /// 줄서기 시작 순간의 키오스크→유저 방향과 거리를 고정 기준선으로 캡처한다.
+    /// 이후 매 프레임 이 스냅샷을 그대로 재사용하므로, 유저가 트리거 반경 안에서
+    /// 조금씩 움직여도 대기줄이 다시 정렬되며 흔들리지 않는다.
+    private func captureQueueLine(kioskCenter: SIMD2<Float>, playerPosition: SIMD2<Float>) {
         var direction = playerPosition - kioskCenter
-        if simd_length(direction) < 0.001 { direction = SIMD2(0, 1) }
-        let normalized = simd_normalize(direction)
-        return playerPosition + normalized * (Tuning.queueSpacing * Float(rank))
+        let distance = simd_length(direction)
+        if distance < 0.001 { direction = SIMD2(0, 1) }
+        queueOrigin = kioskCenter
+        queueDirection = simd_normalize(direction)
+        queueBaseDistance = distance
+    }
+
+    /// 고정된 키오스크 기준선(queueOrigin + queueDirection) 위에서, 유저가 서 있는
+    /// 지점(queueBaseDistance)보다 rank칸 더 뒤로 줄을 세운다.
+    private func queueSlot(rank: Int) -> SIMD2<Float> {
+        guard let queueOrigin, let queueDirection else { return .zero }
+        let distance = queueBaseDistance + Tuning.queueSpacing * Float(rank)
+        return queueOrigin + queueDirection * distance
     }
 
     /// AreaK 계산(NPCClerkController.makeWorkArea)과 동일하게, authored marker의 회전·
