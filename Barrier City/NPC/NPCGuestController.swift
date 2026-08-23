@@ -232,7 +232,8 @@ final class NPCGuestController {
         case .movingToSeat:
             updateMovingToSeat(deltaTime: deltaTime,
                                playerPosition: playerPosition,
-                               neighboringPositions: neighboringPositions)
+                               neighboringPositions: neighboringPositions,
+                               exclusions: exclusions)
             return
         case .sitting:
             updateSitting(deltaTime: deltaTime)
@@ -249,7 +250,8 @@ final class NPCGuestController {
                                arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
-                               separationScale: 0.35)
+                               separationScale: 0.35,
+                               exclusions: exclusions)
             if outcome.arrived {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
                 playAnimation(.angry)
@@ -303,13 +305,15 @@ final class NPCGuestController {
 
     private func updateMovingToSeat(deltaTime: Float,
                                     playerPosition: SIMD2<Float>,
-                                    neighboringPositions: [SIMD2<Float>]) {
+                                    neighboringPositions: [SIMD2<Float>],
+                                    exclusions: [NPCGuestArea]) {
         guard let seat = claimedSeat else { seatState = .none; return }
         let outcome = move(toward: seat.position, deltaTime: deltaTime,
                            arrivalDistance: NPCGuestTuning.seatArrivalDistance,
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
-                           separationScale: 0.5)
+                           separationScale: 0.5,
+                           exclusions: exclusions)
         if outcome.arrived {
             seatState = .sitting
             seatTimeRemaining = Float.random(in: movementProfile.sittingDurationRange)

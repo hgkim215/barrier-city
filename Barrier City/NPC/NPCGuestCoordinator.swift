@@ -28,9 +28,8 @@ struct NPCGuestArea {
 /// 착석 가능한 좌석 하나. Furnitures 하위의 "SittingPoint" 마커에서 만들어진다.
 struct GuestSeat {
     let position: SIMD2<Float>
-    /// 착석 시 바라볼 방향. Tripo로 생성된 의자 메시의 로컬 회전은 신뢰할 수 없어
-    /// authored 회전 대신, 가까운 좌석끼리 묶은 클러스터의 중심(= 마주보는 자리는
-    /// 서로를, 고립된 자리는 방 안쪽을 향함)으로 계산한다.
+    /// 착석 시 바라볼 방향. SittingPoint 마커의 실제 authored 회전(디자이너가 각
+    /// 의자 복제본을 배치하며 직접 돌려놓은 값)에서 뽑아낸다.
     let facing: SIMD2<Float>
 }
 
@@ -64,9 +63,6 @@ final class NPCGuestCoordinator {
         /// seatedPool 인원을 나눠 서로 다른 테이블에 앉힐 그룹 크기(합이
         /// seatedPoolCount와 같아야 한다).
         static let seatedPoolGroupSizes: [Int] = [1, 2, 3]
-        /// 이보다 가까운 두 좌석은 "서로 마주보는 사이"로 간주해 좌석 방향 계산 시
-        /// 서로를 향하게 한다(예: 작은 테이블 양쪽에 놓인 의자).
-        static let seatFacingLinkDistance: Float = 1.0
         /// 이보다 가까운 좌석들은 "같은 테이블"로 묶어 seatedPool 그룹 배정에 쓴다.
         /// facing용 기준보다 넉넉해서, 한 테이블에 여러 좌석이 줄지어 있어도(예: 벽
         /// 쪽 긴 벤치) 하나의 테이블로 인식한다.
@@ -139,21 +135,19 @@ final class NPCGuestCoordinator {
 
         // authoring 상 실수로 좌석이 직원 구역(AreaK/AreaB) 안에 놓였다면 손님이
         // 그쪽으로 걸어 들어가지 않도록 애초에 좌석 후보에서 뺀다.
-        let rawPositions = collectSittingPointPositions(in: indoorMap, relativeTo: worldRoot)
-            .filter { position in !exclusionAreas.contains(where: { $0.contains(position) }) }
-        let facingClusters = clusterIndices(of: rawPositions, linkDistance: Tuning.seatFacingLinkDistance)
-        seats = rawPositions.indices.map { index in
-            let cluster = facingClusters.first(where: { $0.contains(index) }) ?? [index]
-            return GuestSeat(
-                position: rawPositions[index],
-                facing: facing(forSeatAt: index, positions: rawPositions, cluster: cluster, roomCenter: floorArea.center))
-        }
-        seatTableGroups = clusterIndices(of: rawPositions, linkDistance: Tuning.seatTableGroupLinkDistance)
+        seats = collectSittingPoints(in: indoorMap, relativeTo: worldRoot)
+            .filter { seat in !exclusionAreas.contains(where: { $0.contains(seat.position) }) }
+        seatTableGroups = clusterIndices(of: seats.map(\.position), linkDistance: Tuning.seatTableGroupLinkDistance)
         seatOccupants = Array(repeating: nil, count: seats.count)
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
-        if let seatClusterExclusion = makeSeatClusterExclusion(from: seats) {
-            exclusionAreas.append(seatClusterExclusion)
+        // 테이블마다 각자 좌석 주변에만 작은 배회 제외 구역을 둔다. 모든 좌석을 하나의
+        // 큰 바운딩 박스로 묶으면(예전 방식) 방 전체를 뒤덮을 만큼 넓어져 배회 가능한
+        // 공간이 거의 안 남아 NPC가 목적지를 못 찾고 그 자리에 멈춰있는 문제가 있었다.
+        for group in seatTableGroups {
+            if let exclusion = makeSeatClusterExclusion(from: group.map { seats[$0] }) {
+                exclusionAreas.append(exclusion)
+            }
         }
 
         var roles: [NPCGuestRole] = []
@@ -216,23 +210,31 @@ final class NPCGuestCoordinator {
         }
     }
 
-    /// Furnitures 하위의 모든 "SittingPoint" 마커 위치를 모은다(방향은 아직 없음).
-    /// 의자 이름이나 개수를 하드코딩하지 않아 나중에 의자가 추가되어도 코드 수정
-    /// 없이 좌석이 늘어난다.
-    private func collectSittingPointPositions(in entity: Entity, relativeTo worldRoot: Entity) -> [SIMD2<Float>] {
-        var positions: [SIMD2<Float>] = []
+    /// Furnitures 하위의 모든 "SittingPoint" 마커를 좌석으로 모은다. 방향은 마커의
+    /// 실제 authored 회전(디자이너가 각 의자 복제본을 배치하며 직접 돌려놓은 값)에서
+    /// 뽑아낸다 — 씬 구조(테이블 이름, 좌석 간 거리)로 방향을 추정하는 시도들이 실제
+    /// 배치와 안 맞는 경우가 있어, 사람이 직접 authoring한 값을 신뢰하는 쪽으로
+    /// 바꿨다. 로컬 +Z를 착석자가 바라보는 축으로 가정한다 — 실제로 반대로 보이면
+    /// seatLocalForward만 (0, 0, -1)로 뒤집으면 된다.
+    private func collectSittingPoints(in entity: Entity, relativeTo worldRoot: Entity) -> [GuestSeat] {
+        let seatLocalForward = SIMD3<Float>(0, 0, 1)
+        var seats: [GuestSeat] = []
         func walk(_ candidate: Entity) {
             // 이름 동등 비교라 같은 이름의 마커가 씬 안에 몇 개든(서로 다른 부모 밑에
             // 있는 한) 전부 개별 좌석으로 잡힌다. RCP는 형제 간 이름이 겹칠 때만
             // "SittingPoint_1"처럼 접미사를 붙이므로 그 패턴도 함께 인식한다.
             if candidate.name == "SittingPoint" || candidate.name.hasPrefix("SittingPoint_") {
                 let world = candidate.position(relativeTo: worldRoot)
-                positions.append(SIMD2(world.x, world.z))
+                let orientation = candidate.orientation(relativeTo: worldRoot)
+                let worldForward = orientation.act(seatLocalForward)
+                var facing = SIMD2<Float>(worldForward.x, worldForward.z)
+                facing = simd_length(facing) > 0.01 ? simd_normalize(facing) : SIMD2(0, 1)
+                seats.append(GuestSeat(position: SIMD2(world.x, world.z), facing: facing))
             }
             for child in candidate.children { walk(child) }
         }
         walk(entity)
-        return positions
+        return seats
     }
 
     /// 거리 기반 union-find로 서로 가까운 좌석끼리 묶는다. linkDistance보다 가까운
@@ -257,24 +259,6 @@ final class NPCGuestCoordinator {
         var groups: [Int: [Int]] = [:]
         for i in positions.indices { groups[find(i), default: []].append(i) }
         return Array(groups.values)
-    }
-
-    /// 좌석이 속한 촘촘한 클러스터(가까운 상대와만 묶임)를 향해 바라보게 하고,
-    /// 근처에 아무도 없는 고립된 좌석(예: 벽쪽에 널찍이 떨어져 놓인 자리)은 방
-    /// 중심 쪽을 향하게 한다. 이러면 마주보는 자리는 서로를 보고, 외딴 자리는
-    /// 벽이 아닌 방 안쪽을 보게 된다.
-    private func facing(forSeatAt index: Int,
-                        positions: [SIMD2<Float>],
-                        cluster: [Int],
-                        roomCenter: SIMD2<Float>) -> SIMD2<Float> {
-        let seatPosition = positions[index]
-        if cluster.count > 1 {
-            let centroid = cluster.reduce(SIMD2<Float>.zero) { $0 + positions[$1] } / Float(cluster.count)
-            let toward = centroid - seatPosition
-            if simd_length(toward) > 0.01 { return simd_normalize(toward) }
-        }
-        let towardRoom = roomCenter - seatPosition
-        return simd_length(towardRoom) > 0.01 ? simd_normalize(towardRoom) : SIMD2(0, 1)
     }
 
     /// seatedPoolCount 인원을 groupSizes(예: [1, 2, 3])대로 나눠, 각 그룹을 서로 다른
@@ -432,11 +416,21 @@ final class NPCGuestCoordinator {
     }
 
     /// 고정된 키오스크 기준선(queueOrigin + queueDirection) 위에서, 유저가 서 있는
-    /// 지점(queueBaseDistance)보다 rank칸 더 뒤로 줄을 세운다.
+    /// 지점(queueBaseDistance)보다 rank칸 더 뒤로 줄을 세운다. 키오스크가 직원
+    /// 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를 가로지를 수 있어, 계산된 자리가
+    /// 제외 구역 안이면 같은 방향으로 한 칸씩 더 밀어 구역 밖으로 나갈 때까지
+    /// 반복한다.
     private func queueSlot(rank: Int) -> SIMD2<Float> {
         guard let queueOrigin, let queueDirection else { return .zero }
-        let distance = queueBaseDistance + Tuning.queueSpacing * Float(rank)
-        return queueOrigin + queueDirection * distance
+        var distance = queueBaseDistance + Tuning.queueSpacing * Float(rank)
+        var candidate = queueOrigin + queueDirection * distance
+        var attempts = 0
+        while exclusionAreas.contains(where: { $0.contains(candidate) }), attempts < 20 {
+            distance += Tuning.queueSpacing * 0.5
+            candidate = queueOrigin + queueDirection * distance
+            attempts += 1
+        }
+        return candidate
     }
 
     /// AreaK 계산(NPCClerkController.makeWorkArea)과 동일하게, authored marker의 회전·
