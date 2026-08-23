@@ -81,13 +81,14 @@ final class NPCGuestCoordinator {
     /// (Entity.applyNPCBodyCollision 참고).
     private struct GenderGroup {
         let templateName: String
+        let gender: NPCGuestGender
         let displayNames: [String]
     }
 
     /// wandererCount + cyclerCount + seatedPoolCount(1+3+6=10)에 맞춘 인원 구성.
     private static let genderGroups: [GenderGroup] = [
-        GenderGroup(templateName: "Female", displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3", "Guest_Female_4", "Guest_Female_5"]),
-        GenderGroup(templateName: "MaleIdle", displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4", "Guest_Male_5"]),
+        GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3", "Guest_Female_4", "Guest_Female_5"]),
+        GenderGroup(templateName: "MaleIdle", gender: .male, displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4", "Guest_Male_5"]),
     ]
 
     private var guests: [NPCGuestController] = []
@@ -107,10 +108,11 @@ final class NPCGuestCoordinator {
     /// 줄서기 시작 순간에 고정하는 대기줄 기준선(키오스크 원점 + 방향 + 유저까지의
     /// 거리). 매 프레임 라이브 유저 위치로 다시 계산하면 유저가 트리거 반경 안에서
     /// 조금만 움직여도 줄 전체가 다시 정렬되며 흔들리므로, 시작 시점에만 캡처해
-    /// 이후에는 키오스크 기준으로 고정한다.
+    /// 이후에는 유저가 서 있던 지점 기준으로 고정한다.
     private var queueOrigin: SIMD2<Float>?
     private var queueDirection: SIMD2<Float>?
-    private var queueBaseDistance: Float = 0
+    /// 이번 대기줄에서 자리에 도착하면 한숨을 재생할 손님(줄서기 시작 시 무작위 선정).
+    private var sighingGuestIndex: Int?
 
     /// Indoor 진입 시 손님 엔티티를 찾아 배치하고, "_floor"에서 배회 영역을,
     /// "AreaK"/"AreaB"에서 제외 영역을 계산한다. 좌석은 씬을 스캔해 동적으로 찾고,
@@ -173,7 +175,7 @@ final class NPCGuestCoordinator {
                 entity.name = displayName
                 let role = nextRoleIndex < roles.count ? roles[nextRoleIndex] : .cycler
                 nextRoleIndex += 1
-                let guest = NPCGuestController(name: displayName, role: role)
+                let guest = NPCGuestController(name: displayName, role: role, gender: group.gender)
 
                 let seatIndex: Int? = role == .seatedPool
                     ? (!seatedPoolSeatQueue.isEmpty ? seatedPoolSeatQueue.removeFirst() : bestFreeSeatIndex())
@@ -334,7 +336,7 @@ final class NPCGuestCoordinator {
         wasOrdering = false
         queueOrigin = nil
         queueDirection = nil
-        queueBaseDistance = 0
+        sighingGuestIndex = nil
     }
 
     /// - Parameters:
@@ -353,12 +355,15 @@ final class NPCGuestCoordinator {
             if let kioskCenter {
                 captureQueueLine(kioskCenter: kioskCenter, playerPosition: playerPosition)
             }
+            // 대기줄 중 한 명을 무작위로 골라, 그 손님이 자리에 도착하면 한숨을
+            // 재생해 뒤에 사람이 기다린다는 압박감을 준다.
+            sighingGuestIndex = queuerIndices.randomElement()
         }
         if !isOrdering {
             queuerIndices.removeAll()
             queueOrigin = nil
             queueDirection = nil
-            queueBaseDistance = 0
+            sighingGuestIndex = nil
         }
         wasOrdering = isOrdering
 
@@ -400,29 +405,32 @@ final class NPCGuestCoordinator {
                 seatOccupants[freeSeatIndex] = index
                 guest.grantSeat(index: freeSeatIndex, seat: seats[freeSeatIndex])
             }
+            if index == sighingGuestIndex, guest.takeQueueArrivalSignal() {
+                guest.playSigh()
+            }
         }
     }
 
     /// 줄서기 시작 순간의 키오스크→유저 방향과 거리를 고정 기준선으로 캡처한다.
     /// 이후 매 프레임 이 스냅샷을 그대로 재사용하므로, 유저가 트리거 반경 안에서
     /// 조금씩 움직여도 대기줄이 다시 정렬되며 흔들리지 않는다.
+    /// 유저가 서 있는 지점을 기준선 원점으로 캡처한다(방향은 키오스크→유저를 그대로
+    /// 연장). 원점을 키오스크가 아니라 유저 위치로 잡아야 대기줄 첫 번째 자리가
+    /// 유저 바로 뒤(queueSpacing만큼)에 오지, 키오스크까지의 거리만큼 밀려나지 않는다.
     private func captureQueueLine(kioskCenter: SIMD2<Float>, playerPosition: SIMD2<Float>) {
         var direction = playerPosition - kioskCenter
-        let distance = simd_length(direction)
-        if distance < 0.001 { direction = SIMD2(0, 1) }
-        queueOrigin = kioskCenter
+        if simd_length(direction) < 0.001 { direction = SIMD2(0, 1) }
+        queueOrigin = playerPosition
         queueDirection = simd_normalize(direction)
-        queueBaseDistance = distance
     }
 
-    /// 고정된 키오스크 기준선(queueOrigin + queueDirection) 위에서, 유저가 서 있는
-    /// 지점(queueBaseDistance)보다 rank칸 더 뒤로 줄을 세운다. 키오스크가 직원
-    /// 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를 가로지를 수 있어, 계산된 자리가
-    /// 제외 구역 안이면 같은 방향으로 한 칸씩 더 밀어 구역 밖으로 나갈 때까지
-    /// 반복한다.
+    /// 고정된 기준선(queueOrigin=유저 위치 + queueDirection) 위에서 rank칸 뒤에
+    /// 줄을 세운다. 키오스크가 직원 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를
+    /// 가로지를 수 있어, 계산된 자리가 제외 구역 안이면 같은 방향으로 한 칸씩 더
+    /// 밀어 구역 밖으로 나갈 때까지 반복한다.
     private func queueSlot(rank: Int) -> SIMD2<Float> {
         guard let queueOrigin, let queueDirection else { return .zero }
-        var distance = queueBaseDistance + Tuning.queueSpacing * Float(rank)
+        var distance = Tuning.queueSpacing * Float(rank)
         var candidate = queueOrigin + queueDirection * distance
         var attempts = 0
         while exclusionAreas.contains(where: { $0.contains(candidate) }), attempts < 20 {

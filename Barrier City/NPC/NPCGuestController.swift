@@ -35,6 +35,19 @@ enum NPCGuestRole {
     case seatedPool
 }
 
+/// 성별에 따라 재생할 한숨(sigh) 효과음 리소스가 갈린다.
+enum NPCGuestGender {
+    case male
+    case female
+
+    var sighResourceName: String {
+        switch self {
+        case .male: "male_sigh"
+        case .female: "female_sigh"
+        }
+    }
+}
+
 /// 손님 NPC 한 명의 배치·이동·애니메이션을 담당한다. 대화·근접 감지는 다루지 않는
 /// 순수 동선 담당 컨트롤러로, 대화까지 책임지는 NPCClerkController와 역할을 분리한다.
 @MainActor
@@ -97,6 +110,7 @@ final class NPCGuestController {
 
     private(set) var name: String
     let role: NPCGuestRole
+    let gender: NPCGuestGender
     private var locomotionRoot: Entity?
     private var modelEntity: Entity?
     private var animationPlayback: AnimationPlaybackController?
@@ -113,10 +127,17 @@ final class NPCGuestController {
     /// 방금 자리를 비웠다는 통지에 쓴다(takeSeatRequest/takeVacatedSeatIndex 참고).
     private var pendingSeatRequest = false
     private var pendingVacatedSeatIndex: Int?
+    /// 대기줄 자리에 막 도착한 프레임에 한 번만 서는 원샷 신호(takeQueueArrivalSignal).
+    private var pendingQueueArrival = false
+    /// pendingQueueArrival을 한 번만 세우기 위한 상태 추적(도착해 있는 동안 매 프레임
+    /// 다시 세우지 않도록).
+    private var hasReportedQueueArrival = false
+    private static var cachedSighResources: [NPCGuestGender: AudioFileResource] = [:]
 
-    init(name: String, role: NPCGuestRole = .cycler) {
+    init(name: String, role: NPCGuestRole = .cycler, gender: NPCGuestGender = .female) {
         self.name = name
         self.role = role
+        self.gender = gender
         movementProfile = .random()
     }
 
@@ -146,6 +167,34 @@ final class NPCGuestController {
     func takeVacatedSeatIndex() -> Int? {
         defer { pendingVacatedSeatIndex = nil }
         return pendingVacatedSeatIndex
+    }
+
+    /// 대기줄 자리에 막 도착했으면(이번 대기 세션 중 처음 한 번만) true를 반환하고
+    /// 소비한다.
+    func takeQueueArrivalSignal() -> Bool {
+        defer { pendingQueueArrival = false }
+        return pendingQueueArrival
+    }
+
+    /// 성별에 맞는 한숨 소리를 자신의 위치에서 한 번 재생한다(공간 음향이라 유저
+    /// 뒤에서 나는 것처럼 들린다). 리소스는 타입 전체가 공유하는 캐시에 한 번만
+    /// 로드해 재사용한다.
+    func playSigh() {
+        guard let root = locomotionRoot else { return }
+        let gender = self.gender
+        Task { @MainActor in
+            let resource: AudioFileResource
+            if let cached = Self.cachedSighResources[gender] {
+                resource = cached
+            } else {
+                guard let url = Bundle.main.url(forResource: gender.sighResourceName, withExtension: "mp3"),
+                      let loaded = try? await AudioFileResource(
+                        contentsOf: url, configuration: .init(shouldLoop: false)) else { return }
+                resource = loaded
+                Self.cachedSighResources[gender] = loaded
+            }
+            root.playAudio(resource)
+        }
     }
 
     /// locomotion wrapper 생성과 발 기준 정렬을 공통화한다(place/placeSeated 공용).
@@ -206,6 +255,8 @@ final class NPCGuestController {
         claimedSeat = nil
         pendingSeatRequest = false
         pendingVacatedSeatIndex = nil
+        pendingQueueArrival = false
+        hasReportedQueueArrival = false
     }
 
     var currentPosition: SIMD2<Float> {
@@ -256,11 +307,16 @@ final class NPCGuestController {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
                 playAnimation(.angry)
                 if let facingTarget { face(point: facingTarget, deltaTime: deltaTime) }
+                if !hasReportedQueueArrival {
+                    hasReportedQueueArrival = true
+                    pendingQueueArrival = true
+                }
             } else {
                 playAnimation(outcome.moved ? .walk : .idle)
             }
             return
         }
+        hasReportedQueueArrival = false
 
         if pauseRemaining > 0 {
             pauseRemaining = max(0, pauseRemaining - deltaTime)
