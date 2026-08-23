@@ -77,31 +77,22 @@ enum InteractionSetup {
 
         // 2) 문 트리거 등록: 최신 Outdoor의 Door 프림 좌표를 찾고, 실패 시 authored 폴백 사용.
         var center = InteractionTuning.doorFallbackCenter
-        var cafeCenter = SIMD2<Float>.zero
         if let worldRoot = appModel.worldRoot,
            let door = im.visibleMap?.findEntity(named: "Door") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
         }
 
-        if let worldRoot = appModel.worldRoot,
-                   let cafe = im.visibleMap?.findEntity(named: "Outdoor") {
-                    let bounds = cafe.visualBounds(relativeTo: worldRoot)
-                    cafeCenter = SIMD2(bounds.center.x, bounds.center.z)
-                }
-                let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
-                let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
-                    minimum: SIMD2(repeating: -fallbackHalfExtent),
-                    maximum: SIMD2(repeating: fallbackHalfExtent),
-                    height: 0)
-                let startPosition = OutdoorSessionStart.positionOutsideCafe(
-                    doorCenter: center,
-                    cafeCenter: cafeCenter,
-                    fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
-                    groundMinimum: groundLayout.minimum,
-                    groundMaximum: groundLayout.maximum,
-                    preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
-                    safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
+        let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
+        let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
+            minimum: SIMD2(repeating: -fallbackHalfExtent),
+            maximum: SIMD2(repeating: fallbackHalfExtent),
+            height: 0)
+        // immersive space는 열리는 순간 유저의 실제 위치를 (0,0,0)으로 앵커링한다.
+        // 여기서 0이 아닌 위치로 스폰시키면 worldRoot가 그 위치의 역변환만큼 밀려나
+        // 첫 진입 시 카페 전체가 유저 기준으로 어긋난 채 나타난다. 문 앞 오프셋
+        // 스폰(positionOutsideCafe)은 그래서 첫 진입에는 쓰지 않는다.
+        let startPosition = InteractionTuning.outdoorSpawnPosition
 
         OutdoorSessionStart.reset(
             appModel,
