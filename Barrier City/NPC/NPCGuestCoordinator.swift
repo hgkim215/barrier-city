@@ -48,7 +48,11 @@ final class NPCGuestCoordinator {
     private enum Tuning {
         /// _floor 바깥쪽(벽)에 붙어 걷지 않도록 배회 영역에 두는 여백.
         static let floorMargin: Float = 0.5
-        /// 대기줄 앞뒤 간격(m).
+        /// 유저와 대기줄 맨 앞사람 사이 간격(m). "바로 뒤"라는 느낌을 주기 위해
+        /// 대기줄 내부 간격(queueSpacing)보다 훨씬 좁게 둔다.
+        static let queueFrontGap: Float = 0.45
+        /// 대기줄 안에서 사람과 사람 사이 간격(m). 맨 앞사람과 유저 사이에는 안 쓰고
+        /// (queueFrontGap 참고) 그 뒤부터 이 간격으로 늘어선다.
         static let queueSpacing: Float = 0.85
         /// 스폰 시 손님끼리 서로 떨어뜨리려는 최소 거리(m).
         static let minimumSpawnSeparation: Float = 2.0
@@ -198,6 +202,10 @@ final class NPCGuestCoordinator {
                 guests.append(guest)
             }
         }
+
+        let seatedCount = guests.filter { $0.role == .seatedPool }.count
+        let actuallySeated = seatOccupants.compactMap { $0 }.count
+        Self.seatingLogger.notice("입장 시 착석: seatedPool \(seatedCount)명 중 \(actuallySeated)명 실제 착석(나머지는 배회로 시작해 빈 좌석이 생기면 합류)")
     }
 
     /// 빈 좌석 중 현재 앉아있는 손님들과 가장 멀리 떨어진 자리를 고른다. 그냥 첫 번째
@@ -391,6 +399,8 @@ final class NPCGuestCoordinator {
             queuerIndices = Set(eligible.shuffled().prefix(min(2, eligible.count)))
             if let kioskCenter {
                 captureQueueLine(kioskCenter: kioskCenter, playerPosition: playerPosition)
+                let slot1 = queueSlot(rank: 1)
+                Self.seatingLogger.notice("대기줄 1번 자리: 유저로부터 \(simd_distance(slot1, playerPosition))m (좌표 \(slot1.x), \(slot1.y))")
             }
             // 대기줄 중 한 명을 무작위로 골라, 그 손님이 자리에 도착하면 한숨을
             // 재생해 뒤에 사람이 기다린다는 압박감을 준다.
@@ -453,7 +463,7 @@ final class NPCGuestCoordinator {
     /// 조금씩 움직여도 대기줄이 다시 정렬되며 흔들리지 않는다.
     /// 유저가 서 있는 지점을 기준선 원점으로 캡처한다(방향은 키오스크→유저를 그대로
     /// 연장). 원점을 키오스크가 아니라 유저 위치로 잡아야 대기줄 첫 번째 자리가
-    /// 유저 바로 뒤(queueSpacing만큼)에 오지, 키오스크까지의 거리만큼 밀려나지 않는다.
+    /// 유저 바로 뒤(queueFrontGap만큼)에 오지, 키오스크까지의 거리만큼 밀려나지 않는다.
     private func captureQueueLine(kioskCenter: SIMD2<Float>, playerPosition: SIMD2<Float>) {
         var direction = playerPosition - kioskCenter
         if simd_length(direction) < 0.001 { direction = SIMD2(0, 1) }
@@ -461,13 +471,15 @@ final class NPCGuestCoordinator {
         queueDirection = simd_normalize(direction)
     }
 
-    /// 고정된 기준선(queueOrigin=유저 위치 + queueDirection) 위에서 rank칸 뒤에
-    /// 줄을 세운다. 키오스크가 직원 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를
-    /// 가로지를 수 있어, 계산된 자리가 제외 구역 안이면 같은 방향으로 한 칸씩 더
-    /// 밀어 구역 밖으로 나갈 때까지 반복한다.
+    /// 고정된 기준선(queueOrigin=유저 위치 + queueDirection) 위에서 rank번째 자리를
+    /// 계산한다. 1번은 유저에게서 queueFrontGap만큼만 떨어지고(대기줄 내부 간격보다
+    /// 훨씬 좁게), 그 뒤로는 queueSpacing 간격으로 늘어선다. 키오스크가 직원
+    /// 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를 가로지를 수 있어, 계산된 자리가
+    /// 제외 구역 안이면 같은 방향으로 한 칸씩 더 밀어 구역 밖으로 나갈 때까지
+    /// 반복한다.
     private func queueSlot(rank: Int) -> SIMD2<Float> {
         guard let queueOrigin, let queueDirection else { return .zero }
-        var distance = Tuning.queueSpacing * Float(rank)
+        var distance = Tuning.queueFrontGap + Tuning.queueSpacing * Float(rank - 1)
         var candidate = queueOrigin + queueDirection * distance
         var attempts = 0
         while staffAreaExclusions.contains(where: { $0.contains(candidate) }), attempts < 20 {

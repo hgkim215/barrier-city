@@ -85,7 +85,9 @@ final class NPCGuestController {
         let separationStrength: Float
         let separationSide: Float
         /// 배회 목적지에 도착할 때마다 착석을 시도할 확률(cycler 개인차). 전원이 같은
-        /// 확률로 앉으면 기계적으로 보여, 손님마다 성향을 다르게 둔다.
+        /// 확률로 앉으면 기계적으로 보여, 손님마다 성향을 다르게 둔다. 입장 후 너무
+        /// 오래 아무도 안 앉는 것처럼 보이지 않도록 평균적으로 배회 1~2번 만에는
+        /// 앉기 시작하게 높게 잡았다.
         let sitDesireChance: Float
 
         static func random() -> MovementProfile {
@@ -96,7 +98,7 @@ final class NPCGuestController {
                 personalSpace: Float.random(in: 0.62...0.82),
                 separationStrength: Float.random(in: 0.85...1.25),
                 separationSide: Bool.random() ? 1 : -1,
-                sitDesireChance: Float.random(in: 0.2...0.55))
+                sitDesireChance: Float.random(in: 0.55...0.9))
         }
     }
 
