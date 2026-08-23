@@ -149,24 +149,6 @@
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
-        "Outdoor",
-        "Manhole"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
         "Roads",
         "Road_7"
       ],
@@ -313,28 +295,8 @@
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
-        "Outdoor",
-        "Manhole",
-        "tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
         "Roads",
         "Road_2"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
-        "Outdoor"
       ],
       {
         "isExpanded" : true,
@@ -857,20 +819,6 @@
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
         "Menuboard1"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
-        "Root",
-        "Indoor",
-        "Furnitures",
-        "Chair",
-        "Chair",
-        "tripo_node_06c80f46_9303_47e5_834e_22e8d9037205",
-        "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_1"
       ],
       {
         "isExpanded" : true,
