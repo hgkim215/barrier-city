@@ -736,18 +736,6 @@
       [
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
-        "Indoor",
-        "Furnitures",
-        "Chair",
-        "Chair"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
-        "Root",
         "Menuboard2"
       ],
       {
@@ -798,8 +786,7 @@
         "Indoor",
         "Furnitures",
         "Chair",
-        "Chair",
-        "tripo_node_06c80f46_9303_47e5_834e_22e8d9037205"
+        "LongChair"
       ],
       {
         "isExpanded" : true,
@@ -819,6 +806,19 @@
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
         "Menuboard1"
+      ],
+      {
+        "isExpanded" : true,
+        "isLocked" : false
+      },
+      [
+        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
+        "Root",
+        "Indoor",
+        "Furnitures",
+        "Chair",
+        "LongChair",
+        "tripo_node_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc"
       ],
       {
         "isExpanded" : true,
@@ -890,20 +890,6 @@
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
         "Wood"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
-        "Root",
-        "Indoor",
-        "Furnitures",
-        "Chair",
-        "Chair",
-        "tripo_node_06c80f46_9303_47e5_834e_22e8d9037205",
-        "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205"
       ],
       {
         "isExpanded" : true,
