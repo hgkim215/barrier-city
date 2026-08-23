@@ -113,6 +113,11 @@ final class NPCGuestCoordinator {
     private var queueDirection: SIMD2<Float>?
     /// 이번 대기줄에서 자리에 도착하면 한숨을 재생할 손님(줄서기 시작 시 무작위 선정).
     private var sighingGuestIndex: Int?
+    /// 직원 구역(AreaK/AreaB)만 담은 목록. queueSlot(rank:)가 대기줄 자리를 계산할 때
+    /// exclusionAreas 전체(키오스크 주변 배회 제외 반경 포함) 대신 이걸 쓴다 —
+    /// 키오스크 제외 반경까지 같이 피하게 하면, 유저가 키오스크 가까이 서 있을 때
+    /// 대기줄 첫 자리가 그 반경을 벗어날 때까지 계속 밀려나 유저 뒤에 못 붙었다.
+    private var staffAreaExclusions: [NPCGuestArea] = []
 
     /// Indoor 진입 시 손님 엔티티를 찾아 배치하고, "_floor"에서 배회 영역을,
     /// "AreaK"/"AreaB"에서 제외 영역을 계산한다. 좌석은 씬을 스캔해 동적으로 찾고,
@@ -121,9 +126,10 @@ final class NPCGuestCoordinator {
         tearDownForOutdoor()
 
         floorArea = resolveArea(named: "_floor", in: indoorMap, relativeTo: worldRoot, margin: Tuning.floorMargin)
-        exclusionAreas = ["AreaK", "AreaB"].compactMap {
+        staffAreaExclusions = ["AreaK", "AreaB"].compactMap {
             resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot, margin: 0)
         }
+        exclusionAreas = staffAreaExclusions
         // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지
         // 않도록 작은 반경을 배회 제외 구역에 더한다.
         if let kiosk = indoorMap.findEntity(named: "Kiosk") {
@@ -359,6 +365,7 @@ final class NPCGuestCoordinator {
         guests.removeAll()
         floorArea = nil
         exclusionAreas.removeAll()
+        staffAreaExclusions.removeAll()
         seats.removeAll()
         seatOccupants.removeAll()
         seatTableGroups.removeAll()
@@ -463,7 +470,7 @@ final class NPCGuestCoordinator {
         var distance = Tuning.queueSpacing * Float(rank)
         var candidate = queueOrigin + queueDirection * distance
         var attempts = 0
-        while exclusionAreas.contains(where: { $0.contains(candidate) }), attempts < 20 {
+        while staffAreaExclusions.contains(where: { $0.contains(candidate) }), attempts < 20 {
             distance += Tuning.queueSpacing * 0.5
             candidate = queueOrigin + queueDirection * distance
             attempts += 1
