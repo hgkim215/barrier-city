@@ -62,6 +62,9 @@ final class NPCGuestCoordinator {
         static let seatedPoolCount = 4
         /// 테이블·의자 군집 주변을 배회 목적지에서 제외할 때 두는 여백(m).
         static let seatClusterExclusionMargin: Float = 0.9
+        /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
+        /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
+        static let kioskExclusionRadius: Float = 1.2
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
@@ -108,9 +111,21 @@ final class NPCGuestCoordinator {
         exclusionAreas = ["AreaK", "AreaB"].compactMap {
             resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot, margin: 0)
         }
+        // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지
+        // 않도록 작은 반경을 배회 제외 구역에 더한다.
+        if let kiosk = indoorMap.findEntity(named: "Kiosk") {
+            let world = kiosk.position(relativeTo: worldRoot)
+            let radius = Tuning.kioskExclusionRadius
+            exclusionAreas.append(NPCGuestArea(center: SIMD2(world.x, world.z),
+                                               axisU: SIMD2(radius, 0),
+                                               axisV: SIMD2(0, radius)))
+        }
         guard let floorArea else { return }
 
+        // authoring 상 실수로 좌석이 직원 구역(AreaK/AreaB) 안에 놓였다면 손님이
+        // 그쪽으로 걸어 들어가지 않도록 애초에 좌석 후보에서 뺀다.
         seats = discoverSeats(in: indoorMap, relativeTo: worldRoot)
+            .filter { seat in !exclusionAreas.contains(where: { $0.contains(seat.position) }) }
         seatOccupants = Array(repeating: nil, count: seats.count)
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개: \(seatDescription)")
@@ -138,7 +153,7 @@ final class NPCGuestCoordinator {
                 nextRoleIndex += 1
                 let guest = NPCGuestController(name: displayName, role: role)
 
-                if role == .seatedPool, let seatIndex = seatOccupants.firstIndex(where: { $0 == nil }) {
+                if role == .seatedPool, let seatIndex = bestFreeSeatIndex() {
                     seatOccupants[seatIndex] = guests.count
                     guest.placeSeated(entity: entity, worldRoot: worldRoot, seatIndex: seatIndex, seat: seats[seatIndex])
                 } else {
@@ -148,6 +163,24 @@ final class NPCGuestCoordinator {
                 }
                 guests.append(guest)
             }
+        }
+    }
+
+    /// 빈 좌석 중 현재 앉아있는 손님들과 가장 멀리 떨어진 자리를 고른다. 그냥 첫 번째
+    /// 빈 인덱스를 쓰면 씬 authoring 순서상 같은 테이블의 좌석들이 배열에서 이웃해
+    /// 있어(예: Chair 복제본 19개가 한 테이블에 연달아 있음) 손님들이 한 테이블에만
+    /// 몰려 앉게 된다. 앉은 사람이 아직 없으면 무작위로 고른다.
+    private func bestFreeSeatIndex() -> Int? {
+        let freeIndices = seatOccupants.indices.filter { seatOccupants[$0] == nil }
+        guard !freeIndices.isEmpty else { return nil }
+        let occupiedPositions = seatOccupants.indices.compactMap { idx -> SIMD2<Float>? in
+            seatOccupants[idx] != nil ? seats[idx].position : nil
+        }
+        guard !occupiedPositions.isEmpty else { return freeIndices.randomElement() }
+        return freeIndices.max { lhs, rhs in
+            let lhsDistance = occupiedPositions.map { simd_distance($0, seats[lhs].position) }.min() ?? 0
+            let rhsDistance = occupiedPositions.map { simd_distance($0, seats[rhs].position) }.min() ?? 0
+            return lhsDistance < rhsDistance
         }
     }
 
@@ -310,7 +343,7 @@ final class NPCGuestCoordinator {
             if let vacatedIndex = guest.takeVacatedSeatIndex(), vacatedIndex < seatOccupants.count {
                 seatOccupants[vacatedIndex] = nil
             }
-            if guest.takeSeatRequest(), let freeSeatIndex = seatOccupants.firstIndex(where: { $0 == nil }) {
+            if guest.takeSeatRequest(), let freeSeatIndex = bestFreeSeatIndex() {
                 seatOccupants[freeSeatIndex] = index
                 guest.grantSeat(index: freeSeatIndex, seat: seats[freeSeatIndex])
             }

@@ -52,8 +52,11 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
-        /// 한 번 앉으면 이 범위의 랜덤 시간 동안 머문다(초).
+        /// 한 번 앉으면 이 범위의 랜덤 시간 동안 머문다(초). cycler 전용.
         static let sittingDurationRange: ClosedRange<Float> = 8...20
+        /// seatedPool 역할은 "카페에 계속 앉아있는 손님"이라는 인상을 주기 위해
+        /// 훨씬 오래 머문다.
+        static let seatedPoolSittingDurationRange: ClosedRange<Float> = 90...240
         /// "Sit to Stand" 클립 재생으로 간주하는 시간(초). 애니메이션 완료 콜백 대신
         /// 다른 NPC 상태 전환과 동일하게 타이머 기반으로 처리한다.
         static let standingUpDuration: Float = 1.2
@@ -111,6 +114,11 @@ final class NPCGuestController {
         self.name = name
         self.role = role
         movementProfile = .random()
+    }
+
+    /// 역할에 따라 다른 착석 지속 시간 범위를 쓴다(seatedPool은 훨씬 오래 앉아있는다).
+    private var sittingDurationRange: ClosedRange<Float> {
+        role == .seatedPool ? NPCGuestTuning.seatedPoolSittingDurationRange : NPCGuestTuning.sittingDurationRange
     }
 
     /// 대기줄 후보 자격: 착석 지향(seatedPool) 역할이 아니고, 지금 이동/착석/기립
@@ -181,7 +189,7 @@ final class NPCGuestController {
         claimedSeatIndex = seatIndex
         claimedSeat = seat
         seatState = .sitting
-        seatTimeRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
+        seatTimeRemaining = Float.random(in: sittingDurationRange)
         face(direction: seat.facing, deltaTime: 999)
         playAnimation(.sitting)
     }
@@ -272,7 +280,8 @@ final class NPCGuestController {
                 arrivalDistance: NPCGuestTuning.arrivalDistance,
                 playerPosition: playerPosition,
                 neighboringPositions: neighboringPositions,
-                separationScale: 1) {
+                separationScale: 1,
+                exclusions: exclusions) {
             wanderTarget = nil
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
@@ -297,7 +306,7 @@ final class NPCGuestController {
                 neighboringPositions: neighboringPositions,
                 separationScale: 0.5) {
             seatState = .sitting
-            seatTimeRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
+            seatTimeRemaining = Float.random(in: sittingDurationRange)
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
         }
@@ -328,7 +337,8 @@ final class NPCGuestController {
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
-                      separationScale: Float) -> Bool {
+                      separationScale: Float,
+                      exclusions: [NPCGuestArea] = []) -> Bool {
         guard let root = locomotionRoot else { return false }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         let delta = target - current
@@ -336,11 +346,20 @@ final class NPCGuestController {
         guard distance > arrivalDistance else { return true }
 
         let targetDirection = delta / distance
-        let direction = crowdSteeredDirection(
+        var direction = crowdSteeredDirection(
             targetDirection: targetDirection,
             from: current,
             neighbors: neighboringPositions,
             scale: separationScale)
+        // 목적지 자체는 제외 구역을 피해 골랐어도 직선 경로가 AreaK/AreaB를 가로지를
+        // 수 있다. 지금 그 구역 안에 있다면 중심에서 바깥으로 강하게 밀어내 서성이지
+        // 않고 빠르게 빠져나가게 한다.
+        if let intruded = exclusions.first(where: { $0.contains(current) }) {
+            let away = current - intruded.center
+            if simd_length(away) > 0.001 {
+                direction = simd_normalize(direction + simd_normalize(away) * 1.5)
+            }
+        }
         let desiredStep = min(distance, movementProfile.moveSpeed * deltaTime)
         var step = desiredStep
         if let scene = root.scene {
