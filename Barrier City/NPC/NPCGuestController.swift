@@ -245,15 +245,17 @@ final class NPCGuestController {
         }
 
         if let queueSlot {
-            playAnimation(.walk)
-            if move(toward: queueSlot, deltaTime: deltaTime,
-                    arrivalDistance: NPCGuestTuning.queueArrivalDistance,
-                    playerPosition: playerPosition,
-                    neighboringPositions: neighboringPositions,
-                    separationScale: 0.35) {
+            let outcome = move(toward: queueSlot, deltaTime: deltaTime,
+                               arrivalDistance: NPCGuestTuning.queueArrivalDistance,
+                               playerPosition: playerPosition,
+                               neighboringPositions: neighboringPositions,
+                               separationScale: 0.35)
+            if outcome.arrived {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
                 playAnimation(.angry)
                 if let facingTarget { face(point: facingTarget, deltaTime: deltaTime) }
+            } else {
+                playAnimation(outcome.moved ? .walk : .idle)
             }
             return
         }
@@ -274,13 +276,13 @@ final class NPCGuestController {
             playAnimation(.idle)
             return
         }
-        playAnimation(.walk)
-        if move(toward: target, deltaTime: deltaTime,
-                arrivalDistance: NPCGuestTuning.arrivalDistance,
-                playerPosition: playerPosition,
-                neighboringPositions: neighboringPositions,
-                separationScale: 1,
-                exclusions: exclusions) {
+        let outcome = move(toward: target, deltaTime: deltaTime,
+                           arrivalDistance: NPCGuestTuning.arrivalDistance,
+                           playerPosition: playerPosition,
+                           neighboringPositions: neighboringPositions,
+                           separationScale: 1,
+                           exclusions: exclusions)
+        if outcome.arrived {
             wanderTarget = nil
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
@@ -290,6 +292,10 @@ final class NPCGuestController {
             if role != .alwaysWandering, Float.random(in: 0...1) < movementProfile.sitDesireChance {
                 pendingSeatRequest = true
             }
+        } else {
+            // 실제로 위치가 움직인 프레임에만 Walk를 재생한다. 장애물에 막혀 제자리인
+            // 프레임까지 Walk를 계속 재생하면 제자리걸음처럼 보인다.
+            playAnimation(outcome.moved ? .walk : .idle)
         }
     }
 
@@ -299,16 +305,18 @@ final class NPCGuestController {
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>]) {
         guard let seat = claimedSeat else { seatState = .none; return }
-        playAnimation(.walk)
-        if move(toward: seat.position, deltaTime: deltaTime,
-                arrivalDistance: NPCGuestTuning.seatArrivalDistance,
-                playerPosition: playerPosition,
-                neighboringPositions: neighboringPositions,
-                separationScale: 0.5) {
+        let outcome = move(toward: seat.position, deltaTime: deltaTime,
+                           arrivalDistance: NPCGuestTuning.seatArrivalDistance,
+                           playerPosition: playerPosition,
+                           neighboringPositions: neighboringPositions,
+                           separationScale: 0.5)
+        if outcome.arrived {
             seatState = .sitting
             seatTimeRemaining = Float.random(in: movementProfile.sittingDurationRange)
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
+        } else {
+            playAnimation(outcome.moved ? .walk : .idle)
         }
     }
 
@@ -336,17 +344,25 @@ final class NPCGuestController {
 
     // MARK: - Movement
 
-    @discardableResult
+    /// arrived: 목적지에 도착(또는 이미 도착해 있었음). moved: 이번 프레임에 실제로
+    /// 위치가 바뀌었는지 — 장애물에 완전히 막히면 arrived가 false여도 moved는
+    /// false일 수 있다. 호출부는 moved를 보고서만 Walk를 재생해야 제자리걸음처럼
+    /// 보이지 않는다.
+    private struct MoveOutcome {
+        let arrived: Bool
+        let moved: Bool
+    }
+
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
                       separationScale: Float,
-                      exclusions: [NPCGuestArea] = []) -> Bool {
-        guard let root = locomotionRoot else { return false }
+                      exclusions: [NPCGuestArea] = []) -> MoveOutcome {
+        guard let root = locomotionRoot else { return MoveOutcome(arrived: false, moved: false) }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         let delta = target - current
         let distance = simd_length(delta)
-        guard distance > arrivalDistance else { return true }
+        guard distance > arrivalDistance else { return MoveOutcome(arrived: true, moved: false) }
 
         let targetDirection = delta / distance
         var direction = crowdSteeredDirection(
@@ -376,14 +392,17 @@ final class NPCGuestController {
         }
         root.position.x += direction.x * step
         root.position.z += direction.y * step
-        face(direction: direction, deltaTime: deltaTime)
+        let moved = step > 0.0005
+        if moved {
+            face(direction: direction, deltaTime: deltaTime)
+        }
         if step < desiredStep * NPCGuestTuning.blockedStepFraction {
             wanderTarget = nil
             // 같은 장애물에 도달한 NPC들이 같은 프레임에 즉시 재탐색하지 않도록 짧고
             // 서로 다른 숨 고르기를 둔다.
             pauseRemaining = max(pauseRemaining, Float.random(in: 0.15...0.9))
         }
-        return step >= distance
+        return MoveOutcome(arrived: step >= distance, moved: moved)
     }
 
     /// 목표 방향에 개인 공간 반발력을 섞는다. 완전 정면 충돌 시에는 손님별 좌/우
@@ -466,6 +485,12 @@ final class NPCGuestController {
         animationPlayback?.stop(blendOutDuration: 0.15)
         let resource = cue.repeats ? match.resource.repeat() : match.resource
         animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.2)
+        if cue.repeats {
+            // 여러 손님이 같은 클립을 동시에 재생하면 완전히 같은 위상으로 움직여
+            // 기계적으로 보인다. 반복 재생 cue는 시작 지점을 무작위로 어긋나게 한다
+            // (원샷인 sitToStand는 처음부터 재생돼야 하므로 건드리지 않는다).
+            animationPlayback?.time = TimeInterval.random(in: 0..<4)
+        }
         currentCue = cue
     }
 
