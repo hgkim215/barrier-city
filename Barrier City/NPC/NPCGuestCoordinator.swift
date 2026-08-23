@@ -212,14 +212,19 @@ final class NPCGuestCoordinator {
         }
     }
 
-    /// Furnitures 하위의 모든 "SittingPoint" 마커를 좌석으로 모은다. 방향은 마커의
-    /// 실제 authored 회전(디자이너가 각 의자 복제본을 배치하며 직접 돌려놓은 값)에서
-    /// 뽑아낸다 — 씬 구조(테이블 이름, 좌석 간 거리)로 방향을 추정하는 시도들이 실제
-    /// 배치와 안 맞는 경우가 있어, 사람이 직접 authoring한 값을 신뢰하는 쪽으로
-    /// 바꿨다. 로컬 +Z를 착석자가 바라보는 축으로 가정한다 — 실제로 반대로 보이면
-    /// seatLocalForward만 (0, 0, -1)로 뒤집으면 된다.
+    /// Furnitures 하위의 모든 "SittingPoint" 마커를 좌석으로 모으고, 각 좌석에서
+    /// 가장 가까운 테이블 인스턴스 쪽을 바라보게 한다.
+    ///
+    /// 방향을 SittingPoint의 authored 회전에서 뽑아내려 해봤는데(디자이너가 의자
+    /// 복제본마다 직접 돌려놓은 값이라 믿을만해 보였다), 의자 종류(Chair/WoodChair)
+    /// 마다 마커 로컬 축 관례가 달라 보여 실제 배치와 안 맞는 경우가 있었다.
+    /// 대신 "가장 가까운 테이블 인스턴스를 바라본다"는, 씬 구조에 덜 의존하는
+    /// 기하학적 규칙으로 되돌렸다 — 다만 Table도 Chair와 똑같이 하나의 def 안에
+    /// 여러 인스턴스가 참조로 중첩돼 있어서(예: WoodChair도 실제로는 12개 복제본),
+    /// "Table"/"WoodTable"이라는 이름의 엔티티 하나의 위치만 보면 안 되고 그 밑의
+    /// 개별 tripo_mesh_* 리프(복제본 하나하나)를 전부 앵커로 모아야 한다.
     private func collectSittingPoints(in entity: Entity, relativeTo worldRoot: Entity) -> [GuestSeat] {
-        let seatLocalForward = SIMD3<Float>(0, 0, 1)
+        let tableAnchors = collectTableAnchors(in: entity, relativeTo: worldRoot)
         var seats: [GuestSeat] = []
         func walk(_ candidate: Entity) {
             // 이름 동등 비교라 같은 이름의 마커가 씬 안에 몇 개든(서로 다른 부모 밑에
@@ -227,16 +232,41 @@ final class NPCGuestCoordinator {
             // "SittingPoint_1"처럼 접미사를 붙이므로 그 패턴도 함께 인식한다.
             if candidate.name == "SittingPoint" || candidate.name.hasPrefix("SittingPoint_") {
                 let world = candidate.position(relativeTo: worldRoot)
-                let orientation = candidate.orientation(relativeTo: worldRoot)
-                let worldForward = orientation.act(seatLocalForward)
-                var facing = SIMD2<Float>(worldForward.x, worldForward.z)
-                facing = simd_length(facing) > 0.01 ? simd_normalize(facing) : SIMD2(0, 1)
-                seats.append(GuestSeat(position: SIMD2(world.x, world.z), facing: facing))
+                let position = SIMD2<Float>(world.x, world.z)
+                let nearestTable = tableAnchors.min {
+                    simd_distance($0, position) < simd_distance($1, position)
+                }
+                let facing: SIMD2<Float>
+                if let nearestTable, simd_distance(nearestTable, position) > 0.01 {
+                    facing = simd_normalize(nearestTable - position)
+                } else {
+                    facing = SIMD2(0, 1)
+                }
+                seats.append(GuestSeat(position: position, facing: facing))
             }
             for child in candidate.children { walk(child) }
         }
         walk(entity)
         return seats
+    }
+
+    /// "Table"/"WoodTable" 계열 서브트리 안의 모든 tripo_mesh_* 리프(실제 배치된
+    /// 테이블 인스턴스 하나하나에 대응)의 월드 위치를 모은다.
+    private func collectTableAnchors(in entity: Entity, relativeTo worldRoot: Entity, insideTable: Bool = false) -> [SIMD2<Float>] {
+        let isTableRoot = entity.name == "Table" || entity.name == "WoodTable"
+            || entity.name.hasPrefix("Table_") || entity.name.hasPrefix("WoodTable_")
+        let inTableSubtree = insideTable || isTableRoot
+
+        var anchors: [SIMD2<Float>] = []
+        if inTableSubtree, entity.name.hasPrefix("tripo_mesh_") {
+            let world = entity.position(relativeTo: worldRoot)
+            anchors.append(SIMD2(world.x, world.z))
+        }
+        for child in entity.children {
+            anchors.append(contentsOf: collectTableAnchors(
+                in: child, relativeTo: worldRoot, insideTable: inTableSubtree))
+        }
+        return anchors
     }
 
     /// 거리 기반 union-find로 서로 가까운 좌석끼리 묶는다. linkDistance보다 가까운

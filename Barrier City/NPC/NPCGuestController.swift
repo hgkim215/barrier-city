@@ -71,6 +71,13 @@ final class NPCGuestController {
         /// "Sit to Stand" 클립 재생으로 간주하는 시간(초). 애니메이션 완료 콜백 대신
         /// 다른 NPC 상태 전환과 동일하게 타이머 기반으로 처리한다.
         static let standingUpDuration: Float = 1.2
+        /// 이 시간 동안 배회 목적지에 도착하지 못하면(가구를 완전히 막힌 채 스치듯
+        /// 지나가는 등, 매 프레임 "막혔다" 판정까지는 안 걸리지만 실제로는 못 가는
+        /// 경우) 포기하고 다음 프레임에 새 목적지를 고른다.
+        static let wanderStuckTimeout: Float = 6.0
+        /// 좌석으로 이동 중 이 시간 동안 도착하지 못하면 그 좌석을 포기하고
+        /// 배회로 돌아간다(좌석은 코디네이터가 다른 손님에게 다시 배정할 수 있게 반환).
+        static let seatApproachStuckTimeout: Float = 8.0
     }
 
     private enum SeatState {
@@ -118,6 +125,10 @@ final class NPCGuestController {
     private var wanderTarget: SIMD2<Float>?
     private var pauseRemaining: Float = 0
     private let movementProfile: MovementProfile
+    /// 지금 쫓고 있는 목적지(배회 목적지든 좌석이든)를 얼마나 오래 쫓고 있는지.
+    /// 두 상태가 동시에 벌어지지 않아 하나의 타이머를 공유한다. 새 목적지를
+    /// 잡거나 도착/포기할 때마다 0으로 되돌린다.
+    private var pursuitElapsed: Float = 0
 
     private var seatState: SeatState = .none
     private var claimedSeatIndex: Int?
@@ -160,6 +171,7 @@ final class NPCGuestController {
         seatState = .movingToSeat
         wanderTarget = nil
         pauseRemaining = 0
+        pursuitElapsed = 0
     }
 
     /// 방금 자리를 비웠으면 그 좌석 인덱스를 반환하고 소비한다. 코디네이터가 이걸로
@@ -332,8 +344,20 @@ final class NPCGuestController {
                 excluding: exclusions,
                 awayFrom: currentPosition,
                 avoiding: occupiedAnchors)
+            pursuitElapsed = 0
         }
         guard let target = wanderTarget else {
+            playAnimation(.idle)
+            return
+        }
+        // 매 프레임 "막혔다" 판정(move() 내부)까지는 안 걸리더라도, 가구를 스치듯
+        // 지나가며 아주 조금씩만 전진하는 경우 목적지에 영영 못 닿을 수 있다. 한
+        // 목적지를 너무 오래 쫓고 있으면 포기하고 다음 프레임에 새 목적지를 고른다.
+        pursuitElapsed += deltaTime
+        if pursuitElapsed > NPCGuestTuning.wanderStuckTimeout {
+            wanderTarget = nil
+            pursuitElapsed = 0
+            pauseRemaining = Float.random(in: 0.2...0.6)
             playAnimation(.idle)
             return
         }
@@ -345,6 +369,7 @@ final class NPCGuestController {
                            exclusions: exclusions)
         if outcome.arrived {
             wanderTarget = nil
+            pursuitElapsed = 0
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
             // 목적지 도착이라는 자연스러운 결정 지점에서만 착석 여부를 굴린다.
@@ -367,6 +392,19 @@ final class NPCGuestController {
                                     neighboringPositions: [SIMD2<Float>],
                                     exclusions: [NPCGuestArea]) {
         guard let seat = claimedSeat else { seatState = .none; return }
+        pursuitElapsed += deltaTime
+        if pursuitElapsed > NPCGuestTuning.seatApproachStuckTimeout {
+            // 좌석까지 너무 오래 못 가면 포기하고 자리를 반납한다(코디네이터가
+            // seatOccupants를 비워 다른 손님에게 다시 배정할 수 있게 한다).
+            pendingVacatedSeatIndex = claimedSeatIndex
+            claimedSeatIndex = nil
+            claimedSeat = nil
+            seatState = .none
+            pursuitElapsed = 0
+            pauseRemaining = Float.random(in: 0.3...1.0)
+            playAnimation(.idle)
+            return
+        }
         let outcome = move(toward: seat.position, deltaTime: deltaTime,
                            arrivalDistance: NPCGuestTuning.seatArrivalDistance,
                            playerPosition: playerPosition,
@@ -375,6 +413,7 @@ final class NPCGuestController {
                            exclusions: exclusions)
         if outcome.arrived {
             seatState = .sitting
+            pursuitElapsed = 0
             seatTimeRemaining = Float.random(in: movementProfile.sittingDurationRange)
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
