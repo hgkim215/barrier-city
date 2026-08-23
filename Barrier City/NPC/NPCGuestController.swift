@@ -458,9 +458,14 @@ final class NPCGuestController {
                                     avoiding occupiedAnchors: [SIMD2<Float>]) -> SIMD2<Float>? {
         var fallback: SIMD2<Float>?
         var bestSeparation: Float = -1
-        for _ in 0..<28 {
+        for _ in 0..<40 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
             if exclusions.contains(where: { $0.contains(candidate) }) { continue }
+            // 후보 자체는 제외 구역 밖이어도, 지금 위치에서 거기까지 가는 직선 경로가
+            // AreaK 등을 가로지르면 이동 중 반발력에 계속 밀려나 목적지에 못 닿고
+            // 경계 근처를 맴돌며 Walk 애니메이션만 재생되는 문제가 있었다. 그런
+            // 후보는 애초에 고르지 않는다.
+            if pathCrosses(exclusions, from: current, to: candidate) { continue }
             guard simd_distance(candidate, current) >= NPCGuestTuning.minimumRoamDistance else { continue }
             let separation = occupiedAnchors
                 .map { simd_distance(candidate, $0) }
@@ -474,6 +479,19 @@ final class NPCGuestController {
             }
         }
         return fallback
+    }
+
+    /// start→end 직선 경로 위 몇 지점을 샘플링해 제외 구역을 가로지르는지 대략
+    /// 판정한다(정확한 선분-사각형 교차 계산 대신 충분히 촘촘한 샘플링으로 근사).
+    private func pathCrosses(_ exclusions: [NPCGuestArea], from start: SIMD2<Float>, to end: SIMD2<Float>) -> Bool {
+        guard !exclusions.isEmpty else { return false }
+        let sampleCount = 6
+        for step in 1..<sampleCount {
+            let t = Float(step) / Float(sampleCount)
+            let point = start + (end - start) * t
+            if exclusions.contains(where: { $0.contains(point) }) { return true }
+        }
+        return false
     }
 
     // MARK: - Animation
