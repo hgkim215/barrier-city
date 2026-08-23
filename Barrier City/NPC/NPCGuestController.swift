@@ -4,9 +4,31 @@ import simd
 
 /// Indoor.usda의 Guest_* AnimationLibrary에 등록된 애니메이션 키.
 /// Idle은 Barista와 동일하게 *Idle.usdz의 default subtree animation을 그대로 쓴다.
+/// "Sit_to_Stand"는 AnimationLibrary def 블록 이름을 그대로 쓴 것으로, authored된
+/// "Sit to Stand"라는 표시용 name과는 다르다(라이브러리 조회는 def 이름 기준).
 enum NPCGuestAnimationCue: String {
     case idle = "Idle"
     case walk = "Walk"
+    case sitting = "Sitting"
+    case sitToStand = "Sit_to_Stand"
+
+    var repeats: Bool {
+        switch self {
+        case .idle, .walk, .sitting: true
+        case .sitToStand: false
+        }
+    }
+}
+
+/// 손님 한 명이 대기줄/착석 행동에 참여하는 방식.
+enum NPCGuestRole {
+    /// 절대 앉지 않고 계속 배회한다. 대기줄 후보.
+    case alwaysWandering
+    /// 배회↔착석↔기립을 반복한다. 배회 중일 때만 대기줄 후보.
+    case cycler
+    /// 입장 시 가능하면 이미 앉은 채로 시작하고, 이후에도 배회↔착석↔기립을
+    /// 반복한다. 대기줄 후보에서는 항상 제외된다.
+    case seatedPool
 }
 
 /// 손님 NPC 한 명의 배치·이동·애니메이션을 담당한다. 대화·근접 감지는 다루지 않는
@@ -27,6 +49,22 @@ final class NPCGuestController {
         static let blockedStepFraction: Float = 0.15
         /// 자유 배회 목적지끼리 이 정도 간격을 우선 확보한다.
         static let preferredTargetSeparation: Float = 1.35
+        /// 좌석 도착 판정 거리.
+        static let seatArrivalDistance: Float = 0.08
+        /// 한 번 앉으면 이 범위의 랜덤 시간 동안 머문다(초).
+        static let sittingDurationRange: ClosedRange<Float> = 8...20
+        /// "Sit to Stand" 클립 재생으로 간주하는 시간(초). 애니메이션 완료 콜백 대신
+        /// 다른 NPC 상태 전환과 동일하게 타이머 기반으로 처리한다.
+        static let standingUpDuration: Float = 1.2
+        /// 배회 목적지에 도착할 때마다 착석을 시도할 확률(alwaysWandering 역할 제외).
+        static let sitDesireChance: Float = 0.35
+    }
+
+    private enum SeatState {
+        case none
+        case movingToSeat
+        case sitting
+        case standingUp
     }
 
     /// 전원이 같은 속도와 정지 주기로 움직이면 군무처럼 보인다. 손님마다 생성 시 한 번
@@ -50,6 +88,7 @@ final class NPCGuestController {
     }
 
     private(set) var name: String
+    let role: NPCGuestRole
     private var locomotionRoot: Entity?
     private var modelEntity: Entity?
     private var animationPlayback: AnimationPlaybackController?
@@ -58,14 +97,51 @@ final class NPCGuestController {
     private var pauseRemaining: Float = 0
     private let movementProfile: MovementProfile
 
-    init(name: String) {
+    private var seatState: SeatState = .none
+    private var claimedSeatIndex: Int?
+    private var claimedSeat: GuestSeat?
+    private var seatTimeRemaining: Float = 0
+    /// 코디네이터가 다음 프레임에 한 번만 소비하는 원샷 신호. 착석을 원한다는 요청과,
+    /// 방금 자리를 비웠다는 통지에 쓴다(takeSeatRequest/takeVacatedSeatIndex 참고).
+    private var pendingSeatRequest = false
+    private var pendingVacatedSeatIndex: Int?
+
+    init(name: String, role: NPCGuestRole = .cycler) {
         self.name = name
+        self.role = role
         movementProfile = .random()
     }
 
-    /// Indoor.usda에서 찾은 손님 엔티티를 이동 wrapper로 감싸 worldRoot에 배치한다.
-    /// Barista 배치(NPCClerkController.enterIndoor)와 동일한 발 기준 정렬 방식을 쓴다.
-    func place(entity: Entity, worldRoot: Entity, at position: SIMD2<Float>) {
+    /// 대기줄 후보 자격: 착석 지향(seatedPool) 역할이 아니고, 지금 이동/착석/기립
+    /// 중이 아닐 때만(= 배회 중일 때만) 후보가 된다.
+    var isQueueEligible: Bool {
+        role != .seatedPool && seatState == .none
+    }
+
+    /// 코디네이터가 이번 프레임에 착석을 원하는지 확인할 때 한 번만 읽고 소비한다.
+    func takeSeatRequest() -> Bool {
+        defer { pendingSeatRequest = false }
+        return pendingSeatRequest
+    }
+
+    /// 코디네이터가 빈 좌석을 찾아 배정할 때 호출한다.
+    func grantSeat(index: Int, seat: GuestSeat) {
+        claimedSeatIndex = index
+        claimedSeat = seat
+        seatState = .movingToSeat
+        wanderTarget = nil
+        pauseRemaining = 0
+    }
+
+    /// 방금 자리를 비웠으면 그 좌석 인덱스를 반환하고 소비한다. 코디네이터가 이걸로
+    /// seatOccupants를 비운다.
+    func takeVacatedSeatIndex() -> Int? {
+        defer { pendingVacatedSeatIndex = nil }
+        return pendingVacatedSeatIndex
+    }
+
+    /// locomotion wrapper 생성과 발 기준 정렬을 공통화한다(place/placeSeated 공용).
+    private func setUpLocomotionRoot(entity: Entity, worldRoot: Entity, at position: SIMD2<Float>) {
         entity.removeFromParent()
 
         let locomotion = Entity()
@@ -85,9 +161,28 @@ final class NPCGuestController {
         locomotionRoot = locomotion
         modelEntity = entity
         wanderTarget = nil
+    }
+
+    /// Indoor.usda에서 찾은 손님 엔티티를 이동 wrapper로 감싸 worldRoot에 배치한다.
+    /// Barista 배치(NPCClerkController.enterIndoor)와 동일한 발 기준 정렬 방식을 쓴다.
+    func place(entity: Entity, worldRoot: Entity, at position: SIMD2<Float>) {
+        setUpLocomotionRoot(entity: entity, worldRoot: worldRoot, at: position)
         // 진입 직후 전원이 동시에 걷기 시작하지 않도록 첫 출발 시점을 넓게 흩뜨린다.
         pauseRemaining = Float.random(in: 0...4.5)
         playAnimation(.idle)
+    }
+
+    /// 입장 시점부터 이미 지정된 좌석에 앉아있는 상태로 배치한다(seatedPool 역할용).
+    /// 걸어가는 과정 없이 좌석 위치/방향으로 바로 배치한다.
+    func placeSeated(entity: Entity, worldRoot: Entity, seatIndex: Int, seat: GuestSeat) {
+        setUpLocomotionRoot(entity: entity, worldRoot: worldRoot, at: seat.position)
+        pauseRemaining = 0
+        claimedSeatIndex = seatIndex
+        claimedSeat = seat
+        seatState = .sitting
+        seatTimeRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
+        face(direction: seat.facing, deltaTime: 999)
+        playAnimation(.sitting)
     }
 
     func teardown() {
@@ -98,6 +193,11 @@ final class NPCGuestController {
         modelEntity = nil
         currentCue = nil
         wanderTarget = nil
+        seatState = .none
+        claimedSeatIndex = nil
+        claimedSeat = nil
+        pendingSeatRequest = false
+        pendingVacatedSeatIndex = nil
     }
 
     var currentPosition: SIMD2<Float> {
@@ -119,6 +219,22 @@ final class NPCGuestController {
                neighboringPositions: [SIMD2<Float>],
                occupiedAnchors: [SIMD2<Float>]) {
         guard locomotionRoot != nil else { return }
+
+        switch seatState {
+        case .movingToSeat:
+            updateMovingToSeat(deltaTime: deltaTime,
+                               playerPosition: playerPosition,
+                               neighboringPositions: neighboringPositions)
+            return
+        case .sitting:
+            updateSitting(deltaTime: deltaTime)
+            return
+        case .standingUp:
+            updateStandingUp(deltaTime: deltaTime)
+            return
+        case .none:
+            break
+        }
 
         if let queueSlot {
             if move(toward: queueSlot, deltaTime: deltaTime,
@@ -157,7 +273,50 @@ final class NPCGuestController {
             wanderTarget = nil
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
+            // 목적지 도착이라는 자연스러운 결정 지점에서만 착석 여부를 굴린다.
+            // alwaysWandering 역할은 절대 앉지 않는다.
+            if role != .alwaysWandering, Float.random(in: 0...1) < NPCGuestTuning.sitDesireChance {
+                pendingSeatRequest = true
+            }
         }
+    }
+
+    // MARK: - Seating
+
+    private func updateMovingToSeat(deltaTime: Float,
+                                    playerPosition: SIMD2<Float>,
+                                    neighboringPositions: [SIMD2<Float>]) {
+        guard let seat = claimedSeat else { seatState = .none; return }
+        playAnimation(.walk)
+        if move(toward: seat.position, deltaTime: deltaTime,
+                arrivalDistance: NPCGuestTuning.seatArrivalDistance,
+                playerPosition: playerPosition,
+                neighboringPositions: neighboringPositions,
+                separationScale: 0.5) {
+            seatState = .sitting
+            seatTimeRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
+            face(direction: seat.facing, deltaTime: 999)
+            playAnimation(.sitting)
+        }
+    }
+
+    private func updateSitting(deltaTime: Float) {
+        seatTimeRemaining -= deltaTime
+        guard seatTimeRemaining <= 0 else { return }
+        seatState = .standingUp
+        seatTimeRemaining = NPCGuestTuning.standingUpDuration
+        playAnimation(.sitToStand)
+    }
+
+    private func updateStandingUp(deltaTime: Float) {
+        seatTimeRemaining -= deltaTime
+        guard seatTimeRemaining <= 0 else { return }
+        pendingVacatedSeatIndex = claimedSeatIndex
+        claimedSeatIndex = nil
+        claimedSeat = nil
+        seatState = .none
+        pauseRemaining = Float.random(in: 0.3...1.2)
+        playAnimation(.idle)
     }
 
     // MARK: - Movement
@@ -280,7 +439,8 @@ final class NPCGuestController {
         guard let match else { return }
 
         animationPlayback?.stop(blendOutDuration: 0.15)
-        animationPlayback = match.entity.playAnimation(match.resource.repeat(), transitionDuration: 0.2)
+        let resource = cue.repeats ? match.resource.repeat() : match.resource
+        animationPlayback = match.entity.playAnimation(resource, transitionDuration: 0.2)
         currentCue = cue
     }
 
@@ -296,10 +456,20 @@ final class NPCGuestController {
         return nil
     }
 
-    /// Idle*.usdz 임포트 시 RealityKit이 모델 스켈레톤에서 자동 생성하는 기본 서브트리
-    /// 애니메이션(숨쉬기 등)을 쓴다. "Walk"라는 이름과 겹치지 않는 첫 애니메이션을 고른다.
+    /// Indoor.usda의 Guest AnimationLibrary에 이름으로 등록된 클립. 이 이름과 겹치지
+    /// 않는 첫 애니메이션이 *Idle.usdz 임포트 시 RealityKit이 모델 자체의 스켈레톤
+    /// 액션으로부터 자동 생성하는 "default subtree animation"(idle 루프)이다.
+    /// Sitting/Sit_to_Stand/Angry도 라이브러리에 등록돼 있어 "Walk"만 제외하면
+    /// idle 판정이 그중 하나로 잘못 걸릴 수 있다(NPCClerkController의 동일 패턴 참고).
+    private static let libraryAnimationNames: Set<String> = ["Walk", "Sitting", "Sit_to_Stand", "Angry"]
+
+    /// availableAnimations는 이미 서브트리 전체를 포함하므로, 라이브러리에 등록된
+    /// 이름과 겹치지 않는 첫 항목을 idle 애니메이션으로 사용한다.
     private func findDefaultSubtreeAnimation(in entity: Entity) -> (entity: Entity, resource: AnimationResource)? {
-        guard let resource = entity.availableAnimations.first(where: { $0.name != "Walk" }) else { return nil }
+        guard let resource = entity.availableAnimations.first(where: { animation in
+            guard let name = animation.name else { return true }
+            return !Self.libraryAnimationNames.contains(name)
+        }) else { return nil }
         return (entity, resource)
     }
 }
