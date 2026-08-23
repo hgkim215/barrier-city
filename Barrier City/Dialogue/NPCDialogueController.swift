@@ -17,11 +17,6 @@ final class NPCDialogueController {
         subsystem: "com.Television.Barrier-City",
         category: "ConversationLifecycle"
     )
-    private static let orderToolLogger = Logger(
-        subsystem: "com.Television.Barrier-City",
-        category: "OrderToolEvaluation"
-    )
-
     enum Status: String { case idle = "대기", listening = "듣는 중", thinking = "생각 중", speaking = "말하는 중" }
 
     /// 버튼 없이 이어지는 공간 대화의 음성 구간 판정값.
@@ -66,6 +61,7 @@ final class NPCDialogueController {
     private var climate: SocialClimate
     private var animationSequence = 0
     private var hasRequestedGreetingAnimation = false
+    private var pendingOrderAcceptanceReaction = false
     private var realtimeSession: RealtimeNPCConversationSession?
     private var realtimeCommandTask: Task<Void, Never>?
     private var realtimeResponseTimeoutTask: Task<Void, Never>?
@@ -128,6 +124,7 @@ final class NPCDialogueController {
         resetRealtimeTurnState()
         animationSequence = 0
         hasRequestedGreetingAnimation = false
+        pendingOrderAcceptanceReaction = false
         animationRequest = nil
         lastMissionEvent = nil
         missionEventSequence = 0
@@ -292,12 +289,6 @@ final class NPCDialogueController {
                 return
             }
             conversationMemory.append(.user, text: transcript)
-            let routingDecision = realtimeMission.observe(userTranscript: transcript)
-#if DEBUG
-            Self.lifecycleLogger.debug(
-                "[ORDER_TURN] transcript=\(transcript, privacy: .public) decision=\(String(describing: routingDecision), privacy: .public) exposesTool=\(routingDecision.exposesMissionOrderTool, privacy: .public)"
-            )
-#endif
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
@@ -313,14 +304,9 @@ final class NPCDialogueController {
                     guard self.isEncounterActive,
                           self.realtimeSession === realtimeSession else { return }
                     try await realtimeSession.requestResponse(
-                        instructions: self.realtimeInstructions(
-                            for: self.climate,
-                            routingDecision: routingDecision
-                        ),
-                        toolChoice: routingDecision.exposesMissionOrderTool ? .required : .none,
-                        tools: routingDecision.exposesMissionOrderTool
-                            ? [Self.placeMissionOrderTool]
-                            : []
+                        instructions: self.realtimeInstructions(for: self.climate),
+                        toolChoice: .auto,
+                        tools: [Self.reportOrderAttemptTool, Self.placeMissionOrderTool]
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -366,12 +352,20 @@ final class NPCDialogueController {
             beginRealtimeListeningIfReady()
 
         case .functionCall(let name, let callID, let arguments):
+            let wasOrderPlacedBeforeThisCall = realtimeMission.snapshot.orderPlaced
             if let event = realtimeMission.register(
                 name: name,
                 callID: callID,
                 arguments: arguments
             ) {
                 publishMissionEvent(event)
+            }
+            // 이 호출이 방금 주문을 성립시켰다면(장벽 설명을 듣고 마지못해 받아준 순간),
+            // 뒤이은 확인 대사와 함께 Angry 애니메이션이 나가도록 표시해 둔다. 실제 요청은
+            // finishRealtimeResponse에서 하는데, 거기서 매번 걸리는 idle 리셋보다 나중에
+            // 판단해야 이 표시가 그대로 덮이지 않는다.
+            if !wasOrderPlacedBeforeThisCall, realtimeMission.snapshot.orderPlaced {
+                pendingOrderAcceptanceReaction = true
             }
 
         case .responseDone:
@@ -406,7 +400,6 @@ final class NPCDialogueController {
 
     private func realtimeInstructions(
         for climate: SocialClimate,
-        routingDecision: RealtimeMissionRoutingDecision = .ordinaryConversation,
         memory: ConversationMemory? = nil
     ) -> String {
         """
@@ -421,9 +414,6 @@ final class NPCDialogueController {
 
         # App-owned order state for this response
         \(realtimeMission.snapshot.promptGuide)
-
-        # Routing for this response
-        \(routingDecision.promptGuide)
         """
     }
 
@@ -450,13 +440,11 @@ final class NPCDialogueController {
         realtimeSpeechDetected = false
         realtimeInputTurnIsActive = false
         realtimeSuppressesCurrentInputTurn = false
-        requestAnimation(.idle)
-        if let evaluation = realtimeMission.finishOrderToolEvaluation() {
-#if DEBUG
-            Self.orderToolLogger.notice(
-                "[ORDER_TOOL_EVALUATION] outcome=\(evaluation.outcome.rawValue, privacy: .public) localReady=\(evaluation.localOrderReady, privacy: .public) proposed=\(evaluation.modelProposedOrder, privacy: .public) argumentsValid=\(String(describing: evaluation.argumentsValid), privacy: .public)"
-            )
-#endif
+        if pendingOrderAcceptanceReaction {
+            pendingOrderAcceptanceReaction = false
+            requestAnimation(.angry)
+        } else {
+            requestAnimation(.idle)
         }
         if let functionCall = realtimeMission.takeFunctionCall() {
             realtimeCanAcceptInput = false
@@ -599,22 +587,28 @@ final class NPCDialogueController {
         return PlayerTurn(text: text, polite: polite, impatient: impatient, hostile: hostile)
     }
 
+    private static let reportOrderAttemptTool = RealtimeFunctionTool(
+        name: "report_order_attempt",
+        description: "Call this the moment the visitor asks you, in any way, to get/bring/order them ANY item or drink — for any item, not only the mission item. Call it once per distinct order attempt, before place_mission_order and before speaking. Never call it in the same response as place_mission_order.",
+        parameters: []
+    )
+
     private static let placeMissionOrderTool = RealtimeFunctionTool(
         name: "place_mission_order",
-        description: "Place exactly one Rainbow Macaron Smoothie. This function is exposed only after the app detects an explicit matching order; call it before confirming placement.",
+        description: "Place exactly one Rainbow Macaron Smoothie once the visitor has clearly ordered it AND, after the kiosk redirect, has explained why they personally can't use the kiosk (a real accessibility barrier, not just a repeated request). Always available, but the app validates every call and rejects it if the item/quantity do not match, if an order was already placed, or if this encounter has not yet had its first-order kiosk redirect (call report_order_attempt for that instead). Call it as soon as you are sure of the order — do not wait for extra confirmation.",
         parameters: [
             .init(
                 name: "item",
                 type: .string,
                 description: "Canonical requested menu item.",
-                allowedStringValues: ["rainbow_macaron_smoothie"]
+                allowedStringValues: [RainbowSmoothieMissionOrder.itemIdentifier]
             ),
             .init(
                 name: "quantity",
                 type: .integer,
                 description: "Explicitly requested number of cups.",
-                minimumIntegerValue: 1,
-                maximumIntegerValue: 1
+                minimumIntegerValue: RainbowSmoothieMissionOrder.quantity,
+                maximumIntegerValue: RainbowSmoothieMissionOrder.quantity
             ),
         ]
     )

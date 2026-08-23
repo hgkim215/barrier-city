@@ -81,13 +81,17 @@ final class RealtimeConversationGuideTests: XCTestCase {
         XCTAssertTrue(opening.contains("exactly two short sentences"))
     }
 
-    func test_readyOrder_requiresValidatedToolBeforeConfirmation() {
-        let guide = RealtimeMissionRoutingDecision.missionOrderCandidate.promptGuide
+    func test_missionBoundary_enforcesKioskFirstAndNoAlternatives() {
+        let guide = RealtimeConversationGuide().instructions(
+            persona: persona,
+            climate: SocialClimate()
+        )
 
-        XCTAssertTrue(guide.contains("explicit evidence"))
-        XCTAssertTrue(guide.contains("exactly one Rainbow Macaron Smoothie"))
-        XCTAssertTrue(guide.contains("Call place_mission_order"))
-        XCTAssertTrue(guide.contains("before the function result succeeds"))
+        XCTAssertTrue(guide.contains("call report_order_attempt first"))
+        XCTAssertTrue(guide.contains("deliberately reject that call"))
+        XCTAssertTrue(guide.contains("redirect the visitor to the kiosk"))
+        XCTAssertTrue(guide.contains("Do not offer, recommend, or ask about another menu item"))
+        XCTAssertTrue(guide.contains("only one cup per visit is possible"))
     }
 
     func test_definesDistinctFreeConversationStyles() {

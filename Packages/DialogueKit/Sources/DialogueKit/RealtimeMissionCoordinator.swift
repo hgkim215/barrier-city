@@ -1,80 +1,35 @@
 import Foundation
 
-/// 한 사용자 턴에 주문 도구를 노출할지 결정한다. 대화의 내용이나 말투는 결정하지 않는다.
-public enum RealtimeMissionRoutingDecision: Equatable, Sendable {
-    case ordinaryConversation
-    case initialKioskRefusal
-    case unavailableMenuRefusal
-    case partialMissionOrder
-    case missionOrderCandidate
-
-    public var exposesMissionOrderTool: Bool {
-        self == .missionOrderCandidate
-    }
-
-    public var promptGuide: String {
-        switch self {
-        case .ordinaryConversation:
-            "Continue the conversation naturally. No function is available for this response."
-        case .initialKioskRefusal:
-            """
-            This is the visitor's first explicit attempt to order from you. Refuse the order and tell them
-            curtly that orders must be placed at the kiosk. Use exactly two short, natural Korean sentences.
-            Do not ask what they want, accept any item, mention the kiosk's accessibility problem, apologize,
-            offer help, or suggest another ordering method. No function is available for this response.
-            """
-        case .unavailableMenuRefusal:
-            """
-            The visitor explicitly ordered a menu item other than the Rainbow Macaron Smoothie. Refuse it
-            with one brief, ordinary operational reason such as insufficient beans or unavailable ingredients.
-            Use exactly two short, natural Korean sentences. Do not offer, recommend, or ask about another
-            menu item. Do not suggest the kiosk, counter ordering, another ordering method, or any next step.
-            No function is available for this response.
-            """
-        case .partialMissionOrder:
-            "The visitor may be forming an order, but the exact mission item and one-cup quantity are not both established. Respond in exactly two short, natural Korean sentences and clarify only if it fits the conversation. No function is available for this response."
-        case .missionOrderCandidate:
-            "The app found explicit evidence that the visitor is ordering exactly one Rainbow Macaron Smoothie. Call place_mission_order with the canonical item and quantity. Do not announce placement before the function result succeeds."
-        }
-    }
-}
-
 /// Realtime tool 호출을 앱 미션 이벤트와 서버 응답으로 변환한다.
-/// 자유 대화는 모델에 맡기고 정확한 미션 주문 증거만 로컬에서 누적·검증한다.
+///
+/// 두 함수 모두 매 응답마다 항상 모델에 노출된다(표준 function calling과 동일) — 이 타입은
+/// 발화 텍스트를 파싱해 "도구를 노출해도 되는지"를 미리 판단하지 않는다. 대신 모델이 실제로
+/// 함수를 호출했을 때만 결정론적으로 개입한다:
+///
+/// - report_order_attempt: 품목과 무관하게 "이 encounter에서 뭔가를 처음 주문하려는 시도"를
+///   모델 스스로 판단해 호출한다. 처음이면 리다이렉트 플래그를 세우고, "지금 바빠서 응대가
+///   어려우니 키오스크로 해달라"는 대사만 하도록 지시한다. 정확한 상품명·수량 매칭은 전혀
+///   하지 않으므로 어떤 메뉴를 시켜도 동일하게 걸린다.
+/// - place_mission_order: 실제 주문 확정. 이 함수의 첫 호출은 report_order_attempt가 그 사이에
+///   먼저 리다이렉트를 처리했는지와 무관하게, 아직 리다이렉트가 없었다면 인자 유효성과 별개로
+///   무조건 거절한다 — 모델이 report_order_attempt 호출을 건너뛰어도 우회되지 않는 안전망이다.
+///   리다이렉트 이후의 호출은 JSON 인자를 스키마와 대조해서만 승인한다 — "방문자가 장벽을
+///   설명했는지"는 코드가 판단할 수 없는 자연어 이해 영역이라 모델의 판단(언제 이 함수를
+///   부를지)에 맡기고, 프롬프트로 그 조건을 명시한다.
 public struct RealtimeMissionCoordinator: Sendable {
-    public struct OrderToolEvaluation: Equatable, Sendable {
-        public enum Outcome: String, Equatable, Sendable {
-            case agreement
-            case missedProposal
-            case prematureProposal
-            case invalidProposal
-        }
-
-        public let outcome: Outcome
-        public let localOrderReady: Bool
-        public let modelProposedOrder: Bool
-        public let argumentsValid: Bool?
-    }
-
     public struct Snapshot: Equatable, Sendable {
-        public let hasMissionItem: Bool
-        public let requestedQuantity: Int?
         public let orderPlaced: Bool
         public let hasRedirectedFirstOrderToKiosk: Bool
 
         public var isPristine: Bool {
-            !hasMissionItem && requestedQuantity == nil && !orderPlaced
-                && !hasRedirectedFirstOrderToKiosk
+            !orderPlaced && !hasRedirectedFirstOrderToKiosk
         }
 
         public var promptGuide: String {
-            let quantity = requestedQuantity.map(String.init) ?? "missing"
-            return """
+            """
             # App-owned mission state
-            - EXACT_ITEM=\(hasMissionItem ? "Rainbow Macaron Smoothie" : "missing")
-            - QUANTITY=\(quantity)
             - ORDER_PLACED=\(orderPlaced)
-            - FIRST_ORDER_REDIRECTED_TO_KIOSK=\(hasRedirectedFirstOrderToKiosk)
+            - FIRST_ORDER_ATTEMPT_REDIRECTED_TO_KIOSK=\(hasRedirectedFirstOrderToKiosk)
             This state is authoritative only for the mission order. It must not constrain ordinary conversation.
             """
         }
@@ -86,180 +41,145 @@ public struct RealtimeMissionCoordinator: Sendable {
         public let followUpInstructions: String
     }
 
-    private var hasMissionItem = false
-    private var requestedQuantity: Int?
-    private var isAwaitingMissionQuantity = false
     private var orderWasPlaced = false
     private var hasRedirectedFirstOrderToKiosk = false
     private var hasPendingOrderCompletion = false
     private var pendingFunctionCall: FunctionCall?
-    private var localOrderReadyForCurrentTurn: Bool?
-    private var orderToolWasProposed = false
-    private var orderToolArgumentsWereValid: Bool?
 
     public init() {}
 
     public mutating func resetImmersiveProgress() {
-        hasMissionItem = false
-        requestedQuantity = nil
-        isAwaitingMissionQuantity = false
         orderWasPlaced = false
         hasRedirectedFirstOrderToKiosk = false
         hasPendingOrderCompletion = false
         pendingFunctionCall = nil
-        clearOrderToolEvaluation()
     }
 
-    /// Realtime 연결만 끝날 때 호출한다. 확정된 주문 슬롯과 완료 이벤트는 같은
+    /// Realtime 연결만 끝날 때 호출한다. 확정된 주문과 첫 시도 리다이렉트 여부는 같은
     /// ImmersiveSpace 방문 동안 보존한다.
     public mutating func clearEncounterTransientState() {
         pendingFunctionCall = nil
-        clearOrderToolEvaluation()
     }
 
     public var snapshot: Snapshot {
-        Snapshot(
-            hasMissionItem: hasMissionItem,
-            requestedQuantity: requestedQuantity,
-            orderPlaced: orderWasPlaced,
-            hasRedirectedFirstOrderToKiosk: hasRedirectedFirstOrderToKiosk
-        )
+        Snapshot(orderPlaced: orderWasPlaced, hasRedirectedFirstOrderToKiosk: hasRedirectedFirstOrderToKiosk)
     }
 
+    /// 모델이 report_order_attempt나 place_mission_order를 호출했을 때만 불린다. 발화
+    /// 텍스트는 보지 않고 오직 함수 호출 자체와(있다면) 그 JSON 인자만으로 판단한다.
     @discardableResult
-    public mutating func observe(
-        userTranscript: String
-    ) -> RealtimeMissionRoutingDecision {
-        orderToolWasProposed = false
-        orderToolArgumentsWereValid = nil
-
-        guard !orderWasPlaced else {
-            localOrderReadyForCurrentTurn = false
-            return .ordinaryConversation
-        }
-
-        let transcript = userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let exactItemMentioned = RainbowSmoothieMissionOrder.isExactMissionItemMention(
-            in: transcript
-        )
-        let quantity = RainbowSmoothieMissionOrder.requestedQuantity(in: transcript)
-        let explicitOrderIntent = Self.expressesOrderIntent(transcript)
-        let bareItemAnswer = exactItemMentioned && Self.looksLikeBareItemAnswer(transcript)
-        let differentItemOrder = RainbowSmoothieMissionOrder.mentionsDifferentItem(in: transcript)
-            && explicitOrderIntent
-
-        // 첫 명시적 주문은 메뉴와 무관하게 반드시 키오스크로 돌려보낸다. 이 턴의
-        // 메뉴·수량은 저장하지 않아 같은 응답에서 주문이 접수되는 경로를 차단한다.
-        if explicitOrderIntent && !hasRedirectedFirstOrderToKiosk {
-            hasRedirectedFirstOrderToKiosk = true
-            hasMissionItem = false
-            requestedQuantity = nil
-            isAwaitingMissionQuantity = false
-            localOrderReadyForCurrentTurn = false
-            return .initialKioskRefusal
-        }
-
-        if differentItemOrder {
-            hasMissionItem = false
-            requestedQuantity = nil
-            isAwaitingMissionQuantity = false
-            localOrderReadyForCurrentTurn = false
-            return .unavailableMenuRefusal
-        }
-
-        if Self.cancelsMissionOrder(transcript) {
-            hasMissionItem = false
-            requestedQuantity = nil
-            isAwaitingMissionQuantity = false
-            localOrderReadyForCurrentTurn = false
-            return .ordinaryConversation
-        }
-
-        if exactItemMentioned && (explicitOrderIntent || bareItemAnswer) {
-            hasMissionItem = true
-            requestedQuantity = quantity
-            isAwaitingMissionQuantity = quantity == nil
-        } else if isAwaitingMissionQuantity, let quantity {
-            requestedQuantity = quantity
-            isAwaitingMissionQuantity = false
-        }
-
-        let ready = hasMissionItem
-            && requestedQuantity == RainbowSmoothieMissionOrder.quantity
-            && (exactItemMentioned || quantity != nil)
-        localOrderReadyForCurrentTurn = ready
-
-        if ready { return .missionOrderCandidate }
-        if hasMissionItem { return .partialMissionOrder }
-        return .ordinaryConversation
-    }
-
-    /// 공개되는 유일한 함수다. 모델이 보낸 JSON과 로컬 transcript 증거가 모두 맞아야
-    /// 실제 미션 완료 이벤트를 생성한다.
     public mutating func register(
         name: String,
         callID: String,
         arguments: String
     ) -> MissionEvent? {
-        orderToolWasProposed = name == "place_mission_order"
-        let argumentsAreValid = validateMissionOrderArguments(arguments)
-        orderToolArgumentsWereValid = argumentsAreValid
-        let locallyReady = hasMissionItem
-            && requestedQuantity == RainbowSmoothieMissionOrder.quantity
-        let accepted = name == "place_mission_order" && argumentsAreValid && locallyReady
+        // 한 응답 안에서 두 번째 함수 호출이 들어오면(모델이 지침을 어기고 두 함수를 같은
+        // 턴에 부른 경우) 무시한다 — pendingFunctionCall은 한 슬롯뿐이라, 덮어쓰면 첫 번째
+        // 호출의 결과가 API로 영영 전송되지 못해 세션이 꼬인다.
+        guard pendingFunctionCall == nil else { return nil }
 
-        let output: String
-        let followUpInstructions: String
-        if accepted {
-            if !orderWasPlaced {
-                orderWasPlaced = true
-                hasPendingOrderCompletion = true
-            }
-            output = #"{"success":true,"item":"rainbow_macaron_smoothie","quantity":1}"#
-            followUpInstructions = """
-              The app validated and placed exactly one Rainbow Macaron Smoothie order. Confirm it briefly
-              in exactly two short, natural Korean sentences and say the visitor will be notified when it is
-              ready. Do not say the drink itself is already ready and do not mention functions or JSON.
-              """
-        } else {
-            output = #"{"success":false,"message":"mission order validation failed"}"#
-            followUpInstructions = """
-              The app did not place an order. Continue in exactly two short, natural Korean sentences without
-              exposing technical details or claiming success. Ask for the exact item or one-cup quantity only
-              if needed.
-              """
+        switch name {
+        case "report_order_attempt":
+            return registerOrderAttemptReport(callID: callID)
+        case "place_mission_order":
+            return registerMissionOrder(callID: callID, arguments: arguments)
+        default:
+            pendingFunctionCall = FunctionCall(
+                callID: callID,
+                output: #"{"success":false,"message":"unknown function"}"#,
+                followUpInstructions: """
+                  The app does not recognize that function. Continue in exactly two short, natural Korean
+                  sentences without mentioning functions or JSON.
+                  """
+            )
+            return nil
         }
+    }
 
+    private mutating func registerOrderAttemptReport(callID: String) -> MissionEvent? {
+        let isFirstAttempt = !hasRedirectedFirstOrderToKiosk
+        hasRedirectedFirstOrderToKiosk = true
         pendingFunctionCall = FunctionCall(
             callID: callID,
-            output: output,
-            followUpInstructions: followUpInstructions
+            output: #"{"success":true}"#,
+            followUpInstructions: isFirstAttempt
+                ? """
+                  This is the visitor's first order attempt in this encounter, for any item. You are too busy
+                  working right now to help. Say so and point them to the kiosk, in exactly two short, natural
+                  spoken Korean sentences — for example (vary the wording, do not repeat verbatim): "지금 좀
+                  정신없어서요. 주문은 저기 키오스크에서 해주시겠어요?" Do not apologize, offer alternatives, or
+                  mention this rule again later.
+                  """
+                : """
+                  The app already noted an earlier order attempt this encounter. Continue naturally in
+                  exactly two short, natural Korean sentences without repeating the kiosk redirect.
+                  """
         )
         return nil
     }
 
-    public mutating func finishOrderToolEvaluation() -> OrderToolEvaluation? {
-        guard let localOrderReady = localOrderReadyForCurrentTurn else { return nil }
-        let outcome: OrderToolEvaluation.Outcome
-        if localOrderReady {
-            if !orderToolWasProposed {
-                outcome = .missedProposal
-            } else if orderToolArgumentsWereValid == true {
-                outcome = .agreement
-            } else {
-                outcome = .invalidProposal
-            }
-        } else {
-            outcome = orderToolWasProposed ? .prematureProposal : .agreement
+    private mutating func registerMissionOrder(callID: String, arguments: String) -> MissionEvent? {
+        guard !orderWasPlaced else {
+            pendingFunctionCall = FunctionCall(
+                callID: callID,
+                output: #"{"success":false,"message":"order already placed"}"#,
+                followUpInstructions: """
+                  The app already placed this visitor's order earlier in this encounter. Do not call the
+                  function again. Continue in exactly two short, natural spoken Korean sentences without
+                  repeating the order — for example (vary the wording) "그거 이미 넣었어요."
+                  """
+            )
+            return nil
         }
-        let evaluation = OrderToolEvaluation(
-            outcome: outcome,
-            localOrderReady: localOrderReady,
-            modelProposedOrder: orderToolWasProposed,
-            argumentsValid: orderToolArgumentsWereValid
+
+        guard hasRedirectedFirstOrderToKiosk else {
+            // report_order_attempt를 건너뛰고 바로 여기로 왔다 — 그래도 첫 시도는 무조건
+            // 거절하고 키오스크로 돌려보낸다.
+            hasRedirectedFirstOrderToKiosk = true
+            pendingFunctionCall = FunctionCall(
+                callID: callID,
+                output: #"{"success":false,"message":"first attempt must be redirected to the kiosk"}"#,
+                followUpInstructions: """
+                  This is the visitor's first attempt to order anything. The app deliberately rejected the
+                  function call. Say you're too busy and point them to the kiosk, in exactly two short,
+                  natural spoken Korean sentences — for example (vary the wording): "저 지금 손이 모자라서요.
+                  주문은 키오스크 이용해 주시겠어요?" Do not apologize, offer alternatives, or repeat this rule
+                  if they try again.
+                  """
+            )
+            return nil
+        }
+
+        guard validateMissionOrderArguments(arguments) else {
+            pendingFunctionCall = FunctionCall(
+                callID: callID,
+                output: #"{"success":false,"message":"mission order validation failed"}"#,
+                followUpInstructions: """
+                  The app did not place an order because the item or quantity did not match exactly one
+                  Rainbow Macaron Smoothie. Continue in exactly two short, natural spoken Korean sentences —
+                  for example (vary the wording) "어, 그건 좀 다른데요. 다시 한번 말씀해 주시겠어요?" — without
+                  exposing technical details or claiming success.
+                  """
+            )
+            return nil
+        }
+
+        orderWasPlaced = true
+        hasPendingOrderCompletion = true
+        pendingFunctionCall = FunctionCall(
+            callID: callID,
+            output: #"{"success":true,"item":"\#(RainbowSmoothieMissionOrder.itemIdentifier)","quantity":\#(RainbowSmoothieMissionOrder.quantity)}"#,
+            followUpInstructions: """
+              The app validated and placed exactly one Rainbow Macaron Smoothie order. You are giving in
+              because the visitor just explained why they can't use the kiosk themselves, not because you
+              wanted to. Confirm it begrudgingly, with a little irritation or a short sigh, in exactly two
+              short, natural spoken Korean sentences, and say they'll be notified when it's ready — for
+              example (vary the wording): "하... 알겠어요. 그거 하나만요, 되면 불러드릴게요." Do not sound warm,
+              polished, or apologetic, and do not say the drink itself is already ready or mention functions
+              or JSON.
+              """
         )
-        clearOrderToolEvaluation()
-        return evaluation
+        return nil
     }
 
     public mutating func takeFunctionCall() -> FunctionCall? {
@@ -282,40 +202,7 @@ public struct RealtimeMissionCoordinator: Sendable {
               let decoded = try? JSONDecoder().decode(Arguments.self, from: data) else {
             return false
         }
-        return decoded.item == "rainbow_macaron_smoothie"
+        return decoded.item == RainbowSmoothieMissionOrder.itemIdentifier
             && decoded.quantity == RainbowSmoothieMissionOrder.quantity
-    }
-
-    private static func expressesOrderIntent(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        return [
-            "주세요", "줘요", "줘", "주문", "시킬게", "시켜", "부탁", "할게요",
-            "할게", "먹을게", "마실게", "한 잔이요", "한잔이요",
-        ].contains(where: lowered.contains)
-    }
-
-    private static func looksLikeBareItemAnswer(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        let questionSignals = ["?", "？", "맛", "얼마", "있나요", "있어요?", "추천", "어때"]
-        return text.count <= 40 && !questionSignals.contains(where: lowered.contains)
-    }
-
-    private static func cancelsMissionOrder(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .joined()
-        return [
-            "레인보우마카롱스무디취소",
-            "레인보우마카롱스무디말고",
-            "레인보우마카롱스무디아니",
-            "레인보우마카롱스무디안먹",
-            "레인보우마카롱스무디안마실",
-        ].contains(where: normalized.contains)
-    }
-
-    private mutating func clearOrderToolEvaluation() {
-        localOrderReadyForCurrentTurn = nil
-        orderToolWasProposed = false
-        orderToolArgumentsWereValid = nil
     }
 }
