@@ -15,12 +15,18 @@ enum NPCObstacleAvoidance {
     /// 휠체어의 전후 외곽(0.42m)을 원형으로 보수적으로 근사한다.
     private static let wheelchairRadius: Float = 0.42
 
+    /// - Parameter avoidPlayer: 평소 배회 중에는 NPC가 사용자 몸으로 걸어 들어가지
+    ///   않도록 반경 안쪽 이동을 막아야 하지만(기본값 true), 대기줄처럼 의도적으로
+    ///   사용자 바로 뒤까지 다가가야 하는 이동에는 이 검사를 꺼야 한다. 그렇지
+    ///   않으면 대기줄 목표 지점이 이 반경(halfWidth+wheelchairRadius+skin,
+    ///   guest 기준 약 0.65m)보다 가까울 때 도착하지 못하고 그 경계에서 멈춘다.
     static func allowedStep(scene: RealityKit.Scene,
                             from position: SIMD3<Float>,
                             direction: SIMD3<Float>,
                             desiredStep: Float,
                             halfWidth: Float,
-                            playerPosition: SIMD2<Float>) -> Float {
+                            playerPosition: SIMD2<Float>,
+                            avoidPlayer: Bool = true) -> Float {
         guard desiredStep > 0 else { return 0 }
         let perpendicular = SIMD3<Float>(direction.z, 0, -direction.x)
         var nearest: Float = desiredStep
@@ -37,12 +43,14 @@ enum NPCObstacleAvoidance {
                 nearest = min(nearest, max(0, hitDistance - skin))
             }
         }
-        nearest = min(nearest, allowedStepPastWheelchair(
-            from: SIMD2(position.x, position.z),
-            direction: SIMD2(direction.x, direction.z),
-            desiredStep: desiredStep,
-            clearance: halfWidth + wheelchairRadius + skin,
-            playerPosition: playerPosition))
+        if avoidPlayer {
+            nearest = min(nearest, allowedStepPastWheelchair(
+                from: SIMD2(position.x, position.z),
+                direction: SIMD2(direction.x, direction.z),
+                desiredStep: desiredStep,
+                clearance: halfWidth + wheelchairRadius + skin,
+                playerPosition: playerPosition))
+        }
         return nearest
     }
 

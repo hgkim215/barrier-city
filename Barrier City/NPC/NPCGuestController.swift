@@ -297,12 +297,15 @@ final class NPCGuestController {
         }
 
         if let queueSlot {
+            // 대기줄은 의도적으로 유저 바로 뒤까지 다가가야 하므로, 평소 배회에서
+            // 유저 몸에 안 걸어 들어가게 막는 반경 회피는 여기서만 끈다.
             let outcome = move(toward: queueSlot, deltaTime: deltaTime,
                                arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
                                separationScale: 0.35,
-                               exclusions: exclusions)
+                               exclusions: exclusions,
+                               avoidPlayer: false)
             if outcome.arrived {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
                 playAnimation(.angry)
@@ -417,7 +420,8 @@ final class NPCGuestController {
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
                       separationScale: Float,
-                      exclusions: [NPCGuestArea] = []) -> MoveOutcome {
+                      exclusions: [NPCGuestArea] = [],
+                      avoidPlayer: Bool = true) -> MoveOutcome {
         guard let root = locomotionRoot else { return MoveOutcome(arrived: false, moved: false) }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         let delta = target - current
@@ -448,15 +452,21 @@ final class NPCGuestController {
                 direction: SIMD3(direction.x, 0, direction.y),
                 desiredStep: desiredStep,
                 halfWidth: NPCGuestTuning.bodyHalfWidth,
-                playerPosition: playerPosition)
+                playerPosition: playerPosition,
+                avoidPlayer: avoidPlayer)
         }
         root.position.x += direction.x * step
         root.position.z += direction.y * step
-        let moved = step > 0.0005
+        // 장애물에 거의 다 막혀 한 프레임에 1mm 안팎만 겨우 밀리는 경우까지 "이동
+        // 중"으로 치면, 실제로는 제자리에 멈춰 있는데도 Walk 애니메이션이 계속
+        // 재생되는 것처럼 보인다. blockedStepFraction과 같은 기준으로 "사실상
+        // 막혔다"를 판정해 그 경우엔 이동도 애니메이션도 멈춘 것으로 취급한다.
+        let isBlocked = step < desiredStep * NPCGuestTuning.blockedStepFraction
+        let moved = !isBlocked && step > 0.0005
         if moved {
             face(direction: direction, deltaTime: deltaTime)
         }
-        if step < desiredStep * NPCGuestTuning.blockedStepFraction {
+        if isBlocked {
             wanderTarget = nil
             // 같은 장애물에 도달한 NPC들이 같은 프레임에 즉시 재탐색하지 않도록 짧고
             // 서로 다른 숨 고르기를 둔다.
