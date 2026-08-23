@@ -1,5 +1,6 @@
 import Foundation
 import RealityKit
+import os
 import simd
 
 /// 회전된 사각형 영역(월드 XZ 평면). AreaK 계산(NPCClerkController)과 동일한 축-투영
@@ -39,6 +40,11 @@ struct GuestSeat {
 /// 순수하게 다수 NPC의 동선만 담당한다.
 @MainActor
 final class NPCGuestCoordinator {
+    private static let seatingLogger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "GuestSeating"
+    )
+
     private enum Tuning {
         /// _floor 바깥쪽(벽)에 붙어 걷지 않도록 배회 영역에 두는 여백.
         static let floorMargin: Float = 0.5
@@ -106,6 +112,8 @@ final class NPCGuestCoordinator {
 
         seats = discoverSeats(in: indoorMap, relativeTo: worldRoot)
         seatOccupants = Array(repeating: nil, count: seats.count)
+        let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
+        Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개: \(seatDescription)")
         if let seatClusterExclusion = makeSeatClusterExclusion(from: seats) {
             exclusionAreas.append(seatClusterExclusion)
         }
@@ -156,7 +164,10 @@ final class NPCGuestCoordinator {
                                       relativeTo worldRoot: Entity,
                                       tableAnchors: [SIMD2<Float>],
                                       into seats: inout [GuestSeat]) {
-        if entity.name == "SittingPoint" {
+        // 이름 동등 비교라 같은 이름의 마커가 씬 안에 몇 개든(서로 다른 부모 밑에
+        // 있는 한) 전부 개별 좌석으로 잡힌다. RCP는 형제 간 이름이 겹칠 때만
+        // "SittingPoint_1"처럼 접미사를 붙이므로 그 패턴도 함께 인식한다.
+        if entity.name == "SittingPoint" || entity.name.hasPrefix("SittingPoint_") {
             let world = entity.position(relativeTo: worldRoot)
             let position = SIMD2<Float>(world.x, world.z)
             let nearestTable = tableAnchors.min {
