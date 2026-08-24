@@ -181,6 +181,92 @@ final class RealtimeMissionCoordinatorTests: XCTestCase {
         XCTAssertTrue(pending[1].output.contains(#""success":false"#))
     }
 
+    func test_unknownFunctionName_isRejectedWithoutAffectingMissionState() {
+        var coordinator = RealtimeMissionCoordinator()
+
+        _ = coordinator.register(name: "some_other_tool", callID: "call-1", arguments: "{}")
+
+        XCTAssertFalse(coordinator.snapshot.hasRedirectedFirstOrderToKiosk)
+        XCTAssertFalse(coordinator.snapshot.orderPlaced)
+        let pending = coordinator.takeFunctionCalls()
+        XCTAssertTrue(pending.first?.output.contains("unknown function") == true)
+    }
+
+    func test_reportOrderAttempt_ignoresItsArguments_evenWhenMalformed() {
+        // report_order_attempt는 "무언가를 주문하려 한다"는 사실 자체만 신호이고 품목·수량은
+        // 전혀 파싱하지 않는다 — 모델이 이상한 JSON을 넘겨도(혹은 아예 안 넘겨도) 똑같이
+        // 동작해야 한다.
+        var coordinator = RealtimeMissionCoordinator()
+
+        _ = coordinator.register(name: "report_order_attempt", callID: "call-1", arguments: "not even json {{{")
+
+        XCTAssertTrue(coordinator.snapshot.hasRedirectedFirstOrderToKiosk)
+        XCTAssertTrue(coordinator.takeFunctionCalls().first?.output.contains(#""success":true"#) == true)
+    }
+
+    func test_reportOrderAttempt_afterOrderAlreadyPlaced_doesNotDisruptState() {
+        // 주문이 이미 성립한 뒤 모델이 실수로 report_order_attempt를 다시 불러도(예: 다른
+        // 품목을 또 물어보는 상황) 이미 리다이렉트가 끝난 상태라 "이미 기록해 두었다" 안내만
+        // 나가고 주문 상태는 그대로여야 한다.
+        var coordinator = redirectedCoordinator()
+        _ = coordinator.register(name: "place_mission_order", callID: "call-2", arguments: validArguments)
+        _ = coordinator.takeFunctionCalls()
+        XCTAssertTrue(coordinator.snapshot.orderPlaced)
+
+        _ = coordinator.register(name: "report_order_attempt", callID: "call-3", arguments: "{}")
+
+        XCTAssertTrue(coordinator.snapshot.orderPlaced)
+        XCTAssertFalse(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("너무 바빠서 응대할 수 없다") == true)
+    }
+
+    func test_secondCall_acceptsExtraUnknownJSONFields() {
+        // 모델이 스키마에 없는 필드를 덧붙여도(예: 설명 필드) 알려진 item/quantity만 맞으면
+        // 여전히 승인돼야 한다 — 실시간 모델의 JSON 출력이 스키마에 완전히 엄격하지 않을 수
+        // 있다.
+        var coordinator = redirectedCoordinator()
+
+        _ = coordinator.register(
+            name: "place_mission_order",
+            callID: "call-extra-field",
+            arguments: #"{"item":"rainbow_macaron_smoothie","quantity":1,"note":"방문자가 직접 설명함"}"#
+        )
+
+        XCTAssertTrue(coordinator.snapshot.orderPlaced)
+        XCTAssertEqual(coordinator.takeCompletedEvent(), .orderPlaced)
+    }
+
+    func test_secondCall_rejectsItemNameCaseOrWhitespaceMismatch() {
+        // item 매칭은 정확한 문자열 동일성만 본다 — 대소문자나 공백이 다르면 실패한다. 이
+        // 엄격함 자체가 의도된 동작인지 확인해 두는 회귀 테스트다(모델이 대문자로 시작하는
+        // 식별자를 낼 가능성은 실제로 있다).
+        var coordinator = redirectedCoordinator()
+
+        _ = coordinator.register(
+            name: "place_mission_order",
+            callID: "call-case-mismatch",
+            arguments: #"{"item":"Rainbow_Macaron_Smoothie","quantity":1}"#
+        )
+
+        XCTAssertFalse(coordinator.snapshot.orderPlaced)
+        XCTAssertTrue(coordinator.takeFunctionCalls().first?.output.contains(#""success":false"#) == true)
+    }
+
+    func test_visitorTurnCounter_survivesEncounterCleanup() {
+        // clearEncounterTransientState()는 Realtime 연결만 끊길 때 호출된다(예: 대화 잠깐
+        // 끊겼다 재연결). 관대화 기준으로 쓰이는 방문자 턴 수는 같은 카페 방문 동안 이어져야
+        // 하므로 이 정리로 리셋되면 안 된다.
+        var coordinator = RealtimeMissionCoordinator()
+        _ = coordinator.register(name: "report_order_attempt", callID: "call-1", arguments: "{}")
+        _ = coordinator.takeFunctionCalls()
+        coordinator.registerVisitorTurn()
+        coordinator.registerVisitorTurn()
+        XCTAssertEqual(coordinator.snapshot.visitorTurnsSinceRedirect, 2)
+
+        coordinator.clearEncounterTransientState()
+
+        XCTAssertEqual(coordinator.snapshot.visitorTurnsSinceRedirect, 2)
+    }
+
     /// 실제 앱 흐름에서는 매 턴이 끝날 때마다 takeFunctionCalls()로 pending 결과를 비운다
     /// (finishRealtimeResponse 참고) — 여기서도 드레인해야 다음 register() 호출이 "같은
     /// 턴의 두 번째 함수 호출"로 오인돼 무시되지 않는다.
