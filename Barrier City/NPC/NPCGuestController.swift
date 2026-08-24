@@ -87,6 +87,9 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
+        /// 좌석 콜리전 프록시를 넘는 마지막 구간에서만 장애물 레이를 끈다. 좌석까지
+        /// 먼 구간은 계속 벽/가구 충돌을 검사해 방을 가로질러 관통하지 못하게 한다.
+        static let seatCollisionBypassDistance: Float = 0.6
         /// cycler가 한 좌석에 계속 앉아있는 시간(초). 이 시간이 지나면 자동으로
         /// 일어나 다시 배회하다 새 좌석을 찾는다 — 카페가 계속 사람이 들고 나는
         /// 느낌을 주기 위함이다. cycler는 3명뿐이라 이 순환에 참여하는 인원이
@@ -366,6 +369,7 @@ final class NPCGuestController {
         switch seatState {
         case .movingToSeat:
             updateMovingToSeat(deltaTime: deltaTime,
+                               movementArea: wanderArea,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
                                exclusions: staffExclusions)
@@ -394,18 +398,32 @@ final class NPCGuestController {
             break
         }
 
+        // 외부 transform 변경이나 이전 프레임의 예외 상황으로 이미 경계를 위반했다면
+        // 정지 타이머/보행 예산보다 복구를 우선한다. move()는 위반 깊이가 줄어드는
+        // 이동만 허용하므로 안전 영역을 향해 빠져나가는 동안 더 깊이 들어갈 수 없다.
+        let requiresRecovery = !NPCGuestNavigation.isValid(
+            currentPosition, inside: wanderArea, excluding: exclusions)
+        if requiresRecovery {
+            pauseRemaining = 0
+            wanderTarget = randomWanderTarget(
+                in: wanderArea,
+                excluding: exclusions,
+                awayFrom: currentPosition,
+                avoiding: occupiedAnchors)
+        }
+
         if let queueSlot {
             // 대기줄은 의도적으로 유저 바로 뒤까지 다가가야 하므로, 평소 배회에서
-            // 유저 몸에 안 걸어 들어가게 막는 반경 회피는 여기서만 끈다. 제외
-            // 구역(exclusions)도 넘기지 않는다 — 키오스크 주변 배회 제외 반경은
-            // "그쪽으로 배회하지 말라"는 뜻이지 "대기줄이 키오스크에 가까워선 안
-            // 된다"는 뜻이 아닌데, 넘기면 그 반발력이 대기줄 자리로의 접근과 충돌해
-            // 유저 뒤에 붙지 못하고 계속 멀리 밀려났다.
+            // 유저 몸에 안 걸어 들어가게 막는 반경 회피는 여기서만 끈다. 전체 배회
+            // 제외 구역은 넘기지 않되 AreaK/AreaB만 유지한다 — 키오스크 주변 반경은
+            // 줄서기와 충돌하지만 직원 전용 구역은 어떤 행동에서도 침범하면 안 된다.
             let outcome = move(toward: queueSlot, deltaTime: deltaTime,
+                               movementArea: wanderArea,
                                arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
                                separationScale: 0.35,
+                               exclusions: staffExclusions,
                                avoidPlayer: false)
             if outcome.arrived {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
@@ -431,7 +449,7 @@ final class NPCGuestController {
             // 이미 걷고 있던 배회를 마저 이어가는 건 막지 않는다 — 여기서 막는 건
             // "새로 걷기 시작하는" 순간뿐이다. 그래야 동시 배회 인원을 최대 3명으로
             // 눌러도 이미 걷던 손님이 벽 앞에서 뚝 멈춰버리지 않는다.
-            guard allowNewWander else {
+            guard allowNewWander || requiresRecovery else {
                 playAnimation(.idle)
                 return
             }
@@ -446,6 +464,7 @@ final class NPCGuestController {
             return
         }
         let outcome = move(toward: target, deltaTime: deltaTime,
+                           movementArea: wanderArea,
                            arrivalDistance: NPCGuestTuning.arrivalDistance,
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
@@ -526,24 +545,30 @@ final class NPCGuestController {
     /// 좌석 클러스터 제외 구역까지 넘기면 목적지인 좌석 자체와 충돌한다(update의
     /// 문서 주석 참고).
     ///
-    /// avoidObstacles: false로 레이캐스트 장애물 회피를 끈다 — Indoor.usda의
+    /// 좌석 바로 앞 마지막 seatCollisionBypassDistance 구간에서만 레이캐스트 장애물
+    /// 회피를 끈다 — Indoor.usda의
     /// 좌석은 사실상 전부(39/39 실측) 휠체어가 테이블을 가로지르지 못하게 둘러싼
     /// collision Cube 프록시 안쪽에 있다. NPC 이동도 같은 콜리전 그룹(groundGroup)을
     /// 검사하므로, 이 회피를 켜 둔 채로는 좌석 코앞까지 걸어와도 그 박스 경계에
     /// 막혀 마지막 한 걸음을 절대 못 넘고("착석 동작 없이 서 있음") seatArrivalDistance
-    /// 안으로 못 들어왔다. 짧은 마지막 접근 구간이라 실제 벽에 부딪힐 위험은 낮다.
+    /// 안으로 못 들어왔다. 그 전 이동은 충돌 검사를 유지해 먼 거리에서 벽이나 가구를
+    /// 관통하는 우회는 허용하지 않는다.
     private func updateMovingToSeat(deltaTime: Float,
+                                    movementArea: NPCGuestArea,
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>],
                                     exclusions: [NPCGuestArea]) {
         guard let seat = claimedSeat else { seatState = .none; return }
+        let bypassSeatCollision = simd_distance(currentPosition, seat.position)
+            <= NPCGuestTuning.seatCollisionBypassDistance
         let outcome = move(toward: seat.position, deltaTime: deltaTime,
+                           movementArea: movementArea,
                            arrivalDistance: NPCGuestTuning.seatArrivalDistance,
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
                            separationScale: 0.5,
                            exclusions: exclusions,
-                           avoidObstacles: false)
+                           avoidObstacles: !bypassSeatCollision)
         if outcome.blocked {
             // 시간을 두고 포기하지 않고, 막힌 걸 확인한 그 프레임에 바로 자리를
             // 반납한다(코디네이터가 seatOccupants를 비워 다른 손님에게 다시
@@ -586,6 +611,7 @@ final class NPCGuestController {
     }
 
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
+                      movementArea: NPCGuestArea,
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
                       separationScale: Float,
@@ -639,6 +665,15 @@ final class NPCGuestController {
                 playerPosition: playerPosition,
                 avoidPlayer: avoidPlayer)
         }
+        // 레이캐스트는 메시 충돌만 알고 논리적인 바닥/금지 영역은 모른다. 군중 회피로
+        // 직선 경로에서 밀려나거나 큰 deltaTime 한 프레임에 경계를 건너는 경우까지
+        // 최종 이동 직전에 잘라, 정상 위치의 NPC가 금지 구역으로 진입하지 못하게 한다.
+        let proposed = current + direction * step
+        step *= NPCGuestNavigation.allowedFraction(
+            from: current,
+            to: proposed,
+            inside: movementArea,
+            excluding: exclusions)
         root.position.x += direction.x * step
         root.position.z += direction.y * step
         // 장애물에 거의 다 막혀 한 프레임에 1mm 안팎만 겨우 밀리는 경우까지 "이동
@@ -731,7 +766,9 @@ final class NPCGuestController {
         var bestSeparation: Float = -1
         for _ in 0..<40 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
-            if activeExclusions.contains(where: { $0.contains(candidate) }) { continue }
+            // 현재 들어가 있는 구역도 목적지 후보에서는 반드시 제외한다. 아래 경로
+            // 교차 검사에서만 빼야 탈출 선분의 시작점 때문에 모든 후보가 거절되지 않는다.
+            if exclusions.contains(where: { $0.contains(candidate) }) { continue }
             // 후보 자체는 제외 구역 밖이어도, 지금 위치에서 거기까지 가는 직선 경로가
             // AreaK 등을 가로지르면 이동 중 반발력에 계속 밀려나 목적지에 못 닿고
             // 경계 근처를 맴돌며 Walk 애니메이션만 재생되는 문제가 있었다. 그런

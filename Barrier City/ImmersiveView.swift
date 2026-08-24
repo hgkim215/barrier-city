@@ -66,10 +66,9 @@ struct ImmersiveView: View {
 
             // 로딩 화면: Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지 화면을
             // 가린다. 휠체어 입력·문/키오스크 트리거 판정도 같이 멈춘다(isBootLoading).
-            BootLoadingOverlay.shared.install(
-                content: content,
-                textAttachment: attachments.entity(for: "bootLoading"))
+            BootLoadingOverlay.shared.install(content: content)
             InteractionModel.shared.isBootLoading = true
+            let loadingStartedAt = ContinuousClock.now
 
             // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
             // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
@@ -198,6 +197,14 @@ struct ImmersiveView: View {
             // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
             _ = await indoorPreload
             _ = await realtimePreconnect
+            // 캐시된 애셋이 있으면 로딩이 순식간에 끝나 스플래시 이미지가 한두 프레임
+            // 만에 지나가 버릴 수 있다. 최소 이만큼은 스플래시가 보이도록 부족한
+            // 시간만큼 더 기다린다.
+            let minimumLoadingDuration = Duration.seconds(5)
+            let elapsed = loadingStartedAt.duration(to: .now)
+            if elapsed < minimumLoadingDuration {
+                try? await Task.sleep(for: minimumLoadingDuration - elapsed)
+            }
             // SceneFadeOverlay를 먼저 즉시 불투명하게 만들어(애니메이션 없이) 로딩
             // 화면(BootLoadingOverlay, 스플래시 이미지)을 걷어내도 화면이 계속 검게
             // 유지되게 한 뒤, fadeIn으로 매끄럽게 밝아지며 도시로 들어가는 느낌을
@@ -223,11 +230,6 @@ struct ImmersiveView: View {
                              shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
-            // Outdoor/Indoor/Realtime 프리로드가 끝날 때까지 보여주는 로딩 화면 문구
-            // (BootLoadingOverlay가 head-anchor 배치를 담당).
-            Attachment(id: "bootLoading") {
-                BootLoadingView()
-            }
             // [김현기] 사용자 눈앞 입장 패널(content-root 배치는 InteractionSetup이 처리)
             Attachment(id: "entryPrompt") {
                 EntryPromptView()

@@ -3,28 +3,6 @@ import RealityKit
 import os
 import simd
 
-/// 회전된 사각형 영역(월드 XZ 평면). AreaK 계산(NPCClerkController)과 동일한 축-투영
-/// 방식으로, 배회 가능 영역과 "제외" 영역(AreaK/AreaB) 판정에 함께 쓴다.
-struct NPCGuestArea {
-    let center: SIMD2<Float>
-    let axisU: SIMD2<Float>
-    let axisV: SIMD2<Float>
-
-    func point(u: Float, v: Float) -> SIMD2<Float> {
-        center + axisU * u + axisV * v
-    }
-
-    /// point가 이 사각형(평행사변형) 내부에 있는지 판정한다.
-    func contains(_ point: SIMD2<Float>) -> Bool {
-        let offset = point - center
-        let determinant = axisU.x * axisV.y - axisU.y * axisV.x
-        guard abs(determinant) > 0.000001 else { return false }
-        let u = (offset.x * axisV.y - offset.y * axisV.x) / determinant
-        let v = (axisU.x * offset.y - axisU.y * offset.x) / determinant
-        return abs(u) <= 1 && abs(v) <= 1
-    }
-}
-
 /// 착석 가능한 좌석 하나. Furnitures 하위의 "SittingPoint" 마커에서 만들어진다.
 struct GuestSeat {
     let position: SIMD2<Float>
@@ -107,6 +85,8 @@ final class NPCGuestCoordinator {
         /// 프록시 상단이 대략 0.39m라, 그보다 훨씬 낮은 여유를 둬 바닥 요철과
         /// 가구를 확실히 구분한다.
         static let furnitureClearanceHeight: Float = 0.05
+        /// AreaK/AreaB 경계에서 NPC 중심뿐 아니라 몸통 반경까지 완전히 빠지게 하는 여유.
+        static let restrictedAreaClearance: Float = 0.25
         /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
         /// 좌석(= 정규화된 SittingPoint 높이가 최소인 의자)에 적용되는 오프셋이다.
         /// 다른 의자들은 여기에 각자의 실측 바운즈 차이만큼만 더해서 쓴다
@@ -220,7 +200,8 @@ final class NPCGuestCoordinator {
 
         floorArea = resolveArea(named: "_floor", in: indoorMap, relativeTo: worldRoot, margin: Tuning.floorMargin)
         staffAreaExclusions = ["AreaK", "AreaB"].compactMap {
-            resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot, margin: 0)
+            resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot,
+                        margin: -Tuning.restrictedAreaClearance)
         }
         exclusionAreas = staffAreaExclusions
         // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지
@@ -241,7 +222,8 @@ final class NPCGuestCoordinator {
         var filteredSeats: [GuestSeat] = []
         var filteredSeatTableEntities: [Entity?] = []
         for (seat, tableEntity) in zip(sittingPoints.seats, sittingPoints.seatTableEntities) {
-            guard !exclusionAreas.contains(where: { $0.contains(seat.position) }) else { continue }
+            guard floorArea.contains(seat.position),
+                  !exclusionAreas.contains(where: { $0.contains(seat.position) }) else { continue }
             filteredSeats.append(seat)
             filteredSeatTableEntities.append(tableEntity)
         }
@@ -390,20 +372,36 @@ final class NPCGuestCoordinator {
                     // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat) — moveSpeed
                     // 최저치(0.68m/s)로도 최악의 경우(4.0m) 약 5.9초면 도착해 10초
                     // 기준 안에서 여유가 있다.
-                    seatOccupants[seatIndex] = guests.count
                     let seat = seats[seatIndex]
-                    let spawn = cyclerSpawnPoint(behind: seat, excluding: exclusionAreas)
-                    spawnedPositions.append(spawn)
-                    guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-                    if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
-                        guest.grantSeat(index: seatIndex, seat: seat)
-                        Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
+                    if let spawn = cyclerSpawnPoint(behind: seat, in: floorArea,
+                                                    excluding: exclusionAreas) {
+                        seatOccupants[seatIndex] = guests.count
+                        spawnedPositions.append(spawn)
+                        guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
+                        if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
+                            guest.grantSeat(index: seatIndex, seat: seat)
+                            Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
+                        } else {
+                            guest.reserveSeat(index: seatIndex, seat: seat)
+                            Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
+                        }
+                    } else if let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
+                                                           keepingAwayFrom: spawnedPositions) {
+                        spawnedPositions.append(spawn)
+                        guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
+                        Self.seatingLogger.error("\(displayName) 좌석 인근 안전 스폰 실패; 일반 안전 지점으로 대체")
                     } else {
-                        guest.reserveSeat(index: seatIndex, seat: seat)
-                        Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
+                        entity.removeFromParent()
+                        Self.seatingLogger.error("\(displayName) 안전 스폰 지점 없음; 생성 취소")
+                        continue
                     }
                 } else {
-                    let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
+                    guard let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
+                                                       keepingAwayFrom: spawnedPositions) else {
+                        entity.removeFromParent()
+                        Self.seatingLogger.error("\(displayName) 안전 스폰 지점 없음; 생성 취소")
+                        continue
+                    }
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                 }
@@ -600,17 +598,16 @@ final class NPCGuestCoordinator {
     }
 
     /// 제외 영역을 피하고, 이미 배치된 손님들과도 최소 거리를 두는 스폰 지점을 고른다.
-    /// 못 찾으면(공간이 좁으면) 그나마 가장 멀리 떨어진 후보로 절충한다 — 다만 그
-    /// "절충 후보"도 반드시 제외 구역 밖이어야 한다(아래 pushedOutsideExclusions 참고).
+    /// 무작위 후보가 실패하면 바닥 전체를 격자로 다시 훑는다. 끝까지 안전한 지점이
+    /// 없으면 nil을 반환해, 금지 구역에 억지로 생성하는 대신 해당 NPC 생성을 취소한다.
     private func randomSpawnPoint(in area: NPCGuestArea,
                                   excluding exclusions: [NPCGuestArea],
-                                  keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float> {
+                                  keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float>? {
         var bestCandidate: SIMD2<Float>?
         var bestSeparation: Float = -1
-        for _ in 0..<20 {
+        for _ in 0..<60 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
-            if exclusions.contains(where: { $0.contains(candidate) }) { continue }
-            guard isClearOfFurniture(candidate) else { continue }
+            guard isSafeSpawn(candidate, in: area, excluding: exclusions) else { continue }
             let separation = others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
             if separation >= Tuning.minimumSpawnSeparation { return candidate }
             if separation > bestSeparation {
@@ -618,11 +615,10 @@ final class NPCGuestCoordinator {
                 bestCandidate = candidate
             }
         }
-        // 20번 다 제외 구역(AreaK 등)이나 가구에 걸렸다면(bestCandidate가 한 번도
-        // 갱신 안 됐다면), 예전엔 area.center를 그대로 반환했는데 그 지점 자체가
-        // 제외 구역 안일 수도 있어 AreaK 안에 스폰되는 경우가 있었다. 이제 그 자리도
-        // 반드시 제외 구역 밖으로 밀어낸 뒤 반환한다.
-        return bestCandidate ?? pushedOutsideExclusions(area.center, exclusions: exclusions)
+        if let bestCandidate { return bestCandidate }
+        return safestGridPoint(in: area, excluding: exclusions) { candidate in
+            others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
+        }
     }
 
     /// cycler를 좌석 반대쪽(테이블에서 먼 쪽)에 스폰하되, 그 지점이 제외 구역(자기
@@ -631,37 +627,50 @@ final class NPCGuestCoordinator {
     /// cyclerSpawnRadius 안의 거리로는 못 벗어나는 경우가 있었다 — 그러면 스폰 시점부터
     /// 자기 테이블의 제외 구역 안에 갇혀 배회 목적지를 하나도 못 찾고(randomWanderTarget이
     /// 매번 경로 교차로 후보를 버림) 영원히 Idle로 멈춰, 예약된 좌석에 결국 못 앉았다.
-    private func cyclerSpawnPoint(behind seat: GuestSeat, excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
-        for attempt in 0..<12 {
+    private func cyclerSpawnPoint(behind seat: GuestSeat,
+                                  in area: NPCGuestArea,
+                                  excluding exclusions: [NPCGuestArea]) -> SIMD2<Float>? {
+        for attempt in 0..<24 {
             // 처음 몇 번은 원래 반경 안에서, 그래도 못 벗어나면 점점 더 멀리 밀어낸다.
             let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
             let distance = Float.random(in: 1.0...radius)
             let candidate = seat.position - seat.facing * distance
-            guard !exclusions.contains(where: { $0.contains(candidate) }),
-                  isClearOfFurniture(candidate) else { continue }
+            guard isSafeSpawn(candidate, in: area, excluding: exclusions) else { continue }
             return candidate
         }
-        // 12번 다 제외 구역(AreaK 등)이나 가구에 걸렸다면, 예전엔 마지막으로 시도한
-        // (즉 제외 구역 안일 수도 있는) 후보를 그대로 반환했다. 최후의 수단으로도
-        // 반드시 제외 구역 밖으로 밀어낸 지점을 반환한다.
-        return pushedOutsideExclusions(seat.position - seat.facing * Tuning.cyclerSpawnRadius, exclusions: exclusions)
+        let preferred = seat.position - seat.facing * Tuning.cyclerSpawnRadius
+        return safestGridPoint(in: area, excluding: exclusions) {
+            -simd_distance($0, preferred)
+        }
     }
 
-    /// point가 exclusions 중 하나 안에 있으면 그 구역 중심에서 바깥으로, 그 구역을
-    /// 확실히 벗어날 만큼(축 반경의 합) 밀어낸다. 여러 구역이 겹쳐 있을 수 있어 몇
-    /// 번 반복한다. 무작위 스폰 후보가 모두 제외 구역(특히 AreaK 같은 직원 구역)에
-    /// 걸린 최후의 상황에서도, 그 구역 안에서 그대로 스폰되는 일이 없게 하는
-    /// 마지막 안전장치다.
-    private func pushedOutsideExclusions(_ point: SIMD2<Float>, exclusions: [NPCGuestArea]) -> SIMD2<Float> {
-        var current = point
-        for _ in 0..<4 {
-            guard let intruded = exclusions.first(where: { $0.contains(current) }) else { break }
-            let away = current - intruded.center
-            let pushDirection = simd_length(away) > 0.001 ? simd_normalize(away) : SIMD2<Float>(1, 0)
-            let pushDistance = simd_length(intruded.axisU) + simd_length(intruded.axisV) + 0.1
-            current = intruded.center + pushDirection * pushDistance
+    private func isSafeSpawn(_ point: SIMD2<Float>,
+                             in area: NPCGuestArea,
+                             excluding exclusions: [NPCGuestArea]) -> Bool {
+        NPCGuestNavigation.isValid(point, inside: area, excluding: exclusions)
+            && isClearOfFurniture(point)
+    }
+
+    /// 난수 운에 안전성이 좌우되지 않도록 -0.95...0.95 범위의 21×21 후보를 전수 검사한다.
+    private func safestGridPoint(in area: NPCGuestArea,
+                                 excluding exclusions: [NPCGuestArea],
+                                 score: (SIMD2<Float>) -> Float) -> SIMD2<Float>? {
+        var result: SIMD2<Float>?
+        var bestScore = -Float.greatestFiniteMagnitude
+        for uIndex in 0...20 {
+            for vIndex in 0...20 {
+                let u = -0.95 + Float(uIndex) * 0.095
+                let v = -0.95 + Float(vIndex) * 0.095
+                let candidate = area.point(u: u, v: v)
+                guard isSafeSpawn(candidate, in: area, excluding: exclusions) else { continue }
+                let candidateScore = score(candidate)
+                if candidateScore > bestScore {
+                    bestScore = candidateScore
+                    result = candidate
+                }
+            }
         }
-        return current
+        return result
     }
 
     /// 좌표(XZ) 위로 레이를 내려 쏴서 가구 콜리전(groundGroup, 이동 중 실시간 장애물
@@ -784,8 +793,11 @@ final class NPCGuestCoordinator {
             queuerIndices = Set(eligible.shuffled().prefix(min(2, eligible.count)))
             if let kioskCenter {
                 captureQueueLine(kioskCenter: kioskCenter, playerPosition: playerPosition)
-                let slot1 = queueSlot(rank: 1)
-                Self.seatingLogger.notice("대기줄 1번 자리: 유저로부터 \(simd_distance(slot1, playerPosition))m (좌표 \(slot1.x), \(slot1.y))")
+                if let slot1 = queueSlot(rank: 1) {
+                    Self.seatingLogger.notice("대기줄 1번 자리: 유저로부터 \(simd_distance(slot1, playerPosition))m (좌표 \(slot1.x), \(slot1.y))")
+                } else {
+                    Self.seatingLogger.error("안전한 대기줄 위치를 찾지 못해 줄서기 이동을 생략")
+                }
             }
             // 대기줄 중 한 명을 무작위로 골라, 그 손님이 자리에 도착하면 한숨을
             // 재생해 뒤에 사람이 기다린다는 압박감을 준다.
@@ -885,8 +897,8 @@ final class NPCGuestCoordinator {
     /// 구역(AreaK) 가까이 있으면 이 기준선이 AreaK를 가로지를 수 있어, 계산된 자리가
     /// 제외 구역 안이면 같은 방향으로 한 칸씩 더 밀어 구역 밖으로 나갈 때까지
     /// 반복한다.
-    private func queueSlot(rank: Int) -> SIMD2<Float> {
-        guard let queueOrigin, let queueDirection else { return .zero }
+    private func queueSlot(rank: Int) -> SIMD2<Float>? {
+        guard let queueOrigin, let queueDirection else { return nil }
         var distance = Tuning.queueFrontGap + Tuning.queueSpacing * Float(rank - 1)
         var candidate = queueOrigin + queueDirection * distance
         var attempts = 0
@@ -895,7 +907,15 @@ final class NPCGuestCoordinator {
             candidate = queueOrigin + queueDirection * distance
             attempts += 1
         }
-        return candidate
+        guard let floorArea else { return nil }
+        if isSafeSpawn(candidate, in: floorArea, excluding: staffAreaExclusions) {
+            return candidate
+        }
+        // 줄 방향이 바닥 밖이나 가구 안을 향하는 비정상 배치에서도 가장 가까운
+        // 유효 지점을 선택한다. 금지 위치를 그대로 반환하는 폴백은 두지 않는다.
+        return safestGridPoint(in: floorArea, excluding: staffAreaExclusions) {
+            -simd_distance($0, candidate)
+        }
     }
 
     /// AreaK 계산(NPCClerkController.makeWorkArea)과 동일하게, authored marker의 회전·
