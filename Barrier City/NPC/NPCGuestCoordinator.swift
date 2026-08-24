@@ -103,9 +103,14 @@ final class NPCGuestCoordinator {
     private var seats: [GuestSeat] = []
     /// seats와 같은 길이. 각 자리를 점유 중인 guests 인덱스, 비어 있으면 nil.
     private var seatOccupants: [Int?] = []
-    /// seats 인덱스를 "같은 테이블" 단위로 묶은 것(느슨한 거리 기준). seatedPool
-    /// 그룹(1/2/3명)을 서로 다른 테이블에 배정할 때 쓴다. facing 계산에 쓰는 더
-    /// 촘촘한 클러스터링과는 별개다.
+    /// seats 인덱스를 "같은 테이블" 단위로 묶은 것(거리 기반 클러스터링). seatedPool
+    /// 그룹(1/2/3명) 배정과 디저트 테이블 배정이 예전에는 서로 다른 두 기준(이 거리
+    /// 클러스터링 vs "가장 가까운 테이블 엔티티" identity)을 각자 썼는데, 실측해보니
+    /// 물리적 테이블 하나가 tripo_mesh_* 리프 여러 개(상판+다리 등)로 나뉘어 있어
+    /// (Indoor.usda 기준 물리적 테이블 5개에 리프 16개) identity 기준 그룹이 물리적
+    /// 테이블보다 훨씬 잘게 쪼개지는 문제가 있었다(한 테이블에 디저트가 중복 배정되거나,
+    /// 다리처럼 작은 리프의 바운즈를 테이블 표면으로 오인). 이제 두 용도 모두 이 배열
+    /// 하나로 통일한다 — 아래 seatIndexToTableGroupIndex/tableSurfaceBoundsByGroupIndex 참고.
     private var seatTableGroups: [[Int]] = []
     private var queuerIndices: Set<Int> = []
     private var wasOrdering = false
@@ -126,16 +131,14 @@ final class NPCGuestCoordinator {
     /// 있어서, 제외 구역 전체를 넘기면 목적지와 반대 방향으로 계속 밀려나 영원히
     /// 도착 못 하고 Walk만 반복 재생했다(cycler가 배회 후 앉지 못하던 원인).
     private var staffAreaExclusions: [NPCGuestArea] = []
-    /// seats와 같은 길이. 좌석 인덱스 → 그 좌석이 "가장 가까운 테이블" 판정으로 실제 연결된
-    /// 디저트 그룹 인덱스. seatTableGroups(좌석 위치 거리 클러스터링)와는 별개로, 좌석마다
-    /// authoritative하게 연결된 테이블 엔티티가 같으면 같은 그룹으로 묶는다 — 긴 테이블처럼
-    /// 좌석 클러스터 중심이 실제 테이블에서 멀어지는 경우에도 항상 정확한 테이블로 연결된다.
-    private var seatToTableGroupIndex: [Int?] = []
-    /// 디저트 그룹 인덱스별 실제 테이블 메시 인스턴스(케이크/라떼를 얹을 표면).
-    private var tableEntityByGroupIndex: [Entity?] = []
-    /// 디저트 그룹 인덱스별 그 테이블에 연결된 좌석들의 중심. 테이블 중심에서 이 좌석
-    /// 중심 쪽으로 디저트를 당겨 놓아 "손님 앞쪽"에 자연스럽게 오게 하는 데 쓴다.
-    private var seatClusterCentroidByGroupIndex: [SIMD2<Float>] = []
+    /// seats와 같은 길이. 좌석 인덱스 → seatTableGroups에서 그 좌석이 속한 그룹 인덱스
+    /// (seatTableGroups의 역인덱스일 뿐이라 매 프레임 배열을 훑지 않고 바로 찾을 수 있다).
+    private var seatIndexToTableGroupIndex: [Int?] = []
+    /// 테이블 그룹 인덱스별로, 그 그룹 좌석들이 "가장 가까운 테이블"로 연결된 모든
+    /// tripo_mesh_* 앵커 엔티티의 바운즈를 합친 값(min/max, worldRoot 기준). 물리적
+    /// 테이블 하나가 여러 리프로 나뉘어 있어도 합치면 실제 테이블 부피에 가까운 바운즈가
+    /// 나온다 — 디저트를 놓을 표면 계산(spawnDessertProps)에 쓴다.
+    private var tableSurfaceBoundsByGroupIndex: [(min: SIMD3<Float>, max: SIMD3<Float>)?] = []
     /// 이미 디저트를 배정한 테이블 그룹 인덱스(같은 테이블에 손님이 여러 명 앉아도 한 번만).
     private var dessertAssignedTableGroups: Set<Int> = []
     /// 배치한 디저트 prop들. tearDownForOutdoor에서 정리한다.
@@ -203,31 +206,30 @@ final class NPCGuestCoordinator {
         seatTableGroups = clusterIndices(of: seats.map(\.position), linkDistance: Tuning.seatTableGroupLinkDistance)
         seatOccupants = Array(repeating: nil, count: seats.count)
 
-        // 디저트 배정용 테이블 그룹은 seatTableGroups(좌석 위치 거리 클러스터링)를 거치지
-        // 않고, 좌석마다 이미 연결된 "가장 가까운 테이블"(facing 계산과 같은 근거)을 그대로
-        // 써서 같은 테이블을 가리키는 좌석끼리 묶는다.
-        var groupIndexByTableIdentity: [ObjectIdentifier: Int] = [:]
-        var seatIndicesByGroup: [Int: [Int]] = [:]
-        seatToTableGroupIndex = Array(repeating: nil, count: seats.count)
-        tableEntityByGroupIndex = []
-        for (seatIndex, tableEntity) in filteredSeatTableEntities.enumerated() {
-            guard let tableEntity else { continue }
-            let key = ObjectIdentifier(tableEntity)
-            let groupIndex: Int
-            if let existing = groupIndexByTableIdentity[key] {
-                groupIndex = existing
-            } else {
-                groupIndex = tableEntityByGroupIndex.count
-                groupIndexByTableIdentity[key] = groupIndex
-                tableEntityByGroupIndex.append(tableEntity)
-            }
-            seatToTableGroupIndex[seatIndex] = groupIndex
-            seatIndicesByGroup[groupIndex, default: []].append(seatIndex)
+        // 디저트 표면 바운즈는 seatTableGroups(위) 하나로 통일해서 구한다: 그룹의 각 좌석이
+        // "가장 가까운 테이블"로 연결된 앵커 엔티티들을 모아 바운즈를 합친다. 물리적 테이블
+        // 하나가 tripo_mesh_* 리프 여러 개(상판+다리 등)로 나뉘어 있어도, 그 그룹에 속한
+        // 좌석들이 링크한 리프를 전부 합치면 실제 테이블 부피에 가까운 바운즈가 나온다.
+        seatIndexToTableGroupIndex = Array(repeating: nil, count: seats.count)
+        for (groupIndex, seatIndices) in seatTableGroups.enumerated() {
+            for seatIndex in seatIndices { seatIndexToTableGroupIndex[seatIndex] = groupIndex }
         }
-        seatClusterCentroidByGroupIndex = Array(repeating: .zero, count: tableEntityByGroupIndex.count)
-        for (groupIndex, seatIndices) in seatIndicesByGroup {
-            let centroid = seatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(seatIndices.count)
-            seatClusterCentroidByGroupIndex[groupIndex] = centroid
+        tableSurfaceBoundsByGroupIndex = seatTableGroups.map { seatIndices -> (min: SIMD3<Float>, max: SIMD3<Float>)? in
+            var seenAnchors: Set<ObjectIdentifier> = []
+            var anchorEntities: [Entity] = []
+            for seatIndex in seatIndices {
+                guard let anchor = filteredSeatTableEntities[seatIndex] else { continue }
+                if seenAnchors.insert(ObjectIdentifier(anchor)).inserted { anchorEntities.append(anchor) }
+            }
+            guard !anchorEntities.isEmpty else { return nil }
+            var combinedMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+            var combinedMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+            for anchor in anchorEntities {
+                let bounds = anchor.visualBounds(relativeTo: worldRoot)
+                combinedMin = simd_min(combinedMin, bounds.min)
+                combinedMax = simd_max(combinedMax, bounds.max)
+            }
+            return (min: combinedMin, max: combinedMax)
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
@@ -476,9 +478,8 @@ final class NPCGuestCoordinator {
         queueOrigin = nil
         queueDirection = nil
         sighingGuestIndex = nil
-        seatToTableGroupIndex.removeAll()
-        tableEntityByGroupIndex.removeAll()
-        seatClusterCentroidByGroupIndex.removeAll()
+        seatIndexToTableGroupIndex.removeAll()
+        tableSurfaceBoundsByGroupIndex.removeAll()
         dessertAssignedTableGroups.removeAll()
         for prop in placedDessertProps { prop.removeFromParent() }
         placedDessertProps.removeAll()
@@ -493,33 +494,36 @@ final class NPCGuestCoordinator {
     /// 무작위로 얹는다. 같은 테이블에 손님이 여러 명 앉아도 테이블당 한 번만 배정한다.
     private func maybeSpawnDessert(forSeatIndex seatIndex: Int) {
         guard let worldRoot,
-              seatToTableGroupIndex.indices.contains(seatIndex),
-              let groupIndex = seatToTableGroupIndex[seatIndex],
+              seatIndexToTableGroupIndex.indices.contains(seatIndex),
+              let groupIndex = seatIndexToTableGroupIndex[seatIndex],
               !dessertAssignedTableGroups.contains(groupIndex),
-              tableEntityByGroupIndex.indices.contains(groupIndex),
-              let table = tableEntityByGroupIndex[groupIndex] else { return }
+              tableSurfaceBoundsByGroupIndex.indices.contains(groupIndex),
+              let surfaceBounds = tableSurfaceBoundsByGroupIndex[groupIndex] else { return }
         dessertAssignedTableGroups.insert(groupIndex)
-        let tableCenter = SIMD2(table.visualBounds(relativeTo: worldRoot).center.x,
-                                table.visualBounds(relativeTo: worldRoot).center.z)
-        let seatCentroid = seatClusterCentroidByGroupIndex.indices.contains(groupIndex)
-            ? seatClusterCentroidByGroupIndex[groupIndex]
-            : tableCenter
-        spawnDessertProps(on: table, towardDiners: seatCentroid - tableCenter, worldRoot: worldRoot)
+        let tableCenter = SIMD2((surfaceBounds.min.x + surfaceBounds.max.x) * 0.5,
+                                (surfaceBounds.min.z + surfaceBounds.max.z) * 0.5)
+        let groupSeatIndices = seatTableGroups.indices.contains(groupIndex) ? seatTableGroups[groupIndex] : []
+        let seatCentroid = groupSeatIndices.isEmpty
+            ? tableCenter
+            : groupSeatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(groupSeatIndices.count)
+        spawnDessertProps(surfaceMin: surfaceBounds.min, surfaceMax: surfaceBounds.max,
+                          towardDiners: seatCentroid - tableCenter, worldRoot: worldRoot)
     }
 
-    /// 테이블의 바운즈(=콜리전 볼륨과 같은 실제 점유 부피) 상단면 높이를 구해, 그 위에 케이크·
-    /// 라떼 템플릿을 복제해 자연스럽게 얹는다. RainbowSmoothiePresenter가 카운터 위에 스무디를
-    /// 놓을 때 쓰는 것과 같은 방식(바닥 기준점 정렬)을 그대로 따른다. towardDiners는 테이블
-    /// 중심에서 그 테이블에 앉은 손님들 쪽을 향하는 벡터로, 긴 테이블에서도 디저트가 손님과
-    /// 먼 반대편이 아니라 앞쪽 가장자리 근처에 오게 한다.
-    private func spawnDessertProps(on table: Entity, towardDiners direction: SIMD2<Float>, worldRoot: Entity) {
-        let bounds = table.visualBounds(relativeTo: worldRoot)
-        guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(minimum: bounds.min, maximum: bounds.max) else { return }
-        let surfaceY = bounds.max.y + DessertTuning.surfaceClearance
-        let centerX = bounds.center.x
-        let centerZ = bounds.center.z
-        let insetHalfWidth = max(0, bounds.extents.x * 0.5 - DessertTuning.edgeMargin)
-        let insetHalfDepth = max(0, bounds.extents.z * 0.5 - DessertTuning.edgeMargin)
+    /// 테이블 표면 바운즈(=maybeSpawnDessert가 seatTableGroups 기준으로 합친 앵커 부피) 상단
+    /// 높이를 구해, 그 위에 케이크·라떼 템플릿을 복제해 자연스럽게 얹는다.
+    /// RainbowSmoothiePresenter가 카운터 위에 스무디를 놓을 때 쓰는 것과 같은 방식(바닥
+    /// 기준점 정렬)을 그대로 따른다. towardDiners는 테이블 중심에서 그 테이블에 앉은
+    /// 손님들 쪽을 향하는 벡터로, 긴 테이블에서도 디저트가 손님과 먼 반대편이 아니라 앞쪽
+    /// 가장자리 근처에 오게 한다.
+    private func spawnDessertProps(surfaceMin: SIMD3<Float>, surfaceMax: SIMD3<Float>,
+                                   towardDiners direction: SIMD2<Float>, worldRoot: Entity) {
+        guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(minimum: surfaceMin, maximum: surfaceMax) else { return }
+        let surfaceY = surfaceMax.y + DessertTuning.surfaceClearance
+        let centerX = (surfaceMin.x + surfaceMax.x) * 0.5
+        let centerZ = (surfaceMin.z + surfaceMax.z) * 0.5
+        let insetHalfWidth = max(0, (surfaceMax.x - surfaceMin.x) * 0.5 - DessertTuning.edgeMargin)
+        let insetHalfDepth = max(0, (surfaceMax.z - surfaceMin.z) * 0.5 - DessertTuning.edgeMargin)
 
         let forward = simd_length(direction) > 0.001 ? simd_normalize(direction) : SIMD2<Float>(0, 1)
         let right = SIMD2<Float>(forward.y, -forward.x)
