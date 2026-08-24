@@ -414,6 +414,13 @@ final class NPCGuestController {
     /// exclusions는 호출부(update)가 staffExclusions(직원 구역만)를 넘긴다 — 테이블
     /// 좌석 클러스터 제외 구역까지 넘기면 목적지인 좌석 자체와 충돌한다(update의
     /// 문서 주석 참고).
+    ///
+    /// avoidObstacles: false로 레이캐스트 장애물 회피를 끈다 — Indoor.usda의
+    /// 좌석은 사실상 전부(39/39 실측) 휠체어가 테이블을 가로지르지 못하게 둘러싼
+    /// collision Cube 프록시 안쪽에 있다. NPC 이동도 같은 콜리전 그룹(groundGroup)을
+    /// 검사하므로, 이 회피를 켜 둔 채로는 좌석 코앞까지 걸어와도 그 박스 경계에
+    /// 막혀 마지막 한 걸음을 절대 못 넘고("착석 동작 없이 서 있음") seatArrivalDistance
+    /// 안으로 못 들어왔다. 짧은 마지막 접근 구간이라 실제 벽에 부딪힐 위험은 낮다.
     private func updateMovingToSeat(deltaTime: Float,
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>],
@@ -424,7 +431,8 @@ final class NPCGuestController {
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
                            separationScale: 0.5,
-                           exclusions: exclusions)
+                           exclusions: exclusions,
+                           avoidObstacles: false)
         if outcome.blocked {
             // 시간을 두고 포기하지 않고, 막힌 걸 확인한 그 프레임에 바로 자리를
             // 반납한다(코디네이터가 seatOccupants를 비워 다른 손님에게 다시
@@ -464,7 +472,8 @@ final class NPCGuestController {
                       neighboringPositions: [SIMD2<Float>],
                       separationScale: Float,
                       exclusions: [NPCGuestArea] = [],
-                      avoidPlayer: Bool = true) -> MoveOutcome {
+                      avoidPlayer: Bool = true,
+                      avoidObstacles: Bool = true) -> MoveOutcome {
         guard let root = locomotionRoot else {
             return MoveOutcome(arrived: false, moved: false, blocked: false)
         }
@@ -492,7 +501,7 @@ final class NPCGuestController {
         }
         let desiredStep = min(distance, movementProfile.moveSpeed * deltaTime)
         var step = desiredStep
-        if let scene = root.scene {
+        if avoidObstacles, let scene = root.scene {
             step = NPCObstacleAvoidance.allowedStep(
                 scene: scene,
                 from: SIMD3(current.x, 0, current.y),
