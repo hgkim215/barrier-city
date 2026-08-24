@@ -349,11 +349,19 @@ final class NPCGuestController {
             // 멈췄다 가게 해 새 목적지도 같은 장애물에 곧장 다시 막히며 Idle↔Walk가
             // 매 프레임 번갈아 재생되는(결과적으로 Walk가 안 끊기는 것처럼 보이는)
             // 진동을 막는다.
-            wanderTarget = randomWanderTarget(
+            let newTarget = randomWanderTarget(
                 in: wanderArea,
                 excluding: exclusions,
                 awayFrom: currentPosition,
                 avoiding: occupiedAnchors)
+            wanderTarget = newTarget
+            // move()는 실제로 이동한(moved) 프레임에만 face()를 호출한다. 막힌 프레임은
+            // moved가 false라 이 회전이 없으면 벽/가구를 향한 채로 그대로 멈춰 서서,
+            // Idle로 바뀌어도 여전히 "막혀서 못 가고 있다"는 느낌을 준다. 새 목적지를
+            // 정한 그 즉시 그쪽을 보게 돌려 다른 방향을 시도한다는 게 눈에 보이게 한다.
+            if let newTarget {
+                face(point: newTarget, deltaTime: 999)
+            }
             pauseRemaining = Float.random(in: NPCGuestTuning.blockedPauseRange)
             playAnimation(.idle)
             return
