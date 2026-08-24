@@ -122,12 +122,16 @@ final class NPCGuestCoordinator {
     /// 키오스크 제외 반경까지 같이 피하게 하면, 유저가 키오스크 가까이 서 있을 때
     /// 대기줄 첫 자리가 그 반경을 벗어날 때까지 계속 밀려나 유저 뒤에 못 붙었다.
     private var staffAreaExclusions: [NPCGuestArea] = []
-    /// seats와 같은 길이. 좌석 인덱스 → 그 좌석이 속한 seatTableGroups 인덱스. 디저트를
-    /// "테이블당 한 번만" 배정할 때 좌석 점유 시점에 테이블을 역으로 찾는 데 쓴다.
+    /// seats와 같은 길이. 좌석 인덱스 → 그 좌석이 "가장 가까운 테이블" 판정으로 실제 연결된
+    /// 디저트 그룹 인덱스. seatTableGroups(좌석 위치 거리 클러스터링)와는 별개로, 좌석마다
+    /// authoritative하게 연결된 테이블 엔티티가 같으면 같은 그룹으로 묶는다 — 긴 테이블처럼
+    /// 좌석 클러스터 중심이 실제 테이블에서 멀어지는 경우에도 항상 정확한 테이블로 연결된다.
     private var seatToTableGroupIndex: [Int?] = []
-    /// seatTableGroups와 같은 길이. 각 그룹(테이블)의 좌석 중심에서 가장 가까운 실제 테이블
-    /// 메시 인스턴스(케이크/라떼를 얹을 표면).
+    /// 디저트 그룹 인덱스별 실제 테이블 메시 인스턴스(케이크/라떼를 얹을 표면).
     private var tableEntityByGroupIndex: [Entity?] = []
+    /// 디저트 그룹 인덱스별 그 테이블에 연결된 좌석들의 중심. 테이블 중심에서 이 좌석
+    /// 중심 쪽으로 디저트를 당겨 놓아 "손님 앞쪽"에 자연스럽게 오게 하는 데 쓴다.
+    private var seatClusterCentroidByGroupIndex: [SIMD2<Float>] = []
     /// 이미 디저트를 배정한 테이블 그룹 인덱스(같은 테이블에 손님이 여러 명 앉아도 한 번만).
     private var dessertAssignedTableGroups: Set<Int> = []
     /// 배치한 디저트 prop들. tearDownForOutdoor에서 정리한다.
@@ -142,12 +146,15 @@ final class NPCGuestCoordinator {
         static let targetLatteHeight: Float = 0.16
         /// 테이블 상단면 바로 위로 살짝 띄우는 여백.
         static let surfaceClearance: Float = 0.005
-        /// 케이크+라떼를 함께 놓을 때 테이블 중심에서 서로 반대쪽으로 떨어뜨리는 거리.
+        /// 케이크+라떼를 함께 놓을 때, 손님 쪽을 바라보는 축에 수직으로 서로 반대쪽에
+        /// 떨어뜨리는 거리(나란히 놓기).
         static let pairOffset: Float = 0.12
         /// 테이블 중심에서 무작위로 살짝 어긋나게 둬 기계적으로 보이지 않게 한다.
-        static let placementJitter: Float = 0.05
+        static let placementJitter: Float = 0.03
         /// 테이블 가장자리에 걸치지 않도록 바운즈 절반 폭에서 빼는 여백.
         static let edgeMargin: Float = 0.06
+        /// 테이블 중심에서 손님이 앉은 쪽으로 당기는 비율(0=중앙, 1=여백을 뺀 가장자리까지).
+        static let towardDinersPullFraction: Float = 0.55
     }
 
     /// Indoor 진입 시 손님 엔티티를 찾아 배치하고, "_floor"에서 배회 영역을,
@@ -178,25 +185,45 @@ final class NPCGuestCoordinator {
         guard let floorArea else { return }
 
         // authoring 상 실수로 좌석이 직원 구역(AreaK/AreaB) 안에 놓였다면 손님이
-        // 그쪽으로 걸어 들어가지 않도록 애초에 좌석 후보에서 뺀다.
+        // 그쪽으로 걸어 들어가지 않도록 애초에 좌석 후보에서 뺀다. seatTableEntities는
+        // seats와 인덱스가 대응해야 하므로 같은 필터를 동시에 적용한다.
         let sittingPoints = collectSittingPoints(in: indoorMap, relativeTo: worldRoot)
-        seats = sittingPoints.seats
-            .filter { seat in !exclusionAreas.contains(where: { $0.contains(seat.position) }) }
+        var filteredSeats: [GuestSeat] = []
+        var filteredSeatTableEntities: [Entity?] = []
+        for (seat, tableEntity) in zip(sittingPoints.seats, sittingPoints.seatTableEntities) {
+            guard !exclusionAreas.contains(where: { $0.contains(seat.position) }) else { continue }
+            filteredSeats.append(seat)
+            filteredSeatTableEntities.append(tableEntity)
+        }
+        seats = filteredSeats
         seatTableGroups = clusterIndices(of: seats.map(\.position), linkDistance: Tuning.seatTableGroupLinkDistance)
         seatOccupants = Array(repeating: nil, count: seats.count)
 
-        // 각 테이블 그룹(좌석 클러스터)의 좌석 중심에서 가장 가까운 실제 테이블 메시 인스턴스를
-        // 찾아 디저트를 얹을 표면으로 미리 연결해 둔다. 좌석이 점유되는 시점에 이 매핑으로
-        // "그 테이블에 이미 디저트를 배정했는지"를 빠르게 확인한다.
+        // 디저트 배정용 테이블 그룹은 seatTableGroups(좌석 위치 거리 클러스터링)를 거치지
+        // 않고, 좌석마다 이미 연결된 "가장 가까운 테이블"(facing 계산과 같은 근거)을 그대로
+        // 써서 같은 테이블을 가리키는 좌석끼리 묶는다.
+        var groupIndexByTableIdentity: [ObjectIdentifier: Int] = [:]
+        var seatIndicesByGroup: [Int: [Int]] = [:]
         seatToTableGroupIndex = Array(repeating: nil, count: seats.count)
-        tableEntityByGroupIndex = Array(repeating: nil, count: seatTableGroups.count)
-        for (groupIndex, group) in seatTableGroups.enumerated() {
-            for seatIndex in group { seatToTableGroupIndex[seatIndex] = groupIndex }
-            guard !group.isEmpty else { continue }
-            let centroid = group.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(group.count)
-            tableEntityByGroupIndex[groupIndex] = sittingPoints.tableAnchors.min {
-                simd_distance($0.position, centroid) < simd_distance($1.position, centroid)
-            }?.entity
+        tableEntityByGroupIndex = []
+        for (seatIndex, tableEntity) in filteredSeatTableEntities.enumerated() {
+            guard let tableEntity else { continue }
+            let key = ObjectIdentifier(tableEntity)
+            let groupIndex: Int
+            if let existing = groupIndexByTableIdentity[key] {
+                groupIndex = existing
+            } else {
+                groupIndex = tableEntityByGroupIndex.count
+                groupIndexByTableIdentity[key] = groupIndex
+                tableEntityByGroupIndex.append(tableEntity)
+            }
+            seatToTableGroupIndex[seatIndex] = groupIndex
+            seatIndicesByGroup[groupIndex, default: []].append(seatIndex)
+        }
+        seatClusterCentroidByGroupIndex = Array(repeating: .zero, count: tableEntityByGroupIndex.count)
+        for (groupIndex, seatIndices) in seatIndicesByGroup {
+            let centroid = seatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(seatIndices.count)
+            seatClusterCentroidByGroupIndex[groupIndex] = centroid
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
@@ -287,9 +314,10 @@ final class NPCGuestCoordinator {
     /// 개별 tripo_mesh_* 리프(복제본 하나하나)를 전부 앵커로 모아야 한다.
     private func collectSittingPoints(
         in entity: Entity, relativeTo worldRoot: Entity
-    ) -> (seats: [GuestSeat], tableAnchors: [(entity: Entity, position: SIMD2<Float>)]) {
+    ) -> (seats: [GuestSeat], seatTableEntities: [Entity?]) {
         let tableAnchors = collectTableAnchors(in: entity, relativeTo: worldRoot)
         var seats: [GuestSeat] = []
+        var seatTableEntities: [Entity?] = []
         func walk(_ candidate: Entity) {
             // 이름 동등 비교라 같은 이름의 마커가 씬 안에 몇 개든(서로 다른 부모 밑에
             // 있는 한) 전부 개별 좌석으로 잡힌다. RCP는 형제 간 이름이 겹칠 때만
@@ -307,11 +335,15 @@ final class NPCGuestCoordinator {
                     facing = SIMD2(0, 1)
                 }
                 seats.append(GuestSeat(position: position, facing: facing))
+                // 이 좌석이 실제로 속한 테이블(디저트를 얹을 표면)도 같은 "가장 가까운
+                // 테이블" 판정으로 같이 기록해 둔다 — facing 계산과 동일한 근거라
+                // 좌석 클러스터 중심을 거치는 간접 매칭보다 테이블을 놓칠 일이 적다.
+                seatTableEntities.append(nearestTable?.entity)
             }
             for child in candidate.children { walk(child) }
         }
         walk(entity)
-        return (seats, tableAnchors)
+        return (seats, seatTableEntities)
     }
 
     /// "Table"/"WoodTable" 계열 서브트리 안의 모든 tripo_mesh_* 리프(실제 배치된
@@ -437,6 +469,7 @@ final class NPCGuestCoordinator {
         sighingGuestIndex = nil
         seatToTableGroupIndex.removeAll()
         tableEntityByGroupIndex.removeAll()
+        seatClusterCentroidByGroupIndex.removeAll()
         dessertAssignedTableGroups.removeAll()
         for prop in placedDessertProps { prop.removeFromParent() }
         placedDessertProps.removeAll()
@@ -457,13 +490,20 @@ final class NPCGuestCoordinator {
               tableEntityByGroupIndex.indices.contains(groupIndex),
               let table = tableEntityByGroupIndex[groupIndex] else { return }
         dessertAssignedTableGroups.insert(groupIndex)
-        spawnDessertProps(on: table, worldRoot: worldRoot)
+        let tableCenter = SIMD2(table.visualBounds(relativeTo: worldRoot).center.x,
+                                table.visualBounds(relativeTo: worldRoot).center.z)
+        let seatCentroid = seatClusterCentroidByGroupIndex.indices.contains(groupIndex)
+            ? seatClusterCentroidByGroupIndex[groupIndex]
+            : tableCenter
+        spawnDessertProps(on: table, towardDiners: seatCentroid - tableCenter, worldRoot: worldRoot)
     }
 
     /// 테이블의 바운즈(=콜리전 볼륨과 같은 실제 점유 부피) 상단면 높이를 구해, 그 위에 케이크·
     /// 라떼 템플릿을 복제해 자연스럽게 얹는다. RainbowSmoothiePresenter가 카운터 위에 스무디를
-    /// 놓을 때 쓰는 것과 같은 방식(바닥 기준점 정렬)을 그대로 따른다.
-    private func spawnDessertProps(on table: Entity, worldRoot: Entity) {
+    /// 놓을 때 쓰는 것과 같은 방식(바닥 기준점 정렬)을 그대로 따른다. towardDiners는 테이블
+    /// 중심에서 그 테이블에 앉은 손님들 쪽을 향하는 벡터로, 긴 테이블에서도 디저트가 손님과
+    /// 먼 반대편이 아니라 앞쪽 가장자리 근처에 오게 한다.
+    private func spawnDessertProps(on table: Entity, towardDiners direction: SIMD2<Float>, worldRoot: Entity) {
         let bounds = table.visualBounds(relativeTo: worldRoot)
         guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(minimum: bounds.min, maximum: bounds.max) else { return }
         let surfaceY = bounds.max.y + DessertTuning.surfaceClearance
@@ -471,6 +511,10 @@ final class NPCGuestCoordinator {
         let centerZ = bounds.center.z
         let insetHalfWidth = max(0, bounds.extents.x * 0.5 - DessertTuning.edgeMargin)
         let insetHalfDepth = max(0, bounds.extents.z * 0.5 - DessertTuning.edgeMargin)
+
+        let forward = simd_length(direction) > 0.001 ? simd_normalize(direction) : SIMD2<Float>(0, 1)
+        let right = SIMD2<Float>(forward.y, -forward.x)
+        let forwardPull = min(insetHalfWidth, insetHalfDepth) * DessertTuning.towardDinersPullFraction
 
         enum DessertCase: CaseIterable { case cakeOnly, latteOnly, both }
         var placements: [(template: Entity, targetHeight: Float, lateralOffset: Float)] = []
@@ -496,6 +540,11 @@ final class NPCGuestCoordinator {
         for (template, targetHeight, lateralOffset) in placements {
             let prop = template.clone(recursive: true)
             worldRoot.addChild(prop)
+            // 원본(Cake/Latte)은 RainbowSmoothie와 달리 수동 정렬을 거치지 않은 Tripo 변환
+            // 원본이라 authored 회전이 뒤틀려 있는 경우가 있다. 기준 회전(Y축 identity)으로
+            // 되돌려서 배치한다 — 여기에 추가 회전을 더하지 않아야 공중에 뜨거나 비스듬히
+            // 놓인 것처럼 보이지 않는다.
+            prop.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
 
             let authoredHeight = prop.visualBounds(relativeTo: worldRoot).extents.y
             guard authoredHeight.isFinite, authoredHeight > 0.0001 else {
@@ -503,17 +552,16 @@ final class NPCGuestCoordinator {
                 continue
             }
             prop.scale *= SIMD3(repeating: targetHeight / authoredHeight)
-            prop.orientation *= simd_quatf(angle: Float.random(in: 0..<(2 * .pi)), axis: [0, 1, 0])
 
-            let clampedOffset = min(abs(lateralOffset), insetHalfWidth) * (lateralOffset < 0 ? -1 : 1)
             let jitterX = Float.random(in: -DessertTuning.placementJitter...DessertTuning.placementJitter)
             let jitterZ = Float.random(in: -DessertTuning.placementJitter...DessertTuning.placementJitter)
-            let x = min(max(centerX + clampedOffset + jitterX, centerX - insetHalfWidth), centerX + insetHalfWidth)
-            let z = min(max(centerZ + jitterZ, centerZ - insetHalfDepth), centerZ + insetHalfDepth)
+            let offsetXZ = forward * forwardPull + right * lateralOffset
+            let x = min(max(centerX + offsetXZ.x + jitterX, centerX - insetHalfWidth), centerX + insetHalfWidth)
+            let z = min(max(centerZ + offsetXZ.y + jitterZ, centerZ - insetHalfDepth), centerZ + insetHalfDepth)
 
             prop.setPosition([x, surfaceY, z], relativeTo: worldRoot)
-            // 스케일·회전을 반영한 실측 바운즈 하단을 테이블 표면에 맞춰, 모델 원점이
-            // 바닥과 어긋나 있어도(제각각인 에셋 원점) 붕 뜨거나 파묻히지 않게 한다.
+            // 스케일을 반영한 실측 바운즈 하단을 테이블 표면에 맞춰, 모델 원점이 바닥과
+            // 어긋나 있어도(제각각인 에셋 원점) 붕 뜨거나 파묻히지 않게 한다.
             let restingOffset = surfaceY - prop.visualBounds(relativeTo: worldRoot).min.y
             prop.position.y += restingOffset
 
