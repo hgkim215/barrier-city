@@ -600,11 +600,12 @@ final class NPCGuestCoordinator {
     }
 
     /// 제외 영역을 피하고, 이미 배치된 손님들과도 최소 거리를 두는 스폰 지점을 고른다.
-    /// 못 찾으면(공간이 좁으면) 그나마 가장 멀리 떨어진 후보로 절충한다.
+    /// 못 찾으면(공간이 좁으면) 그나마 가장 멀리 떨어진 후보로 절충한다 — 다만 그
+    /// "절충 후보"도 반드시 제외 구역 밖이어야 한다(아래 pushedOutsideExclusions 참고).
     private func randomSpawnPoint(in area: NPCGuestArea,
                                   excluding exclusions: [NPCGuestArea],
                                   keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float> {
-        var bestCandidate = area.center
+        var bestCandidate: SIMD2<Float>?
         var bestSeparation: Float = -1
         for _ in 0..<20 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
@@ -617,7 +618,11 @@ final class NPCGuestCoordinator {
                 bestCandidate = candidate
             }
         }
-        return bestCandidate
+        // 20번 다 제외 구역(AreaK 등)이나 가구에 걸렸다면(bestCandidate가 한 번도
+        // 갱신 안 됐다면), 예전엔 area.center를 그대로 반환했는데 그 지점 자체가
+        // 제외 구역 안일 수도 있어 AreaK 안에 스폰되는 경우가 있었다. 이제 그 자리도
+        // 반드시 제외 구역 밖으로 밀어낸 뒤 반환한다.
+        return bestCandidate ?? pushedOutsideExclusions(area.center, exclusions: exclusions)
     }
 
     /// cycler를 좌석 반대쪽(테이블에서 먼 쪽)에 스폰하되, 그 지점이 제외 구역(자기
@@ -627,17 +632,36 @@ final class NPCGuestCoordinator {
     /// 자기 테이블의 제외 구역 안에 갇혀 배회 목적지를 하나도 못 찾고(randomWanderTarget이
     /// 매번 경로 교차로 후보를 버림) 영원히 Idle로 멈춰, 예약된 좌석에 결국 못 앉았다.
     private func cyclerSpawnPoint(behind seat: GuestSeat, excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
-        var fallback = seat.position - seat.facing * Tuning.cyclerSpawnRadius
         for attempt in 0..<12 {
             // 처음 몇 번은 원래 반경 안에서, 그래도 못 벗어나면 점점 더 멀리 밀어낸다.
             let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
             let distance = Float.random(in: 1.0...radius)
             let candidate = seat.position - seat.facing * distance
-            if exclusions.contains(where: { $0.contains(candidate) }) { fallback = candidate; continue }
-            guard isClearOfFurniture(candidate) else { fallback = candidate; continue }
+            guard !exclusions.contains(where: { $0.contains(candidate) }),
+                  isClearOfFurniture(candidate) else { continue }
             return candidate
         }
-        return fallback
+        // 12번 다 제외 구역(AreaK 등)이나 가구에 걸렸다면, 예전엔 마지막으로 시도한
+        // (즉 제외 구역 안일 수도 있는) 후보를 그대로 반환했다. 최후의 수단으로도
+        // 반드시 제외 구역 밖으로 밀어낸 지점을 반환한다.
+        return pushedOutsideExclusions(seat.position - seat.facing * Tuning.cyclerSpawnRadius, exclusions: exclusions)
+    }
+
+    /// point가 exclusions 중 하나 안에 있으면 그 구역 중심에서 바깥으로, 그 구역을
+    /// 확실히 벗어날 만큼(축 반경의 합) 밀어낸다. 여러 구역이 겹쳐 있을 수 있어 몇
+    /// 번 반복한다. 무작위 스폰 후보가 모두 제외 구역(특히 AreaK 같은 직원 구역)에
+    /// 걸린 최후의 상황에서도, 그 구역 안에서 그대로 스폰되는 일이 없게 하는
+    /// 마지막 안전장치다.
+    private func pushedOutsideExclusions(_ point: SIMD2<Float>, exclusions: [NPCGuestArea]) -> SIMD2<Float> {
+        var current = point
+        for _ in 0..<4 {
+            guard let intruded = exclusions.first(where: { $0.contains(current) }) else { break }
+            let away = current - intruded.center
+            let pushDirection = simd_length(away) > 0.001 ? simd_normalize(away) : SIMD2<Float>(1, 0)
+            let pushDistance = simd_length(intruded.axisU) + simd_length(intruded.axisV) + 0.1
+            current = intruded.center + pushDirection * pushDistance
+        }
+        return current
     }
 
     /// 좌표(XZ) 위로 레이를 내려 쏴서 가구 콜리전(groundGroup, 이동 중 실시간 장애물
