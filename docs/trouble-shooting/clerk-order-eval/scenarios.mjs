@@ -111,17 +111,21 @@ otherItems.forEach((item, i) => {
   });
 });
 
-// ---- E. 두 잔 요청 ----
+// ---- E. 두 잔 요청(리다이렉트 직후, 아직 주문 성립 전에 "두 잔"부터 요청) ----
+// 최초 버전(2026-08-24)은 barrierExplanations[i]만으로 1턴만에 이미 주문이 성립해버려서
+// "두 잔 주세요"가 항상 성립된 주문 위에 얹히는 별개 주문 요청으로 해석됐다(시나리오
+// 설계 결함, docs/trouble-shooting/clerk-order-llm-eval.md 참고). 이번 버전은 장벽
+// 설명과 "두 잔" 요청을 같은 턴에 합쳐 리다이렉트 직후 곧장 시도하도록 고쳤다.
 const twoQuantityFollowUps = ["그럼 한 잔만 할게요.", "네, 한 잔이면 돼요.", "알겠어요, 한 잔으로요.", "그래요, 하나만 주세요.", "네 한 잔으로 부탁해요."];
-twoQuantityFollowUps.forEach((followUp, i) => {
+barrierExplanations.slice(0, 5).forEach((barrier, i) => {
   add({
     id: `E_two_then_one_quantity_${i}`,
     category: "E_two_then_one_quantity",
     persona: personaFor(i),
-    turns: [firstAttemptOpeners[i], barrierExplanations[i], "두 잔 주세요.", followUp],
+    turns: [firstAttemptOpeners[i], `${barrier} 스무디 두 잔 주세요.`, twoQuantityFollowUps[i]],
     expectByTurn: {
-      2: (state) => ({ pass: !state.orderPlaced, note: "two-quantity request should not place order as-is" }),
-      3: (state) => ({ pass: state.orderPlaced, note: "after clarifying to one, order should succeed" }),
+      1: (state) => ({ pass: !state.orderPlaced, note: "asking for two smoothies in the same breath as the barrier explanation should not place the order as-is" }),
+      2: (state) => ({ pass: state.orderPlaced, note: "after clarifying to one, the order should succeed" }),
     },
   });
 });
@@ -200,7 +204,10 @@ sameBreath.forEach((combined, i) => {
     persona: personaFor(i),
     turns: [combined, "네, 스무디 하나 부탁드려요."],
     expectByTurn: {
-      0: (state) => ({ pass: state.hasRedirected, note: "first turn (even with explanation attached) is still redirected per app rule" }),
+      0: (state, call, text) => ({
+        pass: state.hasRedirected && !/알겠어요|받아둘게요|하나만요/.test(text),
+        note: `first turn (even with explanation attached) is still redirected per app rule, and must not sound like an early concession (found: ${(text.match(/알겠어요|받아둘게요|하나만요/g) ?? []).join(",") || "none"})`,
+      }),
       1: (state) => ({
         pass: state.orderPlaced,
         note: `since the barrier was already explained in the same breath, the very next attempt should succeed without demanding a fresh explanation; orderPlaced=${state.orderPlaced}`,
