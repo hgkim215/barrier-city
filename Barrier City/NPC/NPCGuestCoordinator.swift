@@ -68,9 +68,12 @@ final class NPCGuestCoordinator {
         /// seatedPoolCount와 같아야 한다).
         static let seatedPoolGroupSizes: [Int] = [1, 2, 3]
         /// cycler가 입장 즉시 확정 배정받은 좌석 근처(반경 이내)에 스폰돼, 배회 없이
-        /// 곧장 좌석으로 걸어가게 한다. 착석 + 디저트 생성이 입장 후 5초 안에 보이도록
-        /// 보장하기 위한 값으로, moveSpeed(0.68~1.02m/s) 최저치로도 여유 있게 도착한다.
-        static let cyclerSpawnRadius: Float = 1.2
+        /// 곧장 좌석으로 걸어가게 한다. 착석 + 디저트 생성이 입장 후 10초 안에 보이도록
+        /// 보장하기 위한 값으로, moveSpeed 최저치(0.68m/s)로도 최악의 경우(4.0m) 약
+        /// 5.9초면 도착해 회전·군중 회피 여유를 남긴다. 이전엔 5초 기준으로 1.2m였는데,
+        /// 기준이 늘어난 만큼 반경도 넓혀 방을 가로질러 걸어오는 좀 더 자연스러운
+        /// 그림이 나오게 했다.
+        static let cyclerSpawnRadius: Float = 4.0
         /// 테이블·의자 군집 주변을 배회 목적지에서 제외할 때 두는 여백(m).
         static let seatClusterExclusionMargin: Float = 0.9
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
@@ -233,6 +236,21 @@ final class NPCGuestCoordinator {
             let bounds = anchor.visualBounds(relativeTo: worldRoot)
             return (min: bounds.min, max: bounds.max)
         }
+        // 긴 벤치형 WoodTable 하나는 실측해보니 authored 바운즈 상단이 약 1.2m로, 다른
+        // 일반 테이블(약 0.77m)보다 훨씬 높았다 — 단일 리프 메시라 상판과 별개 부분을
+        // 나눠 인식할 방법이 없어, 씬을 고치는 대신 나머지 테이블들의 중앙값 높이에서
+        // 크게 벗어나는 테이블만 그 중앙값으로 보정해 디저트가 공중에 뜨지 않게 한다.
+        let measuredHeights = tableSurfaceBoundsByGroupIndex.compactMap { $0?.max.y }.sorted()
+        if let medianHeight = measuredHeights.isEmpty ? nil : measuredHeights[measuredHeights.count / 2] {
+            let outlierTolerance: Float = 0.25
+            for index in tableSurfaceBoundsByGroupIndex.indices {
+                guard var bounds = tableSurfaceBoundsByGroupIndex[index],
+                      abs(bounds.max.y - medianHeight) > outlierTolerance else { continue }
+                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(medianHeight)m")
+                bounds.max.y = medianHeight
+                tableSurfaceBoundsByGroupIndex[index] = bounds
+            }
+        }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
         // 테이블마다 각자 좌석 주변에만 작은 배회 제외 구역을 둔다. 모든 좌석을 하나의
@@ -283,7 +301,7 @@ final class NPCGuestCoordinator {
                     // cycler는 입장 즉시 이 좌석으로 걸어가도록 확정 배정하되, "초반엔
                     // 서서 걸어온다"는 연출은 유지하려고 좌석 바로 뒤(테이블 반대쪽,
                     // cyclerSpawnRadius 이내)에서만 스폰해 이동 거리를 짧게 둔다 —
-                    // moveSpeed 최저치(0.68m/s)로도 5초 안에 넉넉히 도착한다. 도중에
+                    // moveSpeed 최저치(0.68m/s)로도 10초 안에 넉넉히 도착한다. 도중에
                     // 실제 장애물에 막혀 updateMovingToSeat가 자리를 반납하면(seatState
                     // = .none), 기존 배회→확률적 재시도 경로가 자연스럽게 이어받는다.
                     // 디저트는 여기서 바로 놓지 않는다 — update()가
@@ -292,7 +310,7 @@ final class NPCGuestCoordinator {
                     // 남는 일이 없다.
                     seatOccupants[seatIndex] = guests.count
                     let seat = seats[seatIndex]
-                    let spawn = seat.position - seat.facing * Float.random(in: 0.5...Tuning.cyclerSpawnRadius)
+                    let spawn = seat.position - seat.facing * Float.random(in: 1.0...Tuning.cyclerSpawnRadius)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                     guest.grantSeat(index: seatIndex, seat: seat)
