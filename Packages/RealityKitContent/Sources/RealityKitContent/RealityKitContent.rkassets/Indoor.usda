@@ -10,7 +10,7 @@
 
 def Xform "Root"
 {
-    reorder nameChildren = ["Barista", "WayPoint", "Door", "DirectionalLight", "DirectionalLight_1", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
+    reorder nameChildren = ["Barista", "invisible", "WayPoint", "Door", "DirectionalLight", "DirectionalLight_1", "Female", "MaleIdle", "Indoor", "collision", "wall", "kiosk", "CaffeFloor", "Menuboard1", "Menuboard2", "Poster", "Poster_1", "PointLight", "PointLight_1", "PointLight_2", "PointLight_3", "Wood", "Drawing1", "Drawing2", "Drawing3"]
     def Material "wall"
     {
         token outputs:mtlx:surface.connect = </Root/wall/PreviewSurface.outputs:out>
@@ -809,6 +809,7 @@ def Xform "Root"
                     {
                         over "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205"
                         {
+                            reorder nameChildren = ["GroundingShadow", "SittingPoint"]
                             def RealityKitComponent "GroundingShadow"
                             {
                                 bool enableIBLShadow = 1
@@ -816,6 +817,25 @@ def Xform "Root"
                                 bool enableReceiveIBLShadow = 0
                                 bool enableReceiveMeshShadow = 0
                                 uniform token info:id = "RealityKit.GroundingShadow"
+                            }
+
+                            def Cylinder "SittingPoint" (
+                                active = true
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                uniform token axis = "Y"
+                                double height = 0.2
+                                rel material:binding = </Root/invisible> (
+                                    bindMaterialAs = "weakerThanDescendants"
+                                )
+                                double radius = 0.1
+                                float2 ui:nodegraph:node:pos = (20, 20)
+                                int ui:nodegraph:node:stackingOrder = 1
+                                quatf xformOp:orient = (0.7071067, 0.70710677, 5.338509e-8, -5.338511e-8)
+                                float3 xformOp:scale = (1.2500001, 0.12499999, 1.2500001)
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
 
@@ -844,6 +864,12 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999998, 0.9999998, 0.9999998)
                             float3 xformOp:translate = (-1.0188771, -3.576279e-7, 1.4784747e-7)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_2" (
@@ -871,6 +897,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999996, 0.9999996, 0.9999996)
                             float3 xformOp:translate = (-1.0189801, -4.6750298, 0.0045655514)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_3" (
@@ -898,6 +929,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.99999934, 0.9999994, 0.9999994)
                             float3 xformOp:translate = (0.1045456, -4.6750307, 0.004565528)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_4" (
@@ -925,6 +961,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.99999934, 0.9999994, 0.9999994)
                             float3 xformOp:translate = (-1.0189811, 4.576886, -0.00446952)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_5" (
@@ -952,6 +993,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999993, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (0.10454465, 4.576886, -0.0044695428)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_6" (
@@ -982,6 +1028,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999993, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-1.0189801, 2.475958, -0.002636085)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_7" (
@@ -1012,6 +1063,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (0.1045456, 2.431691, -0.0025928454)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_8" (
@@ -1042,6 +1098,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999991, 0.9999994, 0.9999994)
                             float3 xformOp:translate = (-1.0189792, -2.1360543, -0.00713949)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_9" (
@@ -1072,6 +1133,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999991, 0.9999994, 0.9999994)
                             float3 xformOp:translate = (0.1045456, -2.1803215, -0.007096251)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_11" (
@@ -1102,6 +1168,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.999999, 0.9999994, 0.9999994)
                             float3 xformOp:translate = (0.10454465, -6.5241566, -0.011337797)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_12" (
@@ -1132,6 +1203,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999993, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-18.461567, 5.1032286, -0.0049836244)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_13" (
@@ -1162,6 +1238,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-17.338041, 5.1032286, -0.004983647)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_14" (
@@ -1192,6 +1273,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-15.514834, 5.103228, -0.004983708)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_15" (
@@ -1222,6 +1308,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-13.969915, 5.103228, -0.0049837087)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_16" (
@@ -1252,6 +1343,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-13.969916, -0.55352795, -0.010508555)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_17" (
@@ -1282,6 +1378,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-15.514836, -0.55352795, -0.010508555)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_18" (
@@ -1312,6 +1413,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-17.338041, -0.55352795, -0.010508493)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
 
                         def Mesh "tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205_19" (
@@ -1342,6 +1448,11 @@ def Xform "Root"
                             float3 xformOp:scale = (0.9999992, 0.99999946, 0.99999946)
                             float3 xformOp:translate = (-18.461569, -0.55352795, -0.010508472)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "SittingPoint"
+                            {
+                                rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                            }
                         }
                     }
 
@@ -1370,6 +1481,7 @@ def Xform "Root"
 
                     over "tripo_node_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc"
                     {
+                        reorder nameChildren = ["tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_1", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_2", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_3", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_4", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_5", "SittingPoint"]
                         def Mesh "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_1" (
                             active = true
                             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -1513,6 +1625,158 @@ def Xform "Root"
                             float3 xformOp:translate = (-0.065944195, 0.8216187, 1.268927e-7)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
+
+                        def Cylinder "SittingPoint" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (40, 40)
+                            int ui:nodegraph:node:stackingOrder = 2
+                            quatf xformOp:orient = (1.15202326e-7, 8.432145e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.058823515, 0.5882352)
+                            float3 xformOp:translate = (0.15377331, 0.88951993, 0.33076674)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_1" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (60, 60)
+                            int ui:nodegraph:node:stackingOrder = 3
+                            quatf xformOp:orient = (1.1520234e-7, 8.43215e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.05882352, 0.5882352)
+                            float3 xformOp:translate = (-0.38990355, 0.88951993, 0.33077058)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_2" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (80, 80)
+                            int ui:nodegraph:node:stackingOrder = 4
+                            quatf xformOp:orient = (1.1520234e-7, 8.43215e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.058823522, 0.5882352)
+                            float3 xformOp:translate = (-1.249629, 0.88952017, 0.33077416)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_3" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (100, 100)
+                            int ui:nodegraph:node:stackingOrder = 5
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-2.0146484, 0.8895203, 0.33077636)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_4" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (120, 120)
+                            int ui:nodegraph:node:stackingOrder = 6
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-2.0146422, -0.06919956, 0.3307809)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_5" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (140, 140)
+                            int ui:nodegraph:node:stackingOrder = 7
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-1.2787199, -0.069202185, 0.33078456)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_6" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (160, 160)
+                            int ui:nodegraph:node:stackingOrder = 8
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-0.3828001, -0.069206, 0.33078775)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_7" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (180, 180)
+                            int ui:nodegraph:node:stackingOrder = 9
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (0.10937452, -0.06920719, 0.33079112)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
                     }
                 }
 
@@ -1524,6 +1788,7 @@ def Xform "Root"
                     references = @Furnitures/WoodChair.usdz@
                 )
                 {
+                    reorder nameChildren = ["tripo_node_298ba361_983f_4071_8dd2_c0efcf9c6965", "_materials", "SittingPoint"]
                     float2 ui:nodegraph:node:pos = (31.901001, -3.2148552)
                     int ui:nodegraph:node:stackingOrder = 1
                     quatf xformOp:orient = (2.2476451e-8, -8.4293696e-8, 0.70710677, -0.7071067)
@@ -1535,6 +1800,7 @@ def Xform "Root"
                     {
                         over "tripo_mesh_298ba361_983f_4071_8dd2_c0efcf9c6965"
                         {
+                            reorder nameChildren = ["GroundingShadow", "SittingPoint"]
                             float3 xformOp:translate = (0.1714163, 0.0000014305116, -1.396984e-9)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
@@ -1545,6 +1811,25 @@ def Xform "Root"
                                 bool enableReceiveIBLShadow = 1
                                 bool enableReceiveMeshShadow = 1
                                 uniform token info:id = "RealityKit.GroundingShadow"
+                            }
+
+                            def Cylinder "SittingPoint" (
+                                active = true
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                uniform token axis = "Y"
+                                double height = 0.2
+                                rel material:binding = </Root/invisible> (
+                                    bindMaterialAs = "weakerThanDescendants"
+                                )
+                                double radius = 0.1
+                                float2 ui:nodegraph:node:pos = (40, 40)
+                                int ui:nodegraph:node:stackingOrder = 2
+                                quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385097e-8, -5.3385094e-8)
+                                float3 xformOp:scale = (1.9999995, 0.19999993, 1.9999995)
+                                float3 xformOp:translate = (0.02584553, -0.0030856135, 1.0543412)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
 
@@ -4132,7 +4417,7 @@ def Xform "Root"
                 customData = {
                     float3 rotationEulerHint = (1.570796, 0, 0)
                 }
-                prepend references = @Furnitures/Speaker.usdz@
+                references = @Furnitures/Speaker.usdz@
             )
             {
                 quatf xformOp:orient = (0.7071069, 0.70710665, 0, 0)
@@ -4148,7 +4433,7 @@ def Xform "Root"
                         customData = {
                             float3 rotationEulerHint = (-2.2819204e-7, -4.8591214e-15, 3.1415927)
                         }
-                        prepend references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
+                        references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
                     )
                     {
                         uniform bool doubleSided = 1
@@ -4178,7 +4463,7 @@ def Xform "Root"
                         customData = {
                             float3 rotationEulerHint = (-2.2819204e-7, -4.8591214e-15, 3.1415927)
                         }
-                        prepend references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
+                        references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
                     )
                     {
                         uniform bool doubleSided = 1
@@ -4208,7 +4493,7 @@ def Xform "Root"
                         customData = {
                             float3 rotationEulerHint = (-2.0350295e-7, -2.2604353e-14, 0)
                         }
-                        prepend references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
+                        references = </Root/Indoor/Furnitures/Speaker/tripo_node_7e2af559_369f_4ac7_85d3_ac87ede601c0/tripo_mesh_7e2af559_369f_4ac7_85d3_ac87ede601c0>
                     )
                     {
                         uniform bool doubleSided = 1
@@ -5022,6 +5307,15 @@ def Xform "Root"
         float3 xformOp:scale = (0.2, 0.2, 0.4)
         float3 xformOp:translate = (6.524315, 0.5974773, 4.26385)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        over "_materials"
+        {
+            over "blue"
+            {
+                token outputs:mtlx:surface
+                token outputs:realitykit:vertex
+            }
+        }
     }
 
     def "Barista" (
@@ -5081,6 +5375,142 @@ def Xform "Root"
                 def RealityKitStruct "pose"
                 {
                     float3 position = (4.4703484e-8, 5.5879354e-8, 0.49902344)
+                }
+            }
+        }
+    }
+
+    def Material "invisible"
+    {
+        token outputs:mtlx:surface
+        token outputs:realitykit:vertex
+        token outputs:surface.connect = </Root/invisible/UsdPreviewSurface.outputs:surface>
+
+        def Shader "UsdPreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            float inputs:opacity = 0
+            token outputs:surface
+        }
+    }
+
+    def Xform "ParticleEmitter" (
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0)
+        }
+    )
+    {
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (10, 10, 10)
+        float3 xformOp:translate = (6.3278413, 0.85343033, 4.12531)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "VFXEmitter"
+        {
+            token info:id = "RealityKit.VFXEmitter"
+
+            def RealityKitStruct "currentState"
+            {
+                token birthDirection = "Normal"
+                token birthLocation = "Surface"
+                float3 emissionDirection = (0, 1, 0)
+                token emitterShape = "Plane"
+                bool isEmitting = 1
+                bool isLocal = 0
+                bool isSpawningEnabled = 1
+                bool loops = 1
+                bool spawnInheritParentColor = 1
+                token spawnOccasion = "OnDeath"
+                float spawnSpreadFactor = 0.2
+                float spawnSpreadFactorVariation = 0.1
+                float spawnVelocityFactor = 0.1
+
+                def RealityKitStruct "mainEmitter"
+                {
+                    token animationRepeatMode = "Looping"
+                    token billboardMode = "Billboard"
+                    float birthRate = 2
+                    token blendMode = "Additive"
+                    float colorEvolutionPower = 1
+                    int64 columnCount = 2
+                    float4 endColorA = (0.0013309671, 0.03458923, 1, 1)
+                    float4 endColorB = (0.11386989, 0.0064959256, 0.10626237, 1)
+                    float frameRate = 0
+                    float frameRateVariation = 0
+                    int64 initialFrame = 0
+                    int64 initialFrameVariation = 3
+                    bool isAnimated = 1
+                    float noiseScale = 0
+                    token opacityOverLife = "Constant"
+                    float particleAngle = 0
+                    float particleAngleVariation = 0
+                    asset particleImage = @ParticleEmitterPresetTextures/flaresheet.exr@
+                    double particleLifeSpan = 0.1
+                    float particleMass = 1
+                    float particleMassVariation = 0
+                    float particleSize = 0.03
+                    float particleSizeVariation = 0
+                    int64 rowCount = 2
+                    float sizeMultiplierAtEndOfLifespan = 1
+                    token sortOrder = "IncreasingDepth"
+                    float4 startColorA = (1, 0.051991113, 1, 1)
+                    float4 startColorB = (0, 0.98059916, 1, 1)
+                    float stretchFactor = 0
+                    bool useEndColor = 0
+                    bool useEndColorRange = 0
+                    bool useStartColorRange = 1
+                    float3 vortexDirection = (0, 1, 0)
+                }
+
+                def RealityKitStruct "spawnedEmitter"
+                {
+                    float3 acceleration = (0, 0, 0)
+                    token animationRepeatMode = "Looping"
+                    token billboardMode = "Billboard"
+                    float birthRate = 39000
+                    float birthRateVariation = 8000
+                    token blendMode = "Additive"
+                    float colorEvolutionPower = 1
+                    int64 columnCount = 2
+                    float dampingFactor = 0
+                    float4 endColorA = (0.0013309671, 0.03458923, 1, 1)
+                    float4 endColorB = (0.11386989, 0.0064959256, 0.10626237, 1)
+                    float frameRate = 12
+                    float frameRateVariation = 3
+                    int64 initialFrame = 0
+                    int64 initialFrameVariation = 3
+                    bool isAnimated = 1
+                    bool isLightingEnabled = 0
+                    float noiseAnimationSpeed = 0.2
+                    float noiseScale = 3
+                    float noiseStrength = 0.02
+                    token opacityOverLife = "LinearFadeOut"
+                    float particleAngle = 0
+                    float particleAngleVariation = 2
+                    float particleAngularVelocity = 0
+                    float particleAngularVelocityVariation = 0
+                    asset particleImage = @ParticleEmitterPresetTextures/flaresheet.exr@
+                    double particleLifeSpan = 1.8
+                    double particleLifeSpanVariation = 0.5
+                    float particleMass = 0.75
+                    float particleMassVariation = 0.5
+                    float particleSize = 0.1
+                    float particleSizeVariation = 0.01
+                    float3 radialGravityCenter = (0, 0, 0)
+                    float radialGravityStrength = 0
+                    int64 rowCount = 2
+                    float sizeMultiplierAtEndOfLifespan = 0.03
+                    float sizeMultiplierAtEndOfLifespanPower = 0.03
+                    token sortOrder = "IncreasingID"
+                    float spreadingAngle = 3
+                    float4 startColorA = (1, 1, 1, 1)
+                    float4 startColorB = (1, 1, 1, 1)
+                    float stretchFactor = 0
+                    bool useEndColor = 0
+                    bool useEndColorRange = 0
+                    bool useStartColorRange = 0
+                    float3 vortexDirection = (0, 1, 0)
+                    float vortexStrength = 0
                 }
             }
         }
