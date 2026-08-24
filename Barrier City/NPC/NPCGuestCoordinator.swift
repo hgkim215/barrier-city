@@ -286,13 +286,16 @@ final class NPCGuestCoordinator {
                     // moveSpeed 최저치(0.68m/s)로도 5초 안에 넉넉히 도착한다. 도중에
                     // 실제 장애물에 막혀 updateMovingToSeat가 자리를 반납하면(seatState
                     // = .none), 기존 배회→확률적 재시도 경로가 자연스럽게 이어받는다.
+                    // 디저트는 여기서 바로 놓지 않는다 — update()가
+                    // takeSeatedArrivalSeatIndex()로 실제 도착을 확인한 뒤에 놓아야,
+                    // 걸어가다 막혀 자리를 반납해도 아무도 없는 테이블에 디저트만
+                    // 남는 일이 없다.
                     seatOccupants[seatIndex] = guests.count
                     let seat = seats[seatIndex]
                     let spawn = seat.position - seat.facing * Float.random(in: 0.5...Tuning.cyclerSpawnRadius)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                     guest.grantSeat(index: seatIndex, seat: seat)
-                    maybeSpawnDessert(forSeatIndex: seatIndex)
                 } else {
                     let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
@@ -646,7 +649,12 @@ final class NPCGuestCoordinator {
             if guest.takeSeatRequest(), let freeSeatIndex = bestFreeSeatIndex() {
                 seatOccupants[freeSeatIndex] = index
                 guest.grantSeat(index: freeSeatIndex, seat: seats[freeSeatIndex])
-                maybeSpawnDessert(forSeatIndex: freeSeatIndex)
+            }
+            // 디저트는 배정(grantSeat) 시점이 아니라 실제로 걸어가 도착한 시점에
+            // 놓는다 — 걸어가다 막혀 자리를 반납하면 아무도 없는 테이블에 디저트만
+            // 남는 문제를 막는다.
+            if let arrivedSeatIndex = guest.takeSeatedArrivalSeatIndex() {
+                maybeSpawnDessert(forSeatIndex: arrivedSeatIndex)
             }
             if index == sighingGuestIndex, guest.takeQueueArrivalSignal() {
                 guest.playSigh()

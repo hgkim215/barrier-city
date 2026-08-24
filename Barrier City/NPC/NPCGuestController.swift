@@ -128,6 +128,11 @@ final class NPCGuestController {
     /// 방금 자리를 비웠다는 통지에 쓴다(takeSeatRequest/takeVacatedSeatIndex 참고).
     private var pendingSeatRequest = false
     private var pendingVacatedSeatIndex: Int?
+    /// 좌석까지 실제로 걸어가 도착한(=진짜로 앉은) 프레임에 한 번만 서는 원샷 신호
+    /// (takeSeatedArrivalSeatIndex). grantSeat 시점이 아니라 이 시점에 코디네이터가
+    /// 디저트를 놓아야, 걸어가다 막혀 자리를 반납해도(vacate) 아무도 없는 테이블에
+    /// 디저트만 남는 일이 없다.
+    private var pendingSeatedArrivalIndex: Int?
     /// 대기줄 자리에 막 도착한 프레임에 한 번만 서는 원샷 신호(takeQueueArrivalSignal).
     private var pendingQueueArrival = false
     /// pendingQueueArrival을 한 번만 세우기 위한 상태 추적(도착해 있는 동안 매 프레임
@@ -168,6 +173,13 @@ final class NPCGuestController {
     func takeVacatedSeatIndex() -> Int? {
         defer { pendingVacatedSeatIndex = nil }
         return pendingVacatedSeatIndex
+    }
+
+    /// 방금 좌석에 실제로 도착해 앉았으면 그 좌석 인덱스를 반환하고 소비한다.
+    /// 코디네이터가 이걸로 그제서야 디저트를 배정한다.
+    func takeSeatedArrivalSeatIndex() -> Int? {
+        defer { pendingSeatedArrivalIndex = nil }
+        return pendingSeatedArrivalIndex
     }
 
     /// 대기줄 자리에 막 도착했으면(이번 대기 세션 중 처음 한 번만) true를 반환하고
@@ -256,6 +268,7 @@ final class NPCGuestController {
         claimedSeat = nil
         pendingSeatRequest = false
         pendingVacatedSeatIndex = nil
+        pendingSeatedArrivalIndex = nil
         pendingQueueArrival = false
         hasReportedQueueArrival = false
     }
@@ -428,6 +441,7 @@ final class NPCGuestController {
             seatState = .sitting
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
+            pendingSeatedArrivalIndex = claimedSeatIndex
         } else {
             playAnimation(outcome.moved ? .walk : .idle)
         }
