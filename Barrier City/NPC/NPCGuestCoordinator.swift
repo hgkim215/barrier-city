@@ -354,7 +354,7 @@ final class NPCGuestCoordinator {
                     // 기준 안에서 여유가 있다.
                     seatOccupants[seatIndex] = guests.count
                     let seat = seats[seatIndex]
-                    let spawn = seat.position - seat.facing * Float.random(in: 1.0...Tuning.cyclerSpawnRadius)
+                    let spawn = cyclerSpawnPoint(behind: seat, excluding: exclusionAreas)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                     if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
@@ -550,6 +550,25 @@ final class NPCGuestCoordinator {
             }
         }
         return bestCandidate
+    }
+
+    /// cycler를 좌석 반대쪽(테이블에서 먼 쪽)에 스폰하되, 그 지점이 제외 구역(자기
+    /// 테이블의 좌석 클러스터 포함) 안에 떨어지지 않게 한다. seatClusterExclusionMargin이
+    /// 좌석 위치를 중심으로 한 축 정렬 박스라, facing이 대각선이거나 테이블이 넓으면
+    /// cyclerSpawnRadius 안의 거리로는 못 벗어나는 경우가 있었다 — 그러면 스폰 시점부터
+    /// 자기 테이블의 제외 구역 안에 갇혀 배회 목적지를 하나도 못 찾고(randomWanderTarget이
+    /// 매번 경로 교차로 후보를 버림) 영원히 Idle로 멈춰, 예약된 좌석에 결국 못 앉았다.
+    private func cyclerSpawnPoint(behind seat: GuestSeat, excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
+        var fallback = seat.position - seat.facing * Tuning.cyclerSpawnRadius
+        for attempt in 0..<12 {
+            // 처음 몇 번은 원래 반경 안에서, 그래도 못 벗어나면 점점 더 멀리 밀어낸다.
+            let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
+            let distance = Float.random(in: 1.0...radius)
+            let candidate = seat.position - seat.facing * distance
+            if !exclusions.contains(where: { $0.contains(candidate) }) { return candidate }
+            fallback = candidate
+        }
+        return fallback
     }
 
     func tearDownForOutdoor() {
