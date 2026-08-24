@@ -545,12 +545,14 @@ final class NPCGuestCoordinator {
         for (template, targetHeight, lateralOffset) in placements {
             let prop = template.clone(recursive: true)
             worldRoot.addChild(prop)
-            // 원본(Cake/Latte)은 RainbowSmoothie와 달리 수동 정렬을 거치지 않은 Tripo 변환
-            // 원본이라 authored 회전이 뒤틀려 있는 경우가 있다. 기준 회전(Y축 identity)으로
-            // 되돌려서 배치한다 — 여기에 추가 회전을 더하지 않아야 공중에 뜨거나 비스듬히
-            // 놓인 것처럼 보이지 않는다.
-            prop.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
-
+            // Entity.load 결과를 직접 조사해 보면 Cake/Latte의 루트 엔티티에는 RainbowSmoothie와
+            // 완전히 동일한 회전(X축 -90°)이 authored돼 있다 — Tripo가 Z-up으로 내보낸 원본을
+            // RealityKit이 임포트하며 항상 붙이는 표준 Z-up→Y-up 보정이라, 세 에셋 모두 이
+            // 회전이 있어야 정상적으로 세워진다. 실제 mesh bounds(로컬)도 세로축이 Z이고
+            // 바닥이 정확히 Z=0에 붙어 있어(케이크 0~0.912, 라떼 0~0.603), 이 회전을 그대로
+            // 두면 world Y 바운즈 하단이 이미 0에 온다 — 여기서 다시 회전을 만지면(예전의
+            // identity 리셋) 오히려 이 보정을 지워버려 옆으로 누운 것처럼 보인다. 그래서
+            // RainbowSmoothiePresenter와 마찬가지로 orientation은 아예 건드리지 않는다.
             let authoredHeight = prop.visualBounds(relativeTo: worldRoot).extents.y
             guard authoredHeight.isFinite, authoredHeight > 0.0001 else {
                 prop.removeFromParent()
