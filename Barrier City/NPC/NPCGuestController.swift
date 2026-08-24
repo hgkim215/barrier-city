@@ -76,11 +76,6 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
-        /// 착석 시 발 기준 정렬(setUpLocomotionRoot)된 루트를 이만큼(m) 들어올린다.
-        /// Sitting 애니메이션 자체는 항상 같은 높이로 앉는 포즈를 취하는데, 의자
-        /// authored 높이와 딱 맞지 않아 캐릭터가 의자보다 살짝 낮게(마치 의자 앞
-        /// 바닥에 앉은 것처럼) 보였다. 시각 확인 후 미세 조정 가능하도록 상수로 뺐다.
-        static let seatedHeightOffset: Float = 0.05
     }
 
     private enum SeatState {
@@ -271,7 +266,7 @@ final class NPCGuestController {
         seatState = .sitting
         face(direction: seat.facing, deltaTime: 999)
         playAnimation(.sitting)
-        locomotionRoot?.position.y = NPCGuestTuning.seatedHeightOffset
+        locomotionRoot?.position.y = seat.sittingHeightOffset
     }
 
     func teardown() {
@@ -481,7 +476,7 @@ final class NPCGuestController {
             seatState = .sitting
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
-            locomotionRoot?.position.y = NPCGuestTuning.seatedHeightOffset
+            locomotionRoot?.position.y = seat.sittingHeightOffset
             pendingSeatedArrivalIndex = claimedSeatIndex
         } else {
             playAnimation(outcome.moved ? .walk : .idle)

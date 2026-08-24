@@ -31,6 +31,14 @@ struct GuestSeat {
     /// 착석 시 바라볼 방향. SittingPoint 마커의 실제 authored 회전(디자이너가 각
     /// 의자 복제본을 배치하며 직접 돌려놓은 값)에서 뽑아낸다.
     let facing: SIMD2<Float>
+    /// 착석 시 로코모션 루트(발 기준 정렬)에 적용할 Y 오프셋. 의자 종류마다 실제
+    /// 좌석 높이가 다르다 — SittingPoint 마커의 authored 월드 Y를 실측해보면 Chair는
+    /// ~0.48m, WoodChair는 ~0.53m, LongChair(긴 벤치)는 ~0.565m로 8.5cm 넘게 차이
+    /// 난다. 심지어 Chair는 전체 바운즈 상단(~0.80m)이 등받이라 그걸 쓰면 오히려
+    /// 틀린다. enterIndoor가 이 씬 전체 좌석의 평균 SittingPoint 높이 대비 이 좌석이
+    /// 얼마나 높은지/낮은지를 계산해 채운다 — 하드코딩된 단일 상수 대신 의자마다
+    /// 다르게 보정된다.
+    let sittingHeightOffset: Float
 }
 
 /// 손님 NPC를 관리한다. 매 프레임 각자 자유롭게 배회·착석시키고, 유저가 키오스크에
@@ -84,6 +92,11 @@ final class NPCGuestCoordinator {
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
+        /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 씬 전체 좌석의 평균
+        /// SittingPoint 높이를 가진 "평균적인" 의자라면 이 값을 그대로 쓴다. 실제로
+        /// 시각 확인하며 튜닝한 값으로, GuestSeat.sittingHeightOffset이 이 값에
+        /// 의자별 편차(SittingPoint 높이 - 평균)를 더해 최종 오프셋을 계산한다.
+        static let baselineSittingHeightOffset: Float = 0.05
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
@@ -215,6 +228,18 @@ final class NPCGuestCoordinator {
             guard !exclusionAreas.contains(where: { $0.contains(seat.position) }) else { continue }
             filteredSeats.append(seat)
             filteredSeatTableEntities.append(tableEntity)
+        }
+        // 각 좌석의 sittingHeightOffset은 지금까지 SittingPoint의 raw authored 월드 Y를
+        // 담고 있다(위 collectSittingPoints 참고). 이 씬 전체 좌석의 평균 높이를 구해,
+        // 그 평균보다 얼마나 높은/낮은 의자인지를 baselineSittingHeightOffset(기존에
+        // 시각 확인으로 튜닝한 값) 기준으로 보정한 최종 오프셋으로 다시 채운다 —
+        // 의자 종류마다 다른 높이가 하드코딩 없이 자동으로 반영된다.
+        let averageSeatHeight = filteredSeats.isEmpty ? 0
+            : filteredSeats.map(\.sittingHeightOffset).reduce(0, +) / Float(filteredSeats.count)
+        filteredSeats = filteredSeats.map { seat in
+            GuestSeat(position: seat.position, facing: seat.facing,
+                     sittingHeightOffset: Tuning.baselineSittingHeightOffset
+                         + (seat.sittingHeightOffset - averageSeatHeight))
         }
         seats = filteredSeats
         seatOccupants = Array(repeating: nil, count: seats.count)
@@ -398,7 +423,10 @@ final class NPCGuestCoordinator {
                 } else {
                     facing = SIMD2(0, 1)
                 }
-                seats.append(GuestSeat(position: position, facing: facing))
+                // sittingHeightOffset은 여기서는 SittingPoint의 raw authored 월드 Y를
+                // 그대로 담아 두고(아직 씬 전체 평균을 모르니 보정 전 값), enterIndoor가
+                // 필터링을 마친 뒤 전체 평균 대비 보정된 최종 오프셋으로 다시 채운다.
+                seats.append(GuestSeat(position: position, facing: facing, sittingHeightOffset: world.y))
                 // 이 좌석이 실제로 속한 테이블(디저트를 얹을 표면)도 같은 "가장 가까운
                 // 테이블" 판정으로 같이 기록해 둔다 — facing 계산과 동일한 근거라
                 // 좌석 클러스터 중심을 거치는 간접 매칭보다 테이블을 놓칠 일이 적다.
