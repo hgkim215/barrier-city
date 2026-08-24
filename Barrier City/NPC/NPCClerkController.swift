@@ -560,19 +560,30 @@ final class NPCClerkController {
         guard let root = locomotionRoot else { return }
         let position = SIMD2<Float>(root.position.x, root.position.z)
         let delta = point - position
-        guard simd_length(delta) > 0.001 else { return }
+        guard simd_length(delta) > 0.001, !delta.x.isNaN, !delta.y.isNaN else { return }
         face(direction: simd_normalize(delta), deltaTime: deltaTime)
     }
 
     private func face(direction: SIMD2<Float>, deltaTime: Float) {
-        guard let root = locomotionRoot else { return }
+        guard let root = locomotionRoot,
+              !direction.x.isNaN, !direction.y.isNaN,
+              simd_length(direction) > 0.001 else { return }
         // 이동 wrapper의 -Z를 목표 방향으로 맞춘 뒤 Barista의 +Z 정면을 180° 보정한다.
         // 스켈레톤 애니메이션은 자식에만 적용되므로 바깥 wrapper 보정은 유지된다.
         let yaw = atan2(-direction.x, -direction.y)
             + NPCClerkTuning.baristaForwardYawOffset
+        guard !yaw.isNaN else { return }
         let target = simd_quatf(angle: yaw, axis: [0, 1, 0])
-        let amount = min(1, NPCClerkTuning.turnResponse * deltaTime)
-        root.orientation = simd_slerp(root.orientation, target, amount)
+        let amount = min(1, max(0, NPCClerkTuning.turnResponse * deltaTime))
+        let currentOri = root.orientation
+        if simd_length(currentOri.vector) > 0.001 && !currentOri.vector.x.isNaN {
+            let nextOri = simd_slerp(simd_normalize(currentOri), target, amount)
+            if !nextOri.vector.x.isNaN {
+                root.orientation = nextOri
+            }
+        } else {
+            root.orientation = target
+        }
     }
 
     @discardableResult
@@ -732,11 +743,18 @@ final class NPCClerkController {
               let bubble = interactionBubble,
               bubble.parent === root else { return }
         let delta = player - currentClerkPosition
-        guard simd_length(delta) > 0.001 else { return }
+        guard simd_length(delta) > 0.001, !delta.x.isNaN, !delta.y.isNaN else { return }
 
         let worldYaw = atan2(delta.x, delta.y)
+        guard !worldYaw.isNaN else { return }
         let worldFacing = simd_quatf(angle: worldYaw, axis: [0, 1, 0])
-        bubble.orientation = root.orientation.inverse * worldFacing
+        let rootOri = root.orientation
+        if simd_length(rootOri.vector) > 0.001 && !rootOri.vector.x.isNaN {
+            let nextOri = simd_normalize(rootOri).inverse * worldFacing
+            if !nextOri.vector.x.isNaN {
+                bubble.orientation = nextOri
+            }
+        }
     }
 
     private func setInteractionBubbleVisible(_ visible: Bool) {

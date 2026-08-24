@@ -14,9 +14,12 @@ struct QuestModelOutcomeTests {
 
         let first = model.steps[0]
         let second = model.steps[1]
-        expect(model.advance(on: .enteredIndoor),
+        let firstAdvance = model.advance(on: .enteredIndoor)
+        expect(firstAdvance,
                .advanced(completed: first, next: second),
                "first event advances")
+        expect(firstAdvance.completesExperience, false,
+               "an intermediate mission cannot trigger the ending")
         expect(model.currentIndex, 1, "current index after first event")
 
         _ = model.advance(on: .kioskFailed)
@@ -37,10 +40,15 @@ struct QuestModelOutcomeTests {
         expect(model.advance(on: .drinkCollected),
                .advanced(completed: collectDrink, next: takeSeat),
                "collection advances to seating")
-        expect(model.advance(on: .seatedAtTable),
+        let completion = model.advance(on: .seatedAtTable)
+        expect(completion,
                .advanced(completed: takeSeat, next: nil),
                "seating completes the experience")
+        expect(completion.completesExperience, true,
+               "the final mission triggers the ending exactly once")
         expect(model.currentStep, nil, "all post-order steps completed")
+        expect(model.advance(on: .seatedAtTable).completesExperience, false,
+               "a duplicate final event cannot trigger another ending")
 
         model.reset()
         expect(model.currentIndex, 0, "reset")

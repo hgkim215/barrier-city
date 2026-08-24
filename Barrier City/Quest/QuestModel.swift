@@ -55,6 +55,13 @@ enum QuestTuning {
 enum QuestAdvanceOutcome: Equatable {
     case ignored
     case advanced(completed: QuestStep, next: QuestStep?)
+
+    var completesExperience: Bool {
+        if case .advanced(_, next: nil) = self {
+            return true
+        }
+        return false
+    }
 }
 
 /// 퀘스트 전역 상태.

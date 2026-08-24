@@ -5,10 +5,10 @@
 
 import SwiftUI
 
-/// 창(2D) 콘텐츠: 휠체어 컨트롤 패널(시작/종료 + 시뮬 디버그 입력 + 진단).
+/// 앱 실행 직후 표시하는 릴리스용 시작 화면.
 struct ContentView: View {
     var body: some View {
-        ControlPanelView()
+        StartScreenView()
     }
 }
 

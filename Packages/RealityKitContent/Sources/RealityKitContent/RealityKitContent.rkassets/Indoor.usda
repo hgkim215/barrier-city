@@ -5401,7 +5401,7 @@ def Xform "Root"
     )
     {
         quatf xformOp:orient = (1, 0, 0, 0)
-        float3 xformOp:scale = (10, 10, 10)
+        float3 xformOp:scale = (1, 1, 1)
         float3 xformOp:translate = (6.3278413, 0.85343033, 4.12531)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
@@ -5429,7 +5429,7 @@ def Xform "Root"
                 {
                     token animationRepeatMode = "Looping"
                     token billboardMode = "Billboard"
-                    float birthRate = 2
+                    float birthRate = 6
                     token blendMode = "Additive"
                     float colorEvolutionPower = 1
                     int64 columnCount = 2
@@ -5467,12 +5467,12 @@ def Xform "Root"
                     float3 acceleration = (0, 0, 0)
                     token animationRepeatMode = "Looping"
                     token billboardMode = "Billboard"
-                    float birthRate = 39000
-                    float birthRateVariation = 8000
+                    float birthRate = 120
+                    float birthRateVariation = 20
                     token blendMode = "Additive"
                     float colorEvolutionPower = 1
                     int64 columnCount = 2
-                    float dampingFactor = 0
+                    float dampingFactor = 0.2
                     float4 endColorA = (0.0013309671, 0.03458923, 1, 1)
                     float4 endColorB = (0.11386989, 0.0064959256, 0.10626237, 1)
                     float frameRate = 12
@@ -5499,8 +5499,8 @@ def Xform "Root"
                     float3 radialGravityCenter = (0, 0, 0)
                     float radialGravityStrength = 0
                     int64 rowCount = 2
-                    float sizeMultiplierAtEndOfLifespan = 0.03
-                    float sizeMultiplierAtEndOfLifespanPower = 0.03
+                    float sizeMultiplierAtEndOfLifespan = 0.5
+                    float sizeMultiplierAtEndOfLifespanPower = 1
                     token sortOrder = "IncreasingID"
                     float spreadingAngle = 3
                     float4 startColorA = (1, 1, 1, 1)

@@ -81,29 +81,106 @@ struct MissionListView: View {
 }
 
 struct ExperienceCompletionView: View {
+    let elapsedTime: String
     let onConfirm: () -> Void
 
     var body: some View {
-        VStack(spacing: 40) {
-            VStack(spacing: 16) {
-                Text(GuideContent.completionTitle)
-                    .font(.title2.bold())
-                    .multilineTextAlignment(.center)
+        ZStack {
+            Image("EndingHeaderGlow")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 726, height: 242)
+                .position(x: 444, y: 144)
+                .accessibilityHidden(true)
 
-                Text(GuideContent.completionBody)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            Image("EndingTimeRing")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 852, height: 852)
+                .position(x: 444, y: 327)
+                .accessibilityHidden(true)
+
+            Text("오늘의 체험이 끝났습니다")
+                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .tracking(1.8)
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.1), radius: 2, y: 2)
+                .position(x: 450, y: 83)
+
+            Text("총 미션 완료 시간")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .tracking(1)
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.1), radius: 2, y: 2)
+                .position(x: 450, y: 203)
+
+            Text(elapsedTime)
+                .font(.system(size: 80, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .tracking(4)
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 2)
+                .position(x: 450, y: 270)
+                .accessibilityLabel("총 미션 완료 시간 \(elapsedTime)")
+                .accessibilityIdentifier("ending-elapsed-time")
+
+            Text("오늘의 경험이 누군가의 일상을 다르게 바라보는 계기가 되었길 바랍니다.\n작은 이해와 관심이 더 많은 사람이 편안하게 살아갈 수 있는 도시를 만듭니다.")
+                .font(.system(size: 24, weight: .regular, design: .rounded))
+                .lineSpacing(9)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.1), radius: 5, y: 2)
+                .frame(width: 716)
+                .position(x: 450, y: 447)
+
+            Button(action: onConfirm) {
+                Text("확인")
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .tracking(1.4)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 2)
+                    .frame(width: 240, height: 80)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.992, green: 0.851, blue: 0.173),
+                                Color(red: 0.996, green: 0.584, blue: 0.039)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom),
+                        in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .stroke(.white.opacity(0.22), lineWidth: 2)
+                            .padding(2)
+                    }
+                    .shadow(color: .black.opacity(0.25), radius: 10)
             }
+            .buttonStyle(.plain)
+            .position(x: 450, y: 570)
+            .accessibilityLabel("체험 종료 후 시작 화면으로 돌아가기")
+            .accessibilityIdentifier("ending-confirm-button")
 
-            Button("확인", action: onConfirm)
-                .buttonStyle(.borderedProminent)
-                .tint(GuideTheme.accent)
-                .frame(minWidth: 200, minHeight: 52)
+            Text("확인을 누르면 시작 화면으로 돌아갑니다")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(Color(red: 0.827, green: 0.827, blue: 0.827))
+                .position(x: 450, y: 645)
         }
-        .padding(48)
-        .frame(width: 553)
-        .glassBackgroundEffect()
+        .frame(width: 900, height: 716)
+        .background {
+            RoundedRectangle(cornerRadius: 40, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(Color(red: 0.055, green: 0.063, blue: 0.082).opacity(0.78))
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 40, style: .continuous)
+                .stroke(.white.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 20, x: 2, y: 4)
     }
 }
 
@@ -143,6 +220,6 @@ struct ExperienceCompletionView: View {
 }
 
 #Preview("Experience Completion") {
-    ExperienceCompletionView(onConfirm: {})
+    ExperienceCompletionView(elapsedTime: "28:48", onConfirm: {})
         .padding()
 }

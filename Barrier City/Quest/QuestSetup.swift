@@ -30,6 +30,7 @@ enum QuestSetup {
         }
         content.add(panel)   // 씬 루트에 직접(HUD는 맵과 함께 움직이면 안 된다)
         hudPanel = panel
+        appModel.endingCelebration.attach(to: panel)
 
         let f = QuestHUDFollower()
         follower = f
