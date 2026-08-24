@@ -98,6 +98,10 @@ final class NPCGuestCoordinator {
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
+        /// isClearOfFurniture가 "바닥"으로 인정하는 높이 상한(m). collision/Cube
+        /// 프록시 상단이 대략 0.39m라, 그보다 훨씬 낮은 여유를 둬 바닥 요철과
+        /// 가구를 확실히 구분한다.
+        static let furnitureClearanceHeight: Float = 0.05
         /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
         /// 좌석(= 정규화된 SittingPoint 높이가 최소인 의자)에 적용되는 오프셋이다.
         /// 다른 의자들은 여기에 각자의 실측 바운즈 차이만큼만 더해서 쓴다
@@ -547,6 +551,7 @@ final class NPCGuestCoordinator {
         for _ in 0..<20 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
             if exclusions.contains(where: { $0.contains(candidate) }) { continue }
+            guard isClearOfFurniture(candidate) else { continue }
             let separation = others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
             if separation >= Tuning.minimumSpawnSeparation { return candidate }
             if separation > bestSeparation {
@@ -570,10 +575,27 @@ final class NPCGuestCoordinator {
             let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
             let distance = Float.random(in: 1.0...radius)
             let candidate = seat.position - seat.facing * distance
-            if !exclusions.contains(where: { $0.contains(candidate) }) { return candidate }
-            fallback = candidate
+            if exclusions.contains(where: { $0.contains(candidate) }) { fallback = candidate; continue }
+            guard isClearOfFurniture(candidate) else { fallback = candidate; continue }
+            return candidate
         }
         return fallback
+    }
+
+    /// 좌표(XZ) 위로 레이를 내려 쏴서 가구 콜리전(groundGroup, 이동 중 실시간 장애물
+    /// 회피와 같은 그룹) 위/안에 있는지 확인한다. NPCGuestArea 제외 구역은 직원
+    /// 구역·키오스크·좌석 클러스터처럼 수동으로 지정한 영역만 커버해서, 거기 안 잡힌
+    /// 장식용 테이블·화분·진열대 위에 스폰이 순간이동으로 그대로 얹히는 경우가 있었다.
+    /// 실시간 이동은 레이캐스트로 장애물을 피해 걷지만, 스폰은 순간이동이라 이 검사가
+    /// 따로 필요하다. 바닥(y≈0)이 아니라 그보다 뚜렷이 높은 지점에서 걸리면 가구
+    /// 위/안이라고 본다(collision/Cube 프록시 상단이 대략 0.39m 높이).
+    private func isClearOfFurniture(_ point: SIMD2<Float>) -> Bool {
+        guard let scene = worldRoot?.scene else { return true }
+        let probeHeight: Float = 2.0
+        let hits = scene.raycast(origin: [point.x, probeHeight, point.y], direction: [0, -1, 0],
+                                 length: probeHeight, query: .nearest, mask: AppModel.groundGroup)
+        guard let hit = hits.first else { return true }
+        return hit.position.y <= Tuning.furnitureClearanceHeight
     }
 
     func tearDownForOutdoor() {
