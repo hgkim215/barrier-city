@@ -35,6 +35,7 @@ final class BootLoadingOverlay {
     private var materials: [UnlitMaterial] = []
     private var swapIndex = 0
     private var swapTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>?
 
     private init() {}
 
@@ -55,9 +56,19 @@ final class BootLoadingOverlay {
         content.add(anchor)
         self.anchor = anchor
 
-        materials = Self.loadSplashMaterials()
-        guard let firstMaterial = materials.first else { return }
+        // 텍스처 디코딩(PNG→CGImage→TextureResource)은 install()을 막지 않고 별도
+        // Task로 미룬다 — 검은 구체는 이번 프레임에 바로 보이고, Outdoor 씬 로드와
+        // 동시에(백그라운드로) 스플래시 이미지가 준비되는 대로 뒤이어 붙는다.
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let loaded = Self.loadSplashMaterials()
+            guard !Task.isCancelled, self.anchor === anchor, let firstMaterial = loaded.first else { return }
+            self.materials = loaded
+            self.attachSplashPlane(to: anchor, firstMaterial: firstMaterial)
+        }
+    }
 
+    private func attachSplashPlane(to anchor: Entity, firstMaterial: UnlitMaterial) {
         let plane = ModelEntity(
             mesh: .generatePlane(width: Tuning.imageSize, height: Tuning.imageSize),
             materials: [firstMaterial])
@@ -85,12 +96,33 @@ final class BootLoadingOverlay {
     private static func loadSplashMaterials() -> [UnlitMaterial] {
         var result: [UnlitMaterial] = []
         for name in SplashSequence.resourceNames {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
-                  let uiImage = UIImage(contentsOfFile: url.path),
-                  let cgImage = uiImage.cgImage,
-                  let texture = try? TextureResource(image: cgImage, options: .init(semantic: .color))
-            else {
-                logger.error("스플래시 리소스 로드 실패: \(name, privacy: .public).png")
+            guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
+                logger.error("스플래시 리소스 없음: \(name, privacy: .public).png (번들에 포함되지 않음)")
+                return []
+            }
+            guard let uiImage = UIImage(contentsOfFile: url.path), let cgImage = uiImage.cgImage else {
+                logger.error("스플래시 이미지 디코딩 실패: \(name, privacy: .public).png")
+                return []
+            }
+            // TextureResource(image:)는 CGImage의 픽셀 포맷(색공간·알파 배치 등)이
+            // 기대와 다르면 조용히 throw할 수 있다. 원본 PNG의 색 프로필/알파 배치가
+            // 무엇이든 항상 성공하도록, 표준 sRGB·premultiplied-last 8bit RGBA로
+            // 다시 그려 넘긴다 — 실기에서 "검은 구체만 계속 보이는" 현상의 실제
+            // 원인이 여기(구버전엔 try?로 조용히 삼켜짐)였을 가능성이 크다.
+            guard let normalized = normalizeToRGBA8(cgImage) else {
+                logger.error("스플래시 이미지 정규화 실패: \(name, privacy: .public).png")
+                return []
+            }
+            let texture: TextureResource
+            do {
+                // 화면에 항상 같은 크기로 고정 표시되는 2D 스플래시라 밉맵이 불필요하다.
+                // 밉맵 생성을 끄면 로드가 더 빠르고(백그라운드 애셋 최적화), 밉맵 체인
+                // 생성 과정에서 발생할 수 있는 실패 경로도 함께 제거된다.
+                texture = try TextureResource(
+                    image: normalized,
+                    options: .init(semantic: .color, mipmapsMode: .none))
+            } catch {
+                logger.error("스플래시 텍스처 생성 실패: \(name, privacy: .public).png — \(String(describing: error), privacy: .public)")
                 return []
             }
             var material = UnlitMaterial()
@@ -105,6 +137,26 @@ final class BootLoadingOverlay {
         return result
     }
 
+    /// 원본 CGImage가 어떤 색공간·알파 배치로 디코딩됐든 표준 8bit sRGB RGBA
+    /// (premultiplied-last)로 다시 그려 반환한다.
+    private static func normalizeToRGBA8(_ image: CGImage) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
     private func advanceSplash() {
         guard materials.count > 1, let imagePlane else { return }
         swapIndex = (swapIndex + 1) % materials.count
@@ -113,6 +165,8 @@ final class BootLoadingOverlay {
 
     /// 모든 프리로드가 끝나면 호출해 화면을 걷어낸다.
     func remove() {
+        loadTask?.cancel()
+        loadTask = nil
         swapTask?.cancel()
         swapTask = nil
         anchor?.removeFromParent()
