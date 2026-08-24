@@ -19,6 +19,8 @@ enum SceneSwitcher {
         let collisionShapeCount: Int
         let smoothie: Entity?
         let waypoint: Entity?
+        let cake: Entity?
+        let latte: Entity?
     }
 
     private struct IndoorLayout {
@@ -155,7 +157,10 @@ enum SceneSwitcher {
             in: prepared.visible)
         app.waypointPresenter.install(in: prepared.visible)
         app.rainbowSmoothieServing.enterIndoor()
-        app.npcGuests.enterIndoor(worldRoot: worldRoot, indoorMap: prepared.visible)
+        app.npcGuests.enterIndoor(worldRoot: worldRoot,
+                                  indoorMap: prepared.visible,
+                                  cakeTemplate: prepared.cake,
+                                  latteTemplate: prepared.latte)
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y
@@ -235,6 +240,13 @@ enum SceneSwitcher {
             named: ImmersiveSceneCatalog.wayPoint,
             in: realityKitContentBundle)
         try Task.checkCancellation()
+        // 손님 테이블에 무작위로 얹을 디저트 템플릿. 씬(Indoor.usda)에는 배치돼 있지 않고
+        // rkassets 카탈로그의 독립 에셋이라 RainbowSmoothie/WayPoint와 같은 방식으로 이름으로
+        // 직접 불러온다 — 못 불러와도(nil) 손님 착석 자체는 그대로 진행된다.
+        let cake = try? await Entity(named: ImmersiveSceneCatalog.cake, in: realityKitContentBundle)
+        try Task.checkCancellation()
+        let latte = try? await Entity(named: ImmersiveSceneCatalog.latte, in: realityKitContentBundle)
+        try Task.checkCancellation()
 
         // Indoor에 아직 collision 네이밍 메시가 없으면 0개일 수 있다. 씬에 상주하는
         // 공통 바닥 충돌이 접지를 담당하며, 실내 벽 콜리전은 별도 에셋 작업 대상이다.
@@ -242,7 +254,9 @@ enum SceneSwitcher {
                                    collision: collision,
                                    collisionShapeCount: collisionShapeCount,
                                    smoothie: smoothie,
-                                   waypoint: waypoint)
+                                   waypoint: waypoint,
+                                   cake: cake,
+                                   latte: latte)
     }
 
     /// 비활성 상태로 worldRoot에 연결된 Indoor 엔티티에서 트리거와 스폰 포즈를 계산한다.

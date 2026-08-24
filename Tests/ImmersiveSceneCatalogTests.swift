@@ -31,6 +31,18 @@ struct ImmersiveSceneCatalogTests {
         guard FileManager.default.fileExists(atPath: smoothieAsset.path) else {
             fail("configured smoothie has no USDZ asset: \(smoothieAsset.path)")
         }
+        let cakeAsset = assetDirectory
+            .appendingPathComponent(ImmersiveSceneCatalog.cake)
+            .appendingPathExtension("usdz")
+        guard FileManager.default.fileExists(atPath: cakeAsset.path) else {
+            fail("configured cake dessert has no USDZ asset: \(cakeAsset.path)")
+        }
+        let latteAsset = assetDirectory
+            .appendingPathComponent(ImmersiveSceneCatalog.latte)
+            .appendingPathExtension("usdz")
+        guard FileManager.default.fileExists(atPath: latteAsset.path) else {
+            fail("configured latte dessert has no USDZ asset: \(latteAsset.path)")
+        }
         guard let indoorSource = try? String(contentsOf: indoorAsset, encoding: .utf8),
               indoorSource.contains("\"\(ImmersiveSceneCatalog.barTable)\"") else {
             fail("Indoor scene does not preserve the named BarTable contract")
