@@ -613,9 +613,17 @@ final class NPCGuestCoordinator {
         let tableCenter = SIMD2((surfaceBounds.min.x + surfaceBounds.max.x) * 0.5,
                                 (surfaceBounds.min.z + surfaceBounds.max.z) * 0.5)
         let groupSeatIndices = seatTableGroups.indices.contains(groupIndex) ? seatTableGroups[groupIndex] : []
-        let seatCentroid = groupSeatIndices.isEmpty
+        // WoodTable처럼 좌석이 아주 많은(19개) 긴 벤치형 테이블에서는 그중 실제로
+        // 앉아있는 손님이 한둘뿐이어도 전체 좌석 평균을 쓰면 디저트가 빈 좌석까지
+        // 포함한 테이블 중앙 부근에 놓여 정작 앉은 손님과는 멀어진다. 지금 실제로
+        // 점유된 좌석만으로 중심을 잡는다.
+        let occupiedSeatIndices = groupSeatIndices.filter {
+            seatOccupants.indices.contains($0) && seatOccupants[$0] != nil
+        }
+        let anchorSeatIndices = occupiedSeatIndices.isEmpty ? groupSeatIndices : occupiedSeatIndices
+        let seatCentroid = anchorSeatIndices.isEmpty
             ? tableCenter
-            : groupSeatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(groupSeatIndices.count)
+            : anchorSeatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(anchorSeatIndices.count)
         spawnDessertProps(forTableGroup: groupIndex, surfaceMin: surfaceBounds.min, surfaceMax: surfaceBounds.max,
                           towardDiners: seatCentroid - tableCenter, worldRoot: worldRoot)
     }
@@ -656,7 +664,13 @@ final class NPCGuestCoordinator {
 
         let forward = simd_length(direction) > 0.001 ? simd_normalize(direction) : SIMD2<Float>(0, 1)
         let right = SIMD2<Float>(forward.y, -forward.x)
-        let forwardPull = min(insetHalfWidth, insetHalfDepth) * DessertTuning.towardDinersPullFraction
+        // min(insetHalfWidth, insetHalfDepth)로 pull 거리를 한 축에 묶어두면, WoodTable처럼
+        // 한쪽 축(길이)이 다른 축(폭)보다 훨씬 긴 벤치형 테이블에서 문제가 된다 — 손님이
+        // 테이블 길이 방향으로 멀리 앉아 있어도 짧은 폭 기준으로만 당겨져, 디저트가 손님과
+        // 멀리 떨어진 테이블 중앙 부근에 남았다. direction(정규화 전)의 실제 거리를 그대로
+        // pull에 써서 필요한 만큼 그 축으로 당기고, 테이블 밖으로 넘어가지 않게는 아래에서
+        // x/z를 각자의 inset 범위로 클램프한다.
+        let forwardPull = simd_length(direction) * DessertTuning.towardDinersPullFraction
 
         enum DessertCase: CaseIterable { case cakeOnly, latteOnly, both }
         var placements: [(template: Entity, targetHeight: Float, lateralOffset: Float)] = []
