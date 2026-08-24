@@ -362,6 +362,14 @@ final class NPCClerkController {
         beginGreeting(isRemoteDevelopmentConversation: true)
     }
 
+    /// 대화 패널의 "대화 종료" 버튼에서 호출한다. 사용자가 멀어져서 자동으로 끝나는
+    /// 경로(endEncounterForDeparture)와 완전히 같은 정리를 타되, 거리와 무관하게
+    /// 언제든 명시적으로 끝낼 수 있게 한다.
+    func endConversation() {
+        guard conversationAnchor != nil || phase == .greeting || phase == .conversing else { return }
+        endEncounterForDeparture()
+    }
+
     // MARK: - Placement
 
     private struct Placement {
