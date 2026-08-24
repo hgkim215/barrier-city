@@ -98,32 +98,42 @@ struct ControlPanelView: View {
                           systemImage: "xmark.circle.fill")
                 }
             case .closed, .opening:
-                Button {
-                    Task { @MainActor in
-                        guard let generation = model.beginImmersiveOpen() else { return }
-                        immersiveError = nil
-                        switch await openSpace(id: "wheelchair") {
-                        case .opened:
-                            model.completeImmersiveOpen(generation: generation, succeeded: true)
-                        case .userCancelled:
-                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                immersiveError = "몰입 공간 열기가 취소되었습니다."
-                            }
-                        case .error:
-                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
-                            }
-                        @unknown default:
-                            if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                VStack(spacing: 8) {
+                    Button {
+                        openWindow(id: AppSceneID.start)
+                    } label: {
+                        Label("시작 화면 열기 (정면 정렬)", systemImage: "play.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        Task { @MainActor in
+                            guard let generation = model.beginImmersiveOpen() else { return }
+                            immersiveError = nil
+                            switch await openSpace(id: AppSceneID.wheelchair) {
+                            case .opened:
+                                model.completeImmersiveOpen(generation: generation, succeeded: true)
+                            case .userCancelled:
+                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                    immersiveError = "몰입 공간 열기가 취소되었습니다."
+                                }
+                            case .error:
+                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                    immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
+                                }
+                            @unknown default:
+                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
+                                    immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
+                                }
                             }
                         }
+                    } label: {
+                        Label("몰입 공간 직접 열기 (디버그 창 기준)", systemImage: "figure.roll")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label(model.immersiveSessionState.controlTitle,
-                          systemImage: "figure.roll")
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
             }
 
             if let immersiveError {
@@ -134,7 +144,7 @@ struct ControlPanelView: View {
             }
 
             Button {
-                openWindow(id: "npc-dialogue-test")
+                openWindow(id: AppSceneID.npcDialogueTest)
                 Task { @MainActor in
                     await startNPCConversationForDevelopment()
                 }
@@ -404,7 +414,7 @@ struct ControlPanelView: View {
             return model.isImmersive
         }
 
-        switch await openSpace(id: "wheelchair") {
+        switch await openSpace(id: AppSceneID.wheelchair) {
         case .opened:
             model.completeImmersiveOpen(generation: generation, succeeded: true)
             return true

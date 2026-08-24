@@ -60,7 +60,8 @@ final class GuideFlowModel {
 #endif
             return
         }
-        switch QuestModel.shared.advance(on: event) {
+        let outcome = QuestModel.shared.advance(on: event)
+        switch outcome {
         case .ignored:
 #if DEBUG
             Self.logger.debug(
@@ -69,6 +70,9 @@ final class GuideFlowModel {
 #endif
             return
         case .advanced(_, let next):
+            if outcome.completesExperience {
+                AppModel.current?.completeExperience()
+            }
             apply(.questAdvanced(nextIndex: next == nil ? nil : QuestModel.shared.currentIndex))
 #if DEBUG
             Self.logger.notice(

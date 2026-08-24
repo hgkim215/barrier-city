@@ -5,6 +5,7 @@
 xcuserdata/
 *.xcuserstate
 *.xcuserdatad
+*.rcuserdata
 
 # 빌드 산출물
 DerivedData/

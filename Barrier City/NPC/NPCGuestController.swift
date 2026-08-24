@@ -228,21 +228,33 @@ final class NPCGuestController {
                 * movementProfile.separationSide
             steering = targetDirection * 0.35 + side * 0.65
         }
-        return simd_normalize(steering)
+        let len = simd_length(steering)
+        return len > 0.001 ? steering / len : targetDirection
     }
 
     private func face(point: SIMD2<Float>, deltaTime: Float) {
         let delta = point - currentPosition
-        guard simd_length(delta) > 0.001 else { return }
+        guard simd_length(delta) > 0.001, !delta.x.isNaN, !delta.y.isNaN else { return }
         face(direction: simd_normalize(delta), deltaTime: deltaTime)
     }
 
     private func face(direction: SIMD2<Float>, deltaTime: Float) {
-        guard let root = locomotionRoot else { return }
+        guard let root = locomotionRoot,
+              !direction.x.isNaN, !direction.y.isNaN,
+              simd_length(direction) > 0.001 else { return }
         let yaw = atan2(-direction.x, -direction.y) + NPCGuestTuning.forwardYawOffset
+        guard !yaw.isNaN else { return }
         let target = simd_quatf(angle: yaw, axis: [0, 1, 0])
-        let amount = min(1, NPCGuestTuning.turnResponse * deltaTime)
-        root.orientation = simd_slerp(root.orientation, target, amount)
+        let amount = min(1, max(0, NPCGuestTuning.turnResponse * deltaTime))
+        let currentOri = root.orientation
+        if simd_length(currentOri.vector) > 0.001 && !currentOri.vector.x.isNaN {
+            let nextOri = simd_slerp(simd_normalize(currentOri), target, amount)
+            if !nextOri.vector.x.isNaN {
+                root.orientation = nextOri
+            }
+        } else {
+            root.orientation = target
+        }
     }
 
     private func randomWanderTarget(in area: NPCGuestArea,
