@@ -18,7 +18,7 @@ def Xform "Root" (
 {
     reorder nameChildren = ["Collision", "Outdoor", "Timeline", "Ground", "Base", "Stair", "Ramp", "FlowerBed_1", "FlowerBed_2", "FlowerBed_3", "DirectionalLight", "Roads", "Wall_1", "Asphalt", "SkyDome", "MaleIdle", "Building3_1", "Building9", "Buildings", "Wall"]
     quatf xformOp:orient = (0.70710677, 0, 0.70710677, 0)
-    float3 xformOp:translate = (-4.7215567, 0.000015877187, 7.443829)
+    float3 xformOp:translate = (-4.7215824, 0.000016465783, 5.7643023)
     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
     def Xform "Collision" (
@@ -3358,20 +3358,6 @@ def Xform "Root" (
             }
         }
 
-        def "MenuBoard" (
-            active = true
-            customData = {
-                float3 rotationEulerHint = (-1.570796, 3.1415927, 0)
-            }
-            references = @OutdoorAssets/MenuBoard.usdz@
-        )
-        {
-            quatf xformOp:orient = (-4.371139e-8, -5.107037e-16, 1.6414777e-16, 1)
-            float3 xformOp:scale = (1.6, 1.6, 1.6)
-            float3 xformOp:translate = (-4.2606573, 6.1449122, 0.89884233)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-        }
-
         def "UmbrellaStand" (
             active = true
             customData = {
@@ -3819,7 +3805,7 @@ def Xform "Root" (
             customData = {
                 float3 rotationEulerHint = (-1.5707964, 0, -1.5707964)
             }
-            prepend references = @OutdoorAssets/Manhole.usdz@
+            references = @OutdoorAssets/Manhole.usdz@
         )
         {
             quatf xformOp:orient = (0.5, -0.5, 0.5, -0.5)
@@ -3832,7 +3818,7 @@ def Xform "Root" (
                 def Mesh "tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77_1" (
                     active = true
                     prepend apiSchemas = ["MaterialBindingAPI"]
-                    prepend references = </Root/Outdoor/Manhole/tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77/tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77>
+                    references = </Root/Outdoor/Manhole/tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77/tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77>
                 )
                 {
                     uniform bool doubleSided = 1
@@ -3865,7 +3851,7 @@ def Xform "Root" (
                 def Mesh "tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77_2" (
                     active = true
                     prepend apiSchemas = ["MaterialBindingAPI"]
-                    prepend references = </Root/Outdoor/Manhole/tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77/tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77>
+                    references = </Root/Outdoor/Manhole/tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77/tripo_mesh_e21fe792_8b68_45d1_8763_ec9b1c434c77>
                 )
                 {
                     uniform bool doubleSided = 1
@@ -3889,6 +3875,20 @@ def Xform "Root" (
                     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                 }
             }
+        }
+
+        def "MenuBoard" (
+            active = true
+            customData = {
+                float3 rotationEulerHint = (-1.570796, 3.1415927, 0)
+            }
+            references = @OutdoorAssets/MenuBoard.usdz@
+        )
+        {
+            quatf xformOp:orient = (-4.371139e-8, -5.107037e-16, 1.6414777e-16, 1)
+            float3 xformOp:scale = (1.6, 1.6, 1.6)
+            float3 xformOp:translate = (-4.2606573, 6.1449122, 0.89884233)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
         }
     }
 }

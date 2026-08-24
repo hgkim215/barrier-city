@@ -149,24 +149,6 @@
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
-        "Outdoor",
-        "Manhole"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
         "Roads",
         "Road_7"
       ],
@@ -313,28 +295,8 @@
       [
         "7808C05B-485F-4339-ADE8-F7BA9133C11B",
         "Root",
-        "Outdoor",
-        "Manhole",
-        "tripo_node_e21fe792_8b68_45d1_8763_ec9b1c434c77"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
         "Roads",
         "Road_2"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "7808C05B-485F-4339-ADE8-F7BA9133C11B",
-        "Root",
-        "Outdoor"
       ],
       {
         "isExpanded" : true,
@@ -852,8 +814,11 @@
       [
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
-        "Kiosk",
-        "Screen"
+        "Indoor",
+        "Furnitures",
+        "Chair",
+        "LongChair",
+        "tripo_node_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc"
       ],
       {
         "isExpanded" : true,
@@ -862,11 +827,8 @@
       [
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
-        "Indoor",
-        "Furnitures",
-        "Chair",
-        "WoodChair",
-        "tripo_node_298ba361_983f_4071_8dd2_c0efcf9c6965"
+        "Kiosk",
+        "Screen"
       ],
       {
         "isExpanded" : true,
@@ -928,18 +890,6 @@
         "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
         "Root",
         "Wood"
-      ],
-      {
-        "isExpanded" : true,
-        "isLocked" : false
-      },
-      [
-        "E8EAEBD6-3068-4A1F-8F33-A31C754B3C66",
-        "Root",
-        "Indoor",
-        "Furnitures",
-        "Chair",
-        "WoodChair"
       ],
       {
         "isExpanded" : true,

@@ -834,7 +834,7 @@ def Xform "Root"
                                 int ui:nodegraph:node:stackingOrder = 1
                                 quatf xformOp:orient = (0.7071067, 0.70710677, 5.338509e-8, -5.338511e-8)
                                 float3 xformOp:scale = (1.2500001, 0.12499999, 1.2500001)
-                                float3 xformOp:translate = (0.002040863, -0.10487175, 0.55959636)
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
                                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
@@ -868,6 +868,7 @@ def Xform "Root"
                             over "SittingPoint"
                             {
                                 rel material:binding = </Root/Indoor/Furnitures/Chair/Chair/tripo_node_06c80f46_9303_47e5_834e_22e8d9037205/tripo_mesh_06c80f46_9303_47e5_834e_22e8d9037205/SittingPoint/DefaultMaterial>
+                                float3 xformOp:translate = (0.0020408633, -0.10487235, 0.6045883)
                             }
                         }
 
@@ -1480,7 +1481,7 @@ def Xform "Root"
 
                     over "tripo_node_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc"
                     {
-                        reorder nameChildren = ["tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc", "SittingPoint", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_1", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_2", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_3", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_4", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_5"]
+                        reorder nameChildren = ["tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_1", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_2", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_3", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_4", "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_5", "SittingPoint"]
                         def Mesh "tripo_mesh_8282e8ab_2ee0_4c45_9454_11fe2c93a0dc_1" (
                             active = true
                             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -1624,6 +1625,158 @@ def Xform "Root"
                             float3 xformOp:translate = (-0.065944195, 0.8216187, 1.268927e-7)
                             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
+
+                        def Cylinder "SittingPoint" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (40, 40)
+                            int ui:nodegraph:node:stackingOrder = 2
+                            quatf xformOp:orient = (1.15202326e-7, 8.432145e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.058823515, 0.5882352)
+                            float3 xformOp:translate = (0.15377331, 0.88951993, 0.33076674)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_1" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (60, 60)
+                            int ui:nodegraph:node:stackingOrder = 3
+                            quatf xformOp:orient = (1.1520234e-7, 8.43215e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.05882352, 0.5882352)
+                            float3 xformOp:translate = (-0.38990355, 0.88951993, 0.33077058)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_2" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (80, 80)
+                            int ui:nodegraph:node:stackingOrder = 4
+                            quatf xformOp:orient = (1.1520234e-7, 8.43215e-9, 0.70710677, 0.70710677)
+                            float3 xformOp:scale = (0.5882352, 0.058823522, 0.5882352)
+                            float3 xformOp:translate = (-1.249629, 0.88952017, 0.33077416)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_3" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (100, 100)
+                            int ui:nodegraph:node:stackingOrder = 5
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-2.0146484, 0.8895203, 0.33077636)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_4" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (120, 120)
+                            int ui:nodegraph:node:stackingOrder = 6
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-2.0146422, -0.06919956, 0.3307809)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_5" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (140, 140)
+                            int ui:nodegraph:node:stackingOrder = 7
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-1.2787199, -0.069202185, 0.33078456)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_6" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (160, 160)
+                            int ui:nodegraph:node:stackingOrder = 8
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (-0.3828001, -0.069206, 0.33078775)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        def Cylinder "SittingPoint_7" (
+                            active = true
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            uniform token axis = "Y"
+                            double height = 0.2
+                            rel material:binding = </Root/invisible> (
+                                bindMaterialAs = "weakerThanDescendants"
+                            )
+                            double radius = 0.1
+                            float2 ui:nodegraph:node:pos = (180, 180)
+                            int ui:nodegraph:node:stackingOrder = 9
+                            quatf xformOp:orient = (1.1520234e-7, 8.432155e-9, 0.70710677, 0.7071067)
+                            float3 xformOp:scale = (0.5882352, 0.058823526, 0.5882352)
+                            float3 xformOp:translate = (0.10937452, -0.06920719, 0.33079112)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
                     }
                 }
 
@@ -1675,7 +1828,7 @@ def Xform "Root"
                                 int ui:nodegraph:node:stackingOrder = 2
                                 quatf xformOp:orient = (0.70710677, 0.70710677, 5.3385097e-8, -5.3385094e-8)
                                 float3 xformOp:scale = (1.9999995, 0.19999993, 1.9999995)
-                                float3 xformOp:translate = (0.025774004, -0.0031034949, 0.9762739)
+                                float3 xformOp:translate = (0.02584553, -0.0030856135, 1.0543412)
                                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                             }
                         }
