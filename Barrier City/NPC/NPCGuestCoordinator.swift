@@ -166,8 +166,10 @@ final class NPCGuestCoordinator {
     private var tableSurfaceBoundsByGroupIndex: [(min: SIMD3<Float>, max: SIMD3<Float>)?] = []
     /// 이미 디저트를 배정한 테이블 그룹 인덱스(같은 테이블에 손님이 여러 명 앉아도 한 번만).
     private var dessertAssignedTableGroups: Set<Int> = []
-    /// 배치한 디저트 prop들. tearDownForOutdoor에서 정리한다.
-    private var placedDessertProps: [Entity] = []
+    /// 배치한 디저트 prop들을 테이블 그룹별로 담아 둔다 — cycler가 자동으로 일어나
+    /// 테이블이 완전히 비면(removeDessertIfTableNowEmpty) 그 테이블 몫만 정확히
+    /// 치울 수 있어야 하기 때문에, 예전처럼 하나의 평평한 배열로 두지 않는다.
+    private var placedDessertPropsByTableGroup: [Int: [Entity]] = [:]
     private var worldRoot: Entity?
     private var cakeTemplate: Entity?
     private var latteTemplate: Entity?
@@ -545,8 +547,10 @@ final class NPCGuestCoordinator {
         seatIndexToTableGroupIndex.removeAll()
         tableSurfaceBoundsByGroupIndex.removeAll()
         dessertAssignedTableGroups.removeAll()
-        for prop in placedDessertProps { prop.removeFromParent() }
-        placedDessertProps.removeAll()
+        for props in placedDessertPropsByTableGroup.values {
+            for prop in props { prop.removeFromParent() }
+        }
+        placedDessertPropsByTableGroup.removeAll()
         worldRoot = nil
         cakeTemplate = nil
         latteTemplate = nil
@@ -570,8 +574,27 @@ final class NPCGuestCoordinator {
         let seatCentroid = groupSeatIndices.isEmpty
             ? tableCenter
             : groupSeatIndices.reduce(SIMD2<Float>.zero) { $0 + seats[$1].position } / Float(groupSeatIndices.count)
-        spawnDessertProps(surfaceMin: surfaceBounds.min, surfaceMax: surfaceBounds.max,
+        spawnDessertProps(forTableGroup: groupIndex, surfaceMin: surfaceBounds.min, surfaceMax: surfaceBounds.max,
                           towardDiners: seatCentroid - tableCenter, worldRoot: worldRoot)
+    }
+
+    /// 이 테이블 그룹의 좌석을 전부 비운 손님이 방금 일어났다면(cycler 자동 기립),
+    /// 디저트도 함께 치운다 — 아무도 없는 테이블에 음식만 남아있으면 어색하다.
+    /// 아직 같은 테이블에 다른 손님이 남아있으면 그대로 둔다.
+    private func removeDessertIfTableNowEmpty(forSeatIndex seatIndex: Int) {
+        guard seatIndexToTableGroupIndex.indices.contains(seatIndex),
+              let groupIndex = seatIndexToTableGroupIndex[seatIndex],
+              dessertAssignedTableGroups.contains(groupIndex),
+              seatTableGroups.indices.contains(groupIndex) else { return }
+        let stillOccupied = seatTableGroups[groupIndex].contains { otherSeatIndex in
+            seatOccupants.indices.contains(otherSeatIndex) && seatOccupants[otherSeatIndex] != nil
+        }
+        guard !stillOccupied else { return }
+        dessertAssignedTableGroups.remove(groupIndex)
+        for prop in placedDessertPropsByTableGroup.removeValue(forKey: groupIndex) ?? [] {
+            prop.removeFromParent()
+        }
+        Self.seatingLogger.notice("테이블 그룹 \(groupIndex) 완전히 비어 디저트 정리")
     }
 
     /// 테이블 표면 바운즈(=maybeSpawnDessert가 seatTableGroups 기준으로 합친 앵커 부피) 상단
@@ -580,7 +603,7 @@ final class NPCGuestCoordinator {
     /// 기준점 정렬)을 그대로 따른다. towardDiners는 테이블 중심에서 그 테이블에 앉은
     /// 손님들 쪽을 향하는 벡터로, 긴 테이블에서도 디저트가 손님과 먼 반대편이 아니라 앞쪽
     /// 가장자리 근처에 오게 한다.
-    private func spawnDessertProps(surfaceMin: SIMD3<Float>, surfaceMax: SIMD3<Float>,
+    private func spawnDessertProps(forTableGroup groupIndex: Int, surfaceMin: SIMD3<Float>, surfaceMax: SIMD3<Float>,
                                    towardDiners direction: SIMD2<Float>, worldRoot: Entity) {
         guard RainbowSmoothiePlacement.hasFiniteOrderedBounds(minimum: surfaceMin, maximum: surfaceMax) else { return }
         let surfaceY = surfaceMax.y + DessertTuning.surfaceClearance
@@ -644,7 +667,7 @@ final class NPCGuestCoordinator {
             let restingOffset = surfaceY - prop.visualBounds(relativeTo: worldRoot).min.y
             prop.position.y += restingOffset
 
-            placedDessertProps.append(prop)
+            placedDessertPropsByTableGroup[groupIndex, default: []].append(prop)
         }
     }
 
@@ -709,10 +732,14 @@ final class NPCGuestCoordinator {
 
             // 좌석 점유/해제는 이 프레임의 update() 결과를 반영해 처리한다: 방금
             // 일어선 자리를 같은 프레임에 바로 다른 손님에게 내줄 수 있어 빈 프레임
-            // 없이 자연스럽게 이어진다.
+            // 없이 자연스럽게 이어진다. 이 신호는 두 경우에 온다 — 좌석으로 걸어가다
+            // 막혀서 못 앉은 경우(이땐 디저트가 아직 없으니 아래 정리는 항상 no-op)와,
+            // cycler가 앉아있던 시간이 다 돼 스스로 일어난 경우(이땐 그 테이블에 남은
+            // 손님이 없으면 디저트도 함께 치운다).
             if let vacatedIndex = guest.takeVacatedSeatIndex(), vacatedIndex < seatOccupants.count {
                 seatOccupants[vacatedIndex] = nil
-                Self.seatingLogger.notice("\(guest.name) 좌석 \(vacatedIndex) 접근 실패(막힘)로 반납, 위치=(\(guest.currentPosition.x), \(guest.currentPosition.y))")
+                Self.seatingLogger.notice("\(guest.name) 좌석 \(vacatedIndex) 비움(막힘 또는 자동 기립), 위치=(\(guest.currentPosition.x), \(guest.currentPosition.y))")
+                removeDessertIfTableNowEmpty(forSeatIndex: vacatedIndex)
             }
             if guest.takeSeatRequest(), let freeSeatIndex = bestFreeSeatIndex() {
                 seatOccupants[freeSeatIndex] = index

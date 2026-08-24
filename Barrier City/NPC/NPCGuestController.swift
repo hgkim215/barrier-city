@@ -26,8 +26,9 @@ enum NPCGuestAnimationCue: String {
 enum NPCGuestRole {
     /// 절대 앉지 않고 계속 배회한다. 대기줄 후보.
     case alwaysWandering
-    /// 배회하다가(손님마다 다른 확률로) 좌석을 찾아 딱 한 번 앉고, 그 뒤로는
-    /// seatedPool과 마찬가지로 다시 일어나지 않는다. 배회 중일 때만 대기줄 후보.
+    /// 배회↔착석을 실제로 반복한다: 좌석을 찾아 앉고, 10~15초(NPCGuestTuning.
+    /// sittingDurationRange) 뒤 자동으로 일어나 다시 배회하다 새 좌석에 앉는다.
+    /// 배회 중일 때만 대기줄 후보(착석 중이거나 좌석으로 이동 중일 때는 제외).
     case cycler
     /// 입장 시 가능하면 이미 앉은 채로 시작하고, 한 번 앉으면 다시 일어나지 않는
     /// "그냥 앉아만 있는" 손님이다. 좌석이 부족해 배회로 시작하더라도 자리를
@@ -76,12 +77,24 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
+        /// cycler가 한 좌석에 계속 앉아있는 시간(초). 이 시간이 지나면 자동으로
+        /// 일어나 다시 배회하다 새 좌석을 찾는다 — 카페가 계속 사람이 들고 나는
+        /// 느낌을 주기 위함이다. cycler는 3명뿐이라 이 순환에 참여하는 인원이
+        /// 동시에 3명을 넘는 일은 구조적으로 없다.
+        static let sittingDurationRange: ClosedRange<Float> = 10...15
+        /// Sit_to_Stand 애니메이션이 다 재생될 시간(초). 이 시간 동안은 새 배회
+        /// 목적지를 고르지 않는다 — 그렇지 않으면 일어나자마자 Walk가 요청돼
+        /// 기립 애니메이션이 한 프레임만 보이고 바로 끊긴다.
+        static let standUpAnimationDuration: Float = 1.0
     }
 
     private enum SeatState {
         case none
         case movingToSeat
         case sitting
+        /// Sit_to_Stand 애니메이션이 재생되는 짧은 구간(standUpAnimationDuration).
+        /// 이 동안은 배회 목적지를 고르지 않아 애니메이션이 끊기지 않는다.
+        case standingUp
     }
 
     /// 전원이 같은 속도와 정지 주기로 움직이면 군무처럼 보인다. 손님마다 생성 시 한 번
@@ -124,6 +137,12 @@ final class NPCGuestController {
     private var seatState: SeatState = .none
     private var claimedSeatIndex: Int?
     private var claimedSeat: GuestSeat?
+    /// cycler가 착석한 뒤 자동으로 일어날 때까지 남은 시간(초). role == .cycler로
+    /// 착석했을 때만 값이 채워진다 — seatedPool은 영구 착석이라 항상 nil이다.
+    private var sittingRemaining: Float?
+    /// seatState == .standingUp 동안 Sit_to_Stand 애니메이션이 끊기지 않도록 두는
+    /// 남은 시간(초).
+    private var standingUpRemaining: Float?
     /// 코디네이터가 다음 프레임에 한 번만 소비하는 원샷 신호. 착석을 원한다는 요청과,
     /// 방금 자리를 비웠다는 통지에 쓴다(takeSeatRequest/takeVacatedSeatIndex 참고).
     private var pendingSeatRequest = false
@@ -280,6 +299,8 @@ final class NPCGuestController {
         seatState = .none
         claimedSeatIndex = nil
         claimedSeat = nil
+        sittingRemaining = nil
+        standingUpRemaining = nil
         pendingSeatRequest = false
         pendingVacatedSeatIndex = nil
         pendingSeatedArrivalIndex = nil
@@ -329,7 +350,24 @@ final class NPCGuestController {
                                exclusions: staffExclusions)
             return
         case .sitting:
-            // 한 번 앉으면 다시 일어나지 않는다 — 할 일이 없다.
+            // seatedPool은 sittingRemaining이 nil이라 여기서 끝 — 영구 착석.
+            guard var remaining = sittingRemaining else { return }
+            remaining -= deltaTime
+            if remaining > 0 {
+                sittingRemaining = remaining
+                return
+            }
+            standUpAndResumeWandering()
+            return
+        case .standingUp:
+            guard var remaining = standingUpRemaining else { seatState = .none; return }
+            remaining -= deltaTime
+            if remaining > 0 {
+                standingUpRemaining = remaining
+                return
+            }
+            standingUpRemaining = nil
+            seatState = .none
             return
         case .none:
             break
@@ -438,6 +476,24 @@ final class NPCGuestController {
 
     // MARK: - Seating
 
+    /// cycler 전용: 앉아있던 시간(sittingDurationRange)이 다 되면 자동으로 일어나
+    /// 다시 배회 상태로 돌아간다. 방금 앉아있던 좌석은 pendingVacatedSeatIndex로
+    /// 코디네이터에 알려 비워지고(그 테이블에 다른 손님이 안 남아있으면 코디네이터가
+    /// 디저트도 함께 치운다), 이후 정상적인 배회→확률적 착석 요청 경로가 새 좌석을
+    /// 찾아준다 — 배회 손님이 카페에 계속 들고 나는 느낌을 준다.
+    private func standUpAndResumeWandering() {
+        playAnimation(.sitToStand)
+        locomotionRoot?.position.y = 0
+        pendingVacatedSeatIndex = claimedSeatIndex
+        claimedSeatIndex = nil
+        claimedSeat = nil
+        seatState = .standingUp
+        sittingRemaining = nil
+        standingUpRemaining = NPCGuestTuning.standUpAnimationDuration
+        wanderTarget = nil
+        pauseRemaining = 0
+    }
+
     /// exclusions는 호출부(update)가 staffExclusions(직원 구역만)를 넘긴다 — 테이블
     /// 좌석 클러스터 제외 구역까지 넘기면 목적지인 좌석 자체와 충돌한다(update의
     /// 문서 주석 참고).
@@ -478,6 +534,12 @@ final class NPCGuestController {
             playAnimation(.sitting)
             locomotionRoot?.position.y = seat.sittingHeightOffset
             pendingSeatedArrivalIndex = claimedSeatIndex
+            // cycler만 자동으로 다시 일어난다 — seatedPool은 영구 착석이라 타이머를
+            // 두지 않는다(sittingRemaining이 nil로 남아 update()의 .sitting 분기가
+            // 아무것도 하지 않는다).
+            if role == .cycler {
+                sittingRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
+            }
         } else {
             playAnimation(outcome.moved ? .walk : .idle)
         }
