@@ -212,8 +212,10 @@ struct ImmersiveView: View {
             SceneFadeOverlay.shared.snapOpaque()
             BootLoadingOverlay.shared.remove()
             InteractionModel.shared.isBootLoading = false
-            SceneFadeOverlay.shared.fadeIn()
+            // 음악을 먼저 재생 시작(자체적으로 1.5초에 걸쳐 페이드인됨)한 뒤 화면을
+            // 밝혀, 시야가 밝아지기 전부터 배경음이 들리기 시작하게 한다.
             AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
+            SceneFadeOverlay.shared.fadeIn()
 
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
