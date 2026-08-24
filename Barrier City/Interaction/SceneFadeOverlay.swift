@@ -43,6 +43,16 @@ final class SceneFadeOverlay {
     func fadeOut() { targetOpacity = 1 }
     func fadeIn() { targetOpacity = 0 }
 
+    /// 애니메이션 없이 즉시 완전히 불투명하게 만든다. BootLoadingOverlay(로딩 화면)가
+    /// 이미 화면 전체를 가리고 있는 순간에 맞춰 호출해, 로딩 화면을 걷어내도 화면이
+    /// 끊기지 않고 계속 검게 유지되게 한다 — 그 직후 fadeIn()을 부르면 로딩 화면에서
+    /// 매끄럽게 이어서 밝아지며 도시로 들어가는 느낌을 준다.
+    func snapOpaque() {
+        opacity = 1
+        targetOpacity = 1
+        overlay?.components.set(OpacityComponent(opacity: 1))
+    }
+
     /// InteractionSetup.tick()에서 매 프레임 호출.
     func update(deltaTime: Float) {
         guard let overlay, abs(opacity - targetOpacity) > 0.001 else { return }

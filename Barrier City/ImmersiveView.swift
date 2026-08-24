@@ -61,7 +61,8 @@ struct ImmersiveView: View {
             worldRoot.components.set(WheelchairComponent())
             content.add(worldRoot)
             model.worldRoot = worldRoot
-            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
+            // 배경음악은 로딩(스플래시) 화면이 끝나고 도시가 페이드인되는 순간에
+            // 맞춰 재생한다 — 아래 로딩 완료 지점(BootLoadingOverlay 제거부) 참고.
 
             // 로딩 화면: Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지 화면을
             // 가린다. 휠체어 입력·문/키오스크 트리거 판정도 같이 멈춘다(isBootLoading).
@@ -197,8 +198,15 @@ struct ImmersiveView: View {
             // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
             _ = await indoorPreload
             _ = await realtimePreconnect
+            // SceneFadeOverlay를 먼저 즉시 불투명하게 만들어(애니메이션 없이) 로딩
+            // 화면(BootLoadingOverlay, 스플래시 이미지)을 걷어내도 화면이 계속 검게
+            // 유지되게 한 뒤, fadeIn으로 매끄럽게 밝아지며 도시로 들어가는 느낌을
+            // 준다. 배경음악도 이 순간(도시 진입 시점)에 맞춰 재생한다.
+            SceneFadeOverlay.shared.snapOpaque()
             BootLoadingOverlay.shared.remove()
             InteractionModel.shared.isBootLoading = false
+            SceneFadeOverlay.shared.fadeIn()
+            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
 
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
