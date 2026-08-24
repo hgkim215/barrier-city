@@ -73,6 +73,16 @@ final class NPCGuestController {
         /// 재생되며 결과적으로 Walk가 끊기지 않는 것처럼 보인다. 잠깐 멈춰 있다가
         /// 다시 시도하게 해 이 진동을 막는다.
         static let blockedPauseRange: ClosedRange<Float> = 0.2...0.5
+        /// 이 시간(초) 동안의 순 이동 거리가 stallMinimumDistance보다 작으면 "제자리
+        /// 걸음"으로 본다. blockedStepFraction은 프레임 하나만 보지만, 장애물에 얕은
+        /// 각도로 걸려 매 프레임 방향이 조금씩 상쇄되면(예: 밀렸다 되밀렸다) 프레임별
+        /// 이동량은 40%를 넘어 "막힘"으로 안 잡히면서도 몇 초간 순 이동은 거의 없는
+        /// 경우가 있었다 — Walk 애니메이션은 계속 재생되는데 실제로는 흔들리기만 하고
+        /// 거의 안 나아가는 것처럼 보였다.
+        static let stallCheckInterval: Float = 1.2
+        /// 가장 느린 손님(moveSpeed 0.68m/s)도 이 시간 동안 정상적으로는 훨씬 더
+        /// 멀리 가므로, 이보다 적게 나아갔으면 확실히 막힌 것으로 본다.
+        static let stallMinimumDistance: Float = 0.15
         /// 자유 배회 목적지끼리 이 정도 간격을 우선 확보한다.
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
@@ -132,6 +142,12 @@ final class NPCGuestController {
     private var currentCue: NPCGuestAnimationCue?
     private var wanderTarget: SIMD2<Float>?
     private var pauseRemaining: Float = 0
+    /// "제자리걸음" 감지용(NPCGuestTuning.stallCheckInterval 참고). move()의 목적지가
+    /// 바뀌면(새 배회 목적지, 좌석 이동 시작 등) 그 즉시 리셋해, 정상적으로 도착한 뒤
+    /// 다음 다리를 걷기 시작하는 것까지 오탐하지 않게 한다.
+    private var stallCheckTarget: SIMD2<Float>?
+    private var stallCheckTimer: Float = 0
+    private var stallCheckStartPosition: SIMD2<Float>?
     private let movementProfile: MovementProfile
 
     private var seatState: SeatState = .none
@@ -580,6 +596,16 @@ final class NPCGuestController {
             return MoveOutcome(arrived: false, moved: false, blocked: false)
         }
         let current = SIMD2<Float>(root.position.x, root.position.z)
+        // 목적지가 바뀌었으면(새 배회 목적지, 좌석 이동 시작 등) 제자리걸음 감지 창을
+        // 새로 시작한다 — 그대로 두면 방금 도착해 다음 다리를 반대 방향으로 걷기
+        // 시작한 것까지 "순 이동이 없다"고 오탐할 수 있다. 대기줄처럼 목적지가 유저를
+        // 따라 매 프레임 조금씩 바뀌는 이동은 이 리셋이 계속 일어나 창이 거의 안
+        // 쌓이므로 자연스럽게 감지 대상에서 빠진다(의도한 동작).
+        if stallCheckTarget == nil || simd_distance(stallCheckTarget!, target) > 0.01 {
+            stallCheckTarget = target
+            stallCheckTimer = 0
+            stallCheckStartPosition = current
+        }
         let delta = target - current
         let distance = simd_length(delta)
         guard distance > arrivalDistance else {
@@ -624,11 +650,26 @@ final class NPCGuestController {
         if moved {
             face(direction: direction, deltaTime: deltaTime)
         }
+        // 장애물에 얕은 각도로 걸려 프레임마다 방향이 조금씩 상쇄되면(예: 밀렸다
+        // 되밀렸다), 프레임별로는 매번 blockedStepFraction을 넘어 "막힘"으로 안
+        // 잡히면서도 몇 초간 순 이동은 거의 없을 수 있다 — Walk 애니메이션은 계속
+        // 재생되는데 실제로는 흔들리기만 하고 거의 안 나아가는 것처럼 보인다.
+        // stallCheckInterval 동안의 "시작점 대비 순 이동 거리"를 따로 재서 이런
+        // 경우까지 막힘으로 취급한다.
+        stallCheckTimer += deltaTime
+        var isStalled = false
+        if stallCheckTimer >= NPCGuestTuning.stallCheckInterval {
+            let newPosition = SIMD2<Float>(root.position.x, root.position.z)
+            let netDisplacement = simd_distance(newPosition, stallCheckStartPosition ?? newPosition)
+            isStalled = netDisplacement < NPCGuestTuning.stallMinimumDistance
+            stallCheckTimer = 0
+            stallCheckStartPosition = newPosition
+        }
         // wanderTarget/pauseRemaining 갱신은 호출부(update의 배회·좌석 이동 분기)가
         // blocked를 보고 즉시 처리한다 — 여기서 같이 건드리면 호출부가 막 고른 새
         // 목적지를 다시 지워버리거나, 다음 프레임에 남은 pauseRemaining 때문에
         // "즉시 방향 전환"이 지연될 수 있다.
-        return MoveOutcome(arrived: step >= distance, moved: moved, blocked: isBlocked)
+        return MoveOutcome(arrived: step >= distance, moved: moved, blocked: isBlocked || isStalled)
     }
 
     /// 목표 방향에 개인 공간 반발력을 섞는다. 완전 정면 충돌 시에는 손님별 좌/우
