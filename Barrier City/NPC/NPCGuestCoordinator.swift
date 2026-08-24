@@ -81,6 +81,11 @@ final class NPCGuestCoordinator {
         /// seatedPool 인원을 나눠 서로 다른 테이블에 앉힐 그룹 크기(합이
         /// seatedPoolCount와 같아야 한다).
         static let seatedPoolGroupSizes: [Int] = [1, 2, 3]
+        /// 이 좌석 수 이상인 테이블 그룹은 "공용 테이블"(WoodTable 벤치처럼 여러
+        /// 손님이 나눠 앉는 긴 테이블)로 본다 — pickSeatIndex가 이런 테이블에서는
+        /// 빈자리 없이 인접하게 채우려 한다. 일반 2~4인 테이블은 그보다 훨씬
+        /// 작아서 이 문턱을 넘지 않는다.
+        static let communalTableSeatThreshold = 6
         /// cycler가 입장 즉시 확정 배정받은 좌석 근처(반경 이내)에 스폰돼, 배회 없이
         /// 곧장 좌석으로 걸어가게 한다. 착석 + 디저트 생성이 입장 후 10초 안에 보이도록
         /// 보장하기 위한 값으로, moveSpeed 최저치(0.68m/s)로도 최악의 경우(4.0m) 약
@@ -320,7 +325,7 @@ final class NPCGuestCoordinator {
 
         // seatedPool을 groupSizes(1/2/3명)대로 서로 다른 테이블에 배정하기 위한 좌석
         // 큐. 앞에서부터 하나씩 꺼내 쓰고, 다 떨어지면(테이블이 부족하면)
-        // bestFreeSeatIndex()로 폴백한다.
+        // pickSeatIndex()로 폴백한다.
         var seatedPoolSeatQueue = makeSeatedPoolGroupQueue(groupSizes: Tuning.seatedPoolGroupSizes)
 
         var spawnedPositions: [SIMD2<Float>] = []
@@ -337,14 +342,14 @@ final class NPCGuestCoordinator {
                 let guest = NPCGuestController(name: displayName, role: role, gender: group.gender)
 
                 let seatIndex: Int? = role == .seatedPool
-                    ? (!seatedPoolSeatQueue.isEmpty ? seatedPoolSeatQueue.removeFirst() : bestFreeSeatIndex())
+                    ? (!seatedPoolSeatQueue.isEmpty ? seatedPoolSeatQueue.removeFirst() : pickSeatIndex())
                     : nil
                 if role == .seatedPool, let seatIndex, seatOccupants.indices.contains(seatIndex),
                    seatOccupants[seatIndex] == nil {
                     seatOccupants[seatIndex] = guests.count
                     guest.placeSeated(entity: entity, worldRoot: worldRoot, seatIndex: seatIndex, seat: seats[seatIndex])
                     maybeSpawnDessert(forSeatIndex: seatIndex)
-                } else if role == .cycler, let seatIndex = bestFreeSeatIndex() {
+                } else if role == .cycler, let seatIndex = pickSeatIndex() {
                     // 배회하다 우연히 좌석을 원할 확률(sitDesireChance)에 기대면 유저가
                     // 카페에 들어온 뒤 몇 초 안에 착석·디저트가 보인다는 보장이 안 된다.
                     // 그래서 cycler는 입장 즉시 이 좌석을 확정 배정받고, 좌석 바로 뒤
@@ -387,21 +392,46 @@ final class NPCGuestCoordinator {
         Self.seatingLogger.notice("입장 시 착석: seatedPool \(seatedCount)명 중 \(actuallySeated)명 실제 착석(나머지는 배회로 시작해 빈 좌석이 생기면 합류)")
     }
 
-    /// 빈 좌석 중 현재 앉아있는 손님들과 가장 멀리 떨어진 자리를 고른다. 그냥 첫 번째
-    /// 빈 인덱스를 쓰면 씬 authoring 순서상 같은 테이블의 좌석들이 배열에서 이웃해
-    /// 있어(예: Chair 복제본 19개가 한 테이블에 연달아 있음) 손님들이 한 테이블에만
-    /// 몰려 앉게 된다. 앉은 사람이 아직 없으면 무작위로 고른다.
-    private func bestFreeSeatIndex() -> Int? {
-        let freeIndices = seatOccupants.indices.filter { seatOccupants[$0] == nil }
+    /// 빈 좌석 하나를 고른다. WoodTable처럼 좌석이 아주 많은(19개) 벤치형 "공용
+    /// 테이블"(communalTableSeatThreshold 이상)에 이미 누군가 앉아있다면, 그 옆
+    /// 인접 빈자리(물리적으로 나란히 늘어선 순서 기준)를 우선해 중간에 빈 자리가
+    /// 남지 않게 한다. 그런 자리가 없으면(공용 테이블이 비어있거나 이미 꽉 찼으면)
+    /// 전체 빈 좌석 중 완전히 무작위로 고른다.
+    ///
+    /// 예전에는 "이미 앉아있는 손님들과 가장 멀리 떨어진 자리"를 결정론적으로
+    /// 골랐는데(같은 테이블 좌석끼리 배열에서 이웃해 있어 몰아 앉는 걸 막으려는
+    /// 의도였다), cycler가 자리를 옮길 때마다 매번 같은(가장 외딴) 자리로
+    /// 되돌아가 "고정석에 앉는 것처럼" 보이는 부작용이 있었다.
+    private func pickSeatIndex() -> Int? {
+        let freeIndices = Set(seatOccupants.indices.filter { seatOccupants[$0] == nil })
         guard !freeIndices.isEmpty else { return nil }
-        let occupiedPositions = seatOccupants.indices.compactMap { idx -> SIMD2<Float>? in
-            seatOccupants[idx] != nil ? seats[idx].position : nil
+
+        var adjacentToOccupiedCandidates: [Int] = []
+        for groupIndices in seatTableGroups where groupIndices.count >= Tuning.communalTableSeatThreshold {
+            let ordered = physicallyOrderedSeatIndices(groupIndices)
+            for (position, seatIndex) in ordered.enumerated() where freeIndices.contains(seatIndex) {
+                let hasOccupiedNeighbor =
+                    (position > 0 && seatOccupants[ordered[position - 1]] != nil) ||
+                    (position < ordered.count - 1 && seatOccupants[ordered[position + 1]] != nil)
+                if hasOccupiedNeighbor { adjacentToOccupiedCandidates.append(seatIndex) }
+            }
         }
-        guard !occupiedPositions.isEmpty else { return freeIndices.randomElement() }
-        return freeIndices.max { lhs, rhs in
-            let lhsDistance = occupiedPositions.map { simd_distance($0, seats[lhs].position) }.min() ?? 0
-            let rhsDistance = occupiedPositions.map { simd_distance($0, seats[rhs].position) }.min() ?? 0
-            return lhsDistance < rhsDistance
+        if let picked = adjacentToOccupiedCandidates.randomElement() { return picked }
+        return freeIndices.randomElement()
+    }
+
+    /// 한 테이블의 좌석들을 물리적으로 나란히 늘어선 순서로 정렬한다(예: WoodTable
+    /// 벤치의 왼쪽→오른쪽 순서). 좌석 위치가 더 넓게 퍼진 축(X 또는 Z)을 기준으로
+    /// 투영해 정렬한다 — 인접 배치·빈자리 없는 채움에 쓴다.
+    private func physicallyOrderedSeatIndices(_ groupIndices: [Int]) -> [Int] {
+        guard groupIndices.count > 1 else { return groupIndices }
+        let positions = groupIndices.map { seats[$0].position }
+        let xSpread = (positions.map(\.x).max() ?? 0) - (positions.map(\.x).min() ?? 0)
+        let zSpread = (positions.map(\.y).max() ?? 0) - (positions.map(\.y).min() ?? 0)
+        if xSpread >= zSpread {
+            return groupIndices.sorted { seats[$0].position.x < seats[$1].position.x }
+        } else {
+            return groupIndices.sorted { seats[$0].position.y < seats[$1].position.y }
         }
     }
 
@@ -502,7 +532,10 @@ final class NPCGuestCoordinator {
 
     /// seatedPoolCount 인원을 groupSizes(예: [1, 2, 3])대로 나눠, 각 그룹을 서로 다른
     /// 테이블(seatTableGroups)에 배정한다. 좌석 순서대로 배열해 반환하며, 호출부가
-    /// 앞에서부터 하나씩 꺼내 쓴다.
+    /// 앞에서부터 하나씩 꺼내 쓴다. 같은 일행(size>1)은 물리적으로 나란히 늘어선
+    /// 순서 기준 "연속된" 좌석 구간에서 고른다 — 예전에는 그 테이블의 빈 좌석
+    /// 중에서 완전히 무작위로 size개를 뽑아, 중간에 빈 자리를 남긴 채 듬성듬성
+    /// 앉는 경우가 있었다.
     private func makeSeatedPoolGroupQueue(groupSizes: [Int]) -> [Int] {
         let shuffledGroups = seatTableGroups.indices.shuffled()
         var usedTableGroups: Set<Int> = []
@@ -514,10 +547,11 @@ final class NPCGuestCoordinator {
                     && seatTableGroups[idx].filter({ !usedSeats.contains($0) }).count >= size
             }) else { continue }
             usedTableGroups.insert(groupIndex)
-            let chosen = seatTableGroups[groupIndex]
+            let orderedFree = physicallyOrderedSeatIndices(seatTableGroups[groupIndex])
                 .filter { !usedSeats.contains($0) }
-                .shuffled()
-                .prefix(size)
+            let maxStart = max(0, orderedFree.count - size)
+            let start = Int.random(in: 0...maxStart)
+            let chosen = orderedFree[start..<min(start + size, orderedFree.count)]
             usedSeats.formUnion(chosen)
             queue.append(contentsOf: chosen)
         }
@@ -833,7 +867,7 @@ final class NPCGuestCoordinator {
                 Self.seatingLogger.notice("\(guest.name) 좌석 \(vacatedIndex) 비움(막힘 또는 자동 기립), 위치=(\(guest.currentPosition.x), \(guest.currentPosition.y))")
                 removeDessertIfTableNowEmpty(forSeatIndex: vacatedIndex)
             }
-            if guest.takeSeatRequest(), let freeSeatIndex = bestFreeSeatIndex() {
+            if guest.takeSeatRequest(), let freeSeatIndex = pickSeatIndex() {
                 seatOccupants[freeSeatIndex] = index
                 guest.grantSeat(index: freeSeatIndex, seat: seats[freeSeatIndex])
             }
