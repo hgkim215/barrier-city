@@ -296,6 +296,7 @@ final class NPCGuestCoordinator {
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                     guest.grantSeat(index: seatIndex, seat: seat)
+                    Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 확정 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
                 } else {
                     let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
@@ -645,6 +646,7 @@ final class NPCGuestCoordinator {
             // 없이 자연스럽게 이어진다.
             if let vacatedIndex = guest.takeVacatedSeatIndex(), vacatedIndex < seatOccupants.count {
                 seatOccupants[vacatedIndex] = nil
+                Self.seatingLogger.notice("\(guest.name) 좌석 \(vacatedIndex) 접근 실패(막힘)로 반납, 위치=(\(guest.currentPosition.x), \(guest.currentPosition.y))")
             }
             if guest.takeSeatRequest(), let freeSeatIndex = bestFreeSeatIndex() {
                 seatOccupants[freeSeatIndex] = index
@@ -655,6 +657,7 @@ final class NPCGuestCoordinator {
             // 남는 문제를 막는다.
             if let arrivedSeatIndex = guest.takeSeatedArrivalSeatIndex() {
                 maybeSpawnDessert(forSeatIndex: arrivedSeatIndex)
+                Self.seatingLogger.notice("\(guest.name) 좌석 \(arrivedSeatIndex) 착석 완료")
             }
             if index == sighingGuestIndex, guest.takeQueueArrivalSignal() {
                 guest.playSigh()
