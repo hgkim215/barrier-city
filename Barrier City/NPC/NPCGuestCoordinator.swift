@@ -56,9 +56,11 @@ final class NPCGuestCoordinator {
     private enum Tuning {
         /// _floor 바깥쪽(벽)에 붙어 걷지 않도록 배회 영역에 두는 여백.
         static let floorMargin: Float = 0.5
-        /// 유저와 대기줄 맨 앞사람 사이 간격(m). "바로 뒤"라는 느낌을 주기 위해
-        /// 대기줄 내부 간격(queueSpacing)보다 훨씬 좁게 둔다.
-        static let queueFrontGap: Float = 0.45
+        /// 유저와 대기줄 맨 앞사람 사이 간격(m). 너무 좁으면(예전 0.45) 휠체어가
+        /// 키오스크와 대기줄 맨 앞사람 사이에 끼여 회전할 공간이 없어진다 — 휠체어
+        /// 반경(NPCObstacleAvoidance.wheelchairRadius 0.42m) 기준으로 앞뒤 여유를
+        /// 확보할 수 있게 뒤로 뺐다.
+        static let queueFrontGap: Float = 0.9
         /// 대기줄 안에서 사람과 사람 사이 간격(m). 맨 앞사람과 유저 사이에는 안 쓰고
         /// (queueFrontGap 참고) 그 뒤부터 이 간격으로 늘어선다.
         static let queueSpacing: Float = 0.85
