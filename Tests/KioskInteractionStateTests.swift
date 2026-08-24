@@ -10,8 +10,8 @@ private func expect<T: Equatable>(_ actual: T, _ expected: T, _ message: String)
 struct KioskInteractionStateTests {
     static func main() {
         menuIsVisibleThroughoutIndoorButInputIsGated()
-        generalCategoriesSwitchAndMenusSelect()
-        otherCategoryBlocksWithoutSelecting()
+        allCategoriesBlockWithBarrierPopup()
+        menuSelectWorksOnDefaultCategory()
         dismissKeepsMissionRetryable()
         helpRequestLocksInputAndEmitsOnce()
         sessionResetClearsAllKioskState()
@@ -56,23 +56,22 @@ struct KioskInteractionStateTests {
         expect(state.inputEnabled, true, "near unlocked Mission 2 enables input")
     }
 
-    private static func generalCategoriesSwitchAndMenusSelect() {
-        var state = enabledState()
-        expect(state.selectedCategory, .best, "best is selected initially")
-        expect(state.selectCategory(.coffee, source: .gazePinch), .selected, "coffee switches")
-        expect(state.selectedCategory, .coffee, "coffee remains selected")
-        expect(state.barrierVisible, false, "general category stays usable")
-        expect(state.selectMenu(id: "cafe-latte"), true, "menu can be selected")
-        expect(state.selectedMenuID, "cafe-latte", "menu id is stored")
+    private static func allCategoriesBlockWithBarrierPopup() {
+        for category in KioskCategory.allCases {
+            var state = enabledState()
+            expect(state.selectedCategory, .best, "best is selected initially")
+            expect(state.selectCategory(category, source: .gazePinch), .blocked, "\(category) is blocked")
+            expect(state.selectedCategory, .best, "category remains best")
+            expect(state.barrierVisible, true, "barrier opens for \(category)")
+            expect(state.attemptRestrictedCategory(.handReach), false, "second source deduplicates")
+        }
     }
 
-    private static func otherCategoryBlocksWithoutSelecting() {
+    private static func menuSelectWorksOnDefaultCategory() {
         var state = enabledState()
-        _ = state.selectCategory(.coffee, source: .gazePinch)
-        expect(state.selectCategory(.other, source: .gazePinch), .blocked, "other is blocked")
-        expect(state.selectedCategory, .coffee, "previous category remains")
-        expect(state.barrierVisible, true, "barrier opens")
-        expect(state.attemptRestrictedCategory(.handReach), false, "second source deduplicates")
+        expect(state.selectedCategory, .best, "best is selected initially")
+        expect(state.selectMenu(id: "cafe-latte"), true, "menu can be selected on default category")
+        expect(state.selectedMenuID, "cafe-latte", "menu id is stored")
     }
 
     private static func dismissKeepsMissionRetryable() {
@@ -108,9 +107,9 @@ struct KioskInteractionStateTests {
 
     private static func sessionResetClearsAllKioskState() {
         var state = enabledState()
-        _ = state.selectCategory(.coffee, source: .gazePinch)
         _ = state.selectMenu(id: "cafe-latte")
-        _ = state.selectCategory(.other, source: .handReach)
+        expect(state.selectedMenuID, "cafe-latte", "menu id is stored before reset")
+        _ = state.selectCategory(.coffee, source: .gazePinch)
         _ = state.requestStaffHelp()
 
         state.reset()

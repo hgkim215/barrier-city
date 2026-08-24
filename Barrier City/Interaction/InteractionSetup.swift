@@ -84,24 +84,27 @@ enum InteractionSetup {
             center = SIMD2(p.x, p.z)
         }
 
-        if let worldRoot = appModel.worldRoot,
-                   let cafe = im.visibleMap?.findEntity(named: "Outdoor") {
-                    let bounds = cafe.visualBounds(relativeTo: worldRoot)
-                    cafeCenter = SIMD2(bounds.center.x, bounds.center.z)
-                }
-                let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
-                let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
-                    minimum: SIMD2(repeating: -fallbackHalfExtent),
-                    maximum: SIMD2(repeating: fallbackHalfExtent),
-                    height: 0)
-                let startPosition = OutdoorSessionStart.positionOutsideCafe(
-                    doorCenter: center,
-                    cafeCenter: cafeCenter,
-                    fallbackDoorCenter: InteractionTuning.doorFallbackCenter,
-                    groundMinimum: groundLayout.minimum,
-                    groundMaximum: groundLayout.maximum,
-                    preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
-                    safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
+        var road23Pos: SIMD2<Float>? = nil
+        var road24Pos: SIMD2<Float>? = nil
+        if let worldRoot = appModel.worldRoot {
+            if let r23 = im.visibleMap?.findEntity(named: "Road_23") {
+                let p = r23.position(relativeTo: worldRoot)
+                road23Pos = SIMD2(p.x, p.z)
+            }
+            if let r24 = im.visibleMap?.findEntity(named: "Road_24") {
+                let p = r24.position(relativeTo: worldRoot)
+                road24Pos = SIMD2(p.x, p.z)
+            }
+        }
+        let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
+        let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
+            minimum: SIMD2(repeating: -fallbackHalfExtent),
+            maximum: SIMD2(repeating: fallbackHalfExtent),
+            height: 0)
+        let startPosition = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: road23Pos,
+            road24Position: road24Pos,
+            fallbackPosition: InteractionTuning.roadMidpointFallbackSpawnPosition)
 
         OutdoorSessionStart.reset(
             appModel,
@@ -239,8 +242,11 @@ enum InteractionSetup {
             toward: .zero,
             kind: t.kind)
         panel.setPosition(worldPos, relativeTo: nil)
-        // 3) 사용자를 향하도록 yaw 빌보드.
+        // 3) 사용자를 향하도록 yaw 빌보드 및 상향 틸트 적용.
         let yaw = atan2(-worldPos.x, -worldPos.z)
-        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
+        let yawQuat = simd_quatf(angle: yaw, axis: [0, 1, 0])
+        let pitchAngle = (t.kind == .yesNoPrompt) ? InteractionTuning.doorPromptTiltAngleRadians : 0
+        let pitchQuat = simd_quatf(angle: pitchAngle, axis: [1, 0, 0])
+        panel.setOrientation(yawQuat * pitchQuat, relativeTo: nil)
     }
 }

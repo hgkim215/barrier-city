@@ -14,6 +14,21 @@ protocol OutdoorSessionResettable: AnyObject {
 }
 
 enum OutdoorSessionStart {
+    nonisolated static func roadMidpointPosition(
+        road23Position: SIMD2<Float>?,
+        road24Position: SIMD2<Float>?,
+        fallbackPosition: SIMD2<Float>
+    ) -> SIMD2<Float> {
+        if let r23 = road23Position, let r24 = road24Position {
+            return (r23 + r24) * 0.5
+        } else if let r23 = road23Position {
+            return r23
+        } else if let r24 = road24Position {
+            return r24
+        }
+        return fallbackPosition
+    }
+
     nonisolated static func positionOutsideCafe(
         doorCenter: SIMD2<Float>,
         cafeCenter: SIMD2<Float>,
