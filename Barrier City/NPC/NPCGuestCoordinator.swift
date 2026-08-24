@@ -178,7 +178,8 @@ final class NPCGuestCoordinator {
 
     private enum DessertTuning {
         /// 케이크/라떼를 이 높이(m)로 균일 스케일한다(원본 에셋 크기가 제각각이라 맞춰준다).
-        static let targetCakeHeight: Float = 0.10
+        /// 케이크는 너무 작아 보인다는 피드백으로 기존 값(0.10)의 1.1배로 키웠다.
+        static let targetCakeHeight: Float = 0.11
         /// 라떼가 눈에 띄게 커 보인다는 피드백으로 기존 값(0.16)의 0.5배로 줄였다.
         /// 균일 스케일(targetHeight/authoredHeight)이라 너비·깊이도 함께 절반이 되고,
         /// 배치 위치는 spawnDessertProps가 스케일 적용 후 바운즈를 다시 재서 표면에
