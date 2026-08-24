@@ -188,10 +188,19 @@ enum InteractionSetup {
 
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+        // 대기줄은 키오스크 UI가 열리는 진입 반경(kioskTriggerRadius, 3.0m)이 아니라
+        // 유저가 실제로 키오스크 바로 앞에 서 있을 때(guestQueueTriggerRadius)를
+        // 기준으로 형성한다 — 같은 반경을 쓰면 유저가 트리거 가장자리에 있을 때 줄이
+        // 유저에게서 너무 멀리 떨어져 보인다.
+        let playerPosition = SIMD2(app.motion.positionX, app.motion.positionZ)
+        let isCloseEnoughForQueue = isNearKiosk
+            && im.activeTrigger.map {
+                simd_distance(playerPosition, $0.center) <= InteractionTuning.guestQueueTriggerRadius
+            } == true
         app.npcGuests.update(deltaTime: deltaTime,
                              appModel: app,
-                             isOrdering: isNearKiosk,
-                             kioskCenter: isNearKiosk ? im.activeTrigger?.center : nil)
+                             isOrdering: isCloseEnoughForQueue,
+                             kioskCenter: isCloseEnoughForQueue ? im.activeTrigger?.center : nil)
     }
 
     /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).
