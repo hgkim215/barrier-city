@@ -70,6 +70,10 @@ final class NPCGuestCoordinator {
         static let wandererCount = 1
         /// 배회↔착석↔기립을 반복하는 손님 수(대기줄 후보).
         static let cyclerCount = 3
+        /// 동시에 Walk 애니메이션 중인 손님을 이 인원으로 제한한다 — 카페 전체가
+        /// 한꺼번에 돌아다니면 붐벼 보인다는 피드백. 이미 걷던 손님은 막지 않고
+        /// "새로 걷기 시작하는" 순간만 이 예산을 넘지 않을 때 허용한다.
+        static let maxConcurrentWalkers = 3
         /// 입장 시 가능하면 이미 앉아있는 상태로 시작하는 손님 수(대기줄 제외, 한 번
         /// 앉으면 계속 앉아있는다). 실제 좌석 수보다 많으면 초과분은 배회로 시작해
         /// 빈 좌석이 생기면 자연스럽게 합류한다.
@@ -762,6 +766,11 @@ final class NPCGuestCoordinator {
         // 반응하는 편향을 없앤다.
         let positions = guests.map(\.currentPosition)
         let anchors = guests.map(\.crowdAnchor)
+        // 카페가 한꺼번에 다 같이 돌아다니는 것처럼 보이지 않도록, 동시에 Walk 중인
+        // 인원을 이 프레임 시작 시점 기준으로 세어 최대치를 넘지 않게 한다. 이미
+        // 걷고 있던 손님은 막지 않고(중간에 뚝 멈추면 부자연스럽다), "새로 걷기
+        // 시작하는" 손님만 이 예산을 넘지 않을 때만 허용한다.
+        var activeWalkerCount = guests.filter(\.isWalking).count
 
         for (index, guest) in guests.enumerated() {
             var slot: SIMD2<Float>?
@@ -776,6 +785,7 @@ final class NPCGuestCoordinator {
             let occupiedAnchors = anchors.enumerated().compactMap {
                 $0.offset == index ? nil : $0.element
             }
+            let wasWalking = guest.isWalking
             guest.update(deltaTime: deltaTime,
                         wanderArea: floorArea,
                         exclusions: exclusionAreas,
@@ -784,7 +794,11 @@ final class NPCGuestCoordinator {
                         facing: facing,
                         playerPosition: playerPosition,
                         neighboringPositions: neighboringPositions,
-                        occupiedAnchors: occupiedAnchors)
+                        occupiedAnchors: occupiedAnchors,
+                        allowNewWander: activeWalkerCount < Tuning.maxConcurrentWalkers)
+            if guest.isWalking != wasWalking {
+                activeWalkerCount += guest.isWalking ? 1 : -1
+            }
 
             // 좌석 점유/해제는 이 프레임의 update() 결과를 반영해 처리한다: 방금
             // 일어선 자리를 같은 프레임에 바로 다른 손님에게 내줄 수 있어 빈 프레임

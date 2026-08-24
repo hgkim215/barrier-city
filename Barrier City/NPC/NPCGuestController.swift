@@ -317,6 +317,10 @@ final class NPCGuestController {
     /// 다른 손님이 다음 목적지를 고를 때 현재 위치뿐 아니라 이미 선택된 목적지도 피한다.
     var crowdAnchor: SIMD2<Float> { wanderTarget ?? currentPosition }
 
+    /// 지금 실제로 Walk 애니메이션 중인지. 코디네이터가 동시 배회 인원(최대 3명)을
+    /// 세는 데 쓴다.
+    var isWalking: Bool { currentCue == .walk }
+
     /// queueSlot이 있으면 그 지점으로 이동해 대기하고, 없으면 wanderArea 안에서
     /// exclusions(직원 구역 + 키오스크 반경 + 테이블별 좌석 클러스터)를 피해 자유롭게
     /// 걸어 다닌다.
@@ -339,7 +343,8 @@ final class NPCGuestController {
                facing facingTarget: SIMD2<Float>?,
                playerPosition: SIMD2<Float>,
                neighboringPositions: [SIMD2<Float>],
-               occupiedAnchors: [SIMD2<Float>]) {
+               occupiedAnchors: [SIMD2<Float>],
+               allowNewWander: Bool) {
         guard locomotionRoot != nil else { return }
 
         switch seatState {
@@ -407,6 +412,13 @@ final class NPCGuestController {
             return
         }
         if wanderTarget == nil {
+            // 이미 걷고 있던 배회를 마저 이어가는 건 막지 않는다 — 여기서 막는 건
+            // "새로 걷기 시작하는" 순간뿐이다. 그래야 동시 배회 인원을 최대 3명으로
+            // 눌러도 이미 걷던 손님이 벽 앞에서 뚝 멈춰버리지 않는다.
+            guard allowNewWander else {
+                playAnimation(.idle)
+                return
+            }
             wanderTarget = randomWanderTarget(
                 in: wanderArea,
                 excluding: exclusions,
@@ -666,16 +678,24 @@ final class NPCGuestController {
                                     excluding exclusions: [NPCGuestArea],
                                     awayFrom current: SIMD2<Float>,
                                     avoiding occupiedAnchors: [SIMD2<Float>]) -> SIMD2<Float>? {
+        // 지금 서 있는 위치 자체가 이미 어떤 제외 구역 안에 있다면(예: cycler가 방금
+        // 일어난 좌석은 자기 테이블의 좌석 클러스터 제외 구역 한복판이다), 그 구역은
+        // "빠져나가야 할 곳"이지 "들어가면 안 되는 곳"이 아니다. 그대로 두면 아래
+        // 후보/경로 검사에 매번 걸려 유효한 목적지를 하나도 못 찾고 영원히 Idle로
+        // 멈춘다(가만히 서 있기만 하고 다시 배회하지 않는 문제의 실제 원인이었다).
+        // 지금 위치를 포함하는 구역만 이번 탐색에서 빼고, 아직 들어가 있지 않은
+        // 다른 구역은 그대로 피한다.
+        let activeExclusions = exclusions.filter { !$0.contains(current) }
         var fallback: SIMD2<Float>?
         var bestSeparation: Float = -1
         for _ in 0..<40 {
             let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
-            if exclusions.contains(where: { $0.contains(candidate) }) { continue }
+            if activeExclusions.contains(where: { $0.contains(candidate) }) { continue }
             // 후보 자체는 제외 구역 밖이어도, 지금 위치에서 거기까지 가는 직선 경로가
             // AreaK 등을 가로지르면 이동 중 반발력에 계속 밀려나 목적지에 못 닿고
             // 경계 근처를 맴돌며 Walk 애니메이션만 재생되는 문제가 있었다. 그런
             // 후보는 애초에 고르지 않는다.
-            if pathCrosses(exclusions, from: current, to: candidate) { continue }
+            if pathCrosses(activeExclusions, from: current, to: candidate) { continue }
             guard simd_distance(candidate, current) >= NPCGuestTuning.minimumRoamDistance else { continue }
             let separation = occupiedAnchors
                 .map { simd_distance(candidate, $0) }
