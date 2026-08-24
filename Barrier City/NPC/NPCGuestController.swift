@@ -269,10 +269,23 @@ final class NPCGuestController {
     var crowdAnchor: SIMD2<Float> { wanderTarget ?? currentPosition }
 
     /// queueSlot이 있으면 그 지점으로 이동해 대기하고, 없으면 wanderArea 안에서
-    /// exclusions(직원 구역 등)를 피해 자유롭게 걸어 다닌다.
+    /// exclusions(직원 구역 + 키오스크 반경 + 테이블별 좌석 클러스터)를 피해 자유롭게
+    /// 걸어 다닌다.
+    ///
+    /// exclusions와 staffExclusions를 분리해서 받는 이유: 좌석으로 걸어가는 중(예:
+    /// updateMovingToSeat)에는 목적지인 좌석 자체가 "그 테이블의 좌석 클러스터
+    /// 제외 구역" 안에 있다(제외 구역이 그 테이블 좌석들을 감싸도록 만들어지므로).
+    /// 그런데 exclusions 전체를 그대로 넘기면 move()의 "제외 구역 안에 있으면
+    /// 바깥으로 밀어낸다" 로직이 매 프레임 목적지 반대 방향으로 계속 밀어내, 좌석에
+    /// 영원히 도착하지 못한 채 Walk만 반복 재생하는 문제가 있었다(seatedPool처럼
+    /// 입장 시 바로 착석 배치되는 손님은 이 이동 자체를 안 거쳐서 증상이 안 보였고,
+    /// cycler처럼 배회하다 실제로 좌석까지 걸어가야 하는 손님만 걸렸다). 그래서
+    /// 좌석으로 걸어갈 때는 직원 구역(AreaK/AreaB)만 담은 staffExclusions만 넘겨,
+    /// 그쪽으로는 안 걸어 들어가되 목적지인 좌석 자체와는 싸우지 않게 한다.
     func update(deltaTime: Float,
                wanderArea: NPCGuestArea,
                exclusions: [NPCGuestArea],
+               staffExclusions: [NPCGuestArea],
                queueSlot: SIMD2<Float>?,
                facing facingTarget: SIMD2<Float>?,
                playerPosition: SIMD2<Float>,
@@ -285,7 +298,7 @@ final class NPCGuestController {
             updateMovingToSeat(deltaTime: deltaTime,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
-                               exclusions: exclusions)
+                               exclusions: staffExclusions)
             return
         case .sitting:
             // 한 번 앉으면 다시 일어나지 않는다 — 할 일이 없다.
@@ -385,6 +398,9 @@ final class NPCGuestController {
 
     // MARK: - Seating
 
+    /// exclusions는 호출부(update)가 staffExclusions(직원 구역만)를 넘긴다 — 테이블
+    /// 좌석 클러스터 제외 구역까지 넘기면 목적지인 좌석 자체와 충돌한다(update의
+    /// 문서 주석 참고).
     private func updateMovingToSeat(deltaTime: Float,
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>],

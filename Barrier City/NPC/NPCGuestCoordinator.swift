@@ -117,10 +117,14 @@ final class NPCGuestCoordinator {
     private var queueDirection: SIMD2<Float>?
     /// 이번 대기줄에서 자리에 도착하면 한숨을 재생할 손님(줄서기 시작 시 무작위 선정).
     private var sighingGuestIndex: Int?
-    /// 직원 구역(AreaK/AreaB)만 담은 목록. queueSlot(rank:)가 대기줄 자리를 계산할 때
-    /// exclusionAreas 전체(키오스크 주변 배회 제외 반경 포함) 대신 이걸 쓴다 —
-    /// 키오스크 제외 반경까지 같이 피하게 하면, 유저가 키오스크 가까이 서 있을 때
-    /// 대기줄 첫 자리가 그 반경을 벗어날 때까지 계속 밀려나 유저 뒤에 못 붙었다.
+    /// 직원 구역(AreaK/AreaB)만 담은 목록. exclusionAreas 전체(키오스크 주변 배회
+    /// 제외 반경 + 테이블별 좌석 클러스터 제외 구역 포함) 대신 이걸 써야 하는 곳이
+    /// 두 군데 있다: (1) queueSlot(rank:) — 키오스크 제외 반경까지 같이 피하게 하면
+    /// 유저가 키오스크 가까이 서 있을 때 대기줄 첫 자리가 그 반경을 벗어날 때까지
+    /// 계속 밀려나 유저 뒤에 못 붙었다. (2) 좌석으로 걸어가는 이동(NPCGuestController
+    /// updateMovingToSeat) — 좌석 자체가 그 테이블의 좌석 클러스터 제외 구역 안에
+    /// 있어서, 제외 구역 전체를 넘기면 목적지와 반대 방향으로 계속 밀려나 영원히
+    /// 도착 못 하고 Walk만 반복 재생했다(cycler가 배회 후 앉지 못하던 원인).
     private var staffAreaExclusions: [NPCGuestArea] = []
     /// seats와 같은 길이. 좌석 인덱스 → 그 좌석이 "가장 가까운 테이블" 판정으로 실제 연결된
     /// 디저트 그룹 인덱스. seatTableGroups(좌석 위치 거리 클러스터링)와는 별개로, 좌석마다
@@ -628,6 +632,7 @@ final class NPCGuestCoordinator {
             guest.update(deltaTime: deltaTime,
                         wanderArea: floorArea,
                         exclusions: exclusionAreas,
+                        staffExclusions: staffAreaExclusions,
                         queueSlot: slot,
                         facing: facing,
                         playerPosition: playerPosition,
