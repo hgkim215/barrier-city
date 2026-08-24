@@ -146,7 +146,7 @@ struct NPCDialoguePanelView: View {
         case .listening:
             return "편하게 말씀해 주세요."
         case .thinking:
-            return "음… 잠시만요."
+            return "잠시만요."
         case .idle:
             return controller.npcSubtitle.isEmpty
                 ? "편하게 말씀해 주세요."
