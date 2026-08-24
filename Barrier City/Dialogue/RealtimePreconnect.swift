@@ -24,6 +24,13 @@ final class RealtimePreconnect {
         let client = RealtimeWebRTCClient(config: AppConfig.proxy)
         do {
             try await client.connect()
+            // 실제 대화가 시작돼 session.update(turn_detection.create_response=false,
+            // 한국어 지침)를 보내기 전까지는 이 세션이 OpenAI 기본값(서버 VAD가 알아서
+            // 응답을 생성)으로 동작한다. 마이크를 계속 켜 두면 그 사이 주변 소음만으로도
+            // 서버가 우리 페르소나와 무관한 기본 영어 응답을 자동으로 만들어 낼 수 있다 —
+            // RealtimeNPCConversationSession.start()가 연결 직후 항상 마이크부터 끄는
+            // 것과 같은 이유로, 여기서도 즉시 꺼서 그 창을 없앤다.
+            await client.setMicrophoneEnabled(false)
             connectedClient = client
         } catch {
             // 조용히 무시. 실제 대화 시작 시 새 클라이언트로 다시 시도한다.
