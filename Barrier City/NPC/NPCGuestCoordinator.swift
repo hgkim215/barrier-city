@@ -339,6 +339,11 @@ final class NPCGuestCoordinator {
                 // 테이블" 판정으로 같이 기록해 둔다 — facing 계산과 동일한 근거라
                 // 좌석 클러스터 중심을 거치는 간접 매칭보다 테이블을 놓칠 일이 적다.
                 seatTableEntities.append(nearestTable?.entity)
+                // SittingPoint는 좌석 위치·방향을 뽑기 위한 순수 마커라 실제로 보이면 안
+                // 된다. authored material(</Root/invisible>)이 이 앱의 로딩 경로에서는
+                // 반영되지 않아(Entity.applyNPCBodyCollision 주석의 콜리전 미반영과 같은
+                // 원인) 코드에서 직접 꺼야 한다.
+                candidate.isEnabled = false
             }
             for child in candidate.children { walk(child) }
         }
