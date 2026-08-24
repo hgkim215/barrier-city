@@ -286,18 +286,46 @@ final class NPCGuestCoordinator {
             let bounds = anchor.visualBounds(relativeTo: worldRoot)
             return (min: bounds.min, max: bounds.max)
         }
-        // 긴 벤치형 WoodTable 하나는 실측해보니 authored 바운즈 상단이 약 1.2m로, 다른
-        // 일반 테이블(약 0.77m)보다 훨씬 높았다 — 단일 리프 메시라 상판과 별개 부분을
-        // 나눠 인식할 방법이 없어, 씬을 고치는 대신 나머지 테이블들의 중앙값 높이에서
-        // 크게 벗어나는 테이블만 그 중앙값으로 보정해 디저트가 공중에 뜨지 않게 한다.
+        // 긴 벤치형 WoodTable은 실측해보니 authored 바운즈 상단이 약 1.2m로, 다른 일반
+        // 테이블(약 0.77m)보다 훨씬 높았다(원인: 씬에서 WoodTable 전체를 3.8배 균일
+        // 스케일해 길게 늘였는데, 균일 스케일이라 높이까지 같이 3.8배로 부풀었다 —
+        // 길이만 늘이려면 축별 스케일이 필요했지만 authoring을 바꾸는 대신 여기서 보정).
+        // 단일 리프 메시라 상판과 다리를 나눠 인식할 방법이 없어, 이상치 테이블은 전체
+        // 테이블 평균이 아니라 "그 테이블 자신의 좌석 높이 + 정상 테이블들의 평균적인
+        // '좌석 대비 테이블 여유 높이'"로 추정한다 — 예전에는 전체 이상치를 하나의
+        // 전역 중앙값으로 뭉뚱그려 대체했는데, 의자 종류가 다른 테이블(WoodTable은
+        // LongChair 벤치라 다른 의자보다 낮다)에는 그 차이만큼 오차가 남아 디저트가
+        // 표면보다 살짝 높이 떠 보였다.
+        func averageSeatHeight(_ groupIndex: Int) -> Float? {
+            let indices = seatTableGroups[groupIndex]
+            guard !indices.isEmpty else { return nil }
+            return indices.reduce(Float(0)) { $0 + seats[$1].sittingHeightOffset } / Float(indices.count)
+        }
         let measuredHeights = tableSurfaceBoundsByGroupIndex.compactMap { $0?.max.y }.sorted()
         if let medianHeight = measuredHeights.isEmpty ? nil : measuredHeights[measuredHeights.count / 2] {
             let outlierTolerance: Float = 0.25
+            var clearanceSum: Float = 0
+            var clearanceCount = 0
+            for index in tableSurfaceBoundsByGroupIndex.indices {
+                guard let bounds = tableSurfaceBoundsByGroupIndex[index],
+                      abs(bounds.max.y - medianHeight) <= outlierTolerance,
+                      let seatHeight = averageSeatHeight(index) else { continue }
+                clearanceSum += bounds.max.y - seatHeight
+                clearanceCount += 1
+            }
+            let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
+
             for index in tableSurfaceBoundsByGroupIndex.indices {
                 guard var bounds = tableSurfaceBoundsByGroupIndex[index],
                       abs(bounds.max.y - medianHeight) > outlierTolerance else { continue }
-                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(medianHeight)m")
-                bounds.max.y = medianHeight
+                let corrected: Float
+                if let typicalClearance, let seatHeight = averageSeatHeight(index) {
+                    corrected = seatHeight + typicalClearance
+                } else {
+                    corrected = medianHeight
+                }
+                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(corrected)m")
+                bounds.max.y = corrected
                 tableSurfaceBoundsByGroupIndex[index] = bounds
             }
         }
