@@ -24,6 +24,9 @@ final class NPCDialogueController {
     private enum RealtimeConversationTuning {
         /// NPC 발화가 끝난 뒤 사용자가 첫 말을 시작할 때까지 기다리는 시간.
         static let responseTimeout: TimeInterval = 30
+        /// 주문이 확정된 직후에는 "감사합니다" 같은 짧은 반응이 있을 수 있으니 잠깐만 더
+        /// 듣고, 없으면 자연스럽게 대화를 마친다. 주문 확정 대사가 끝난 시점부터 잰다.
+        static let postOrderFarewellTimeout: TimeInterval = 2.5
         /// 응답 생성이나 도구 후속 응답이 시작되지 않을 때 무한 대기를 끊는 시간.
         static let generationTimeout: TimeInterval = 30
         static let inactivityRapportPenalty: Float = 0.1
@@ -80,6 +83,10 @@ final class NPCDialogueController {
     private var realtimeCanAcceptInput = false
     private var realtimeInputTurnIsActive = false
     private var realtimeSuppressesCurrentInputTurn = false
+    /// 주문 확정 대사 직후 한 번만 짧은 유예 시간(postOrderFarewellTimeout)을 쓰라는 표시.
+    /// beginRealtimeListeningIfReady가 소비하는 즉시 꺼져, 그 다음 턴부터는 평소 30초
+    /// 타임아웃으로 돌아간다.
+    private var pendingPostOrderFarewell = false
     private var orderReadyAnnouncementGate = OrderReadyAnnouncementGate()
     private var orderReadyRealtimeSession: RealtimeNPCConversationSession?
     /// 같은 immersive session에서 몇 번째로 연결한 encounter인지 나타낸다.
@@ -122,8 +129,8 @@ final class NPCDialogueController {
     ) -> NPCPersona {
         NPCPersona(
             id: "staff",
-            role: "cafe staff",
-            englishSystemBase: "You are a busy cafe employee standing near an ordering kiosk whose touchscreen is too high for wheelchair users.",
+            role: "카페 직원",
+            systemBase: "지금 이 카페 카운터에서 일하는 직원은 당신뿐이다 — 매니저도, 동료도, 주변에 다른 사람도 없다. 휠체어 이용자에게는 손이 닿지 않는 높이의 주문용 키오스크 옆에 서 있다.",
             accessibilityAttitude: accessibilityAttitude,
             clerkPersonality: clerkPersonality)
     }
@@ -263,6 +270,11 @@ final class NPCDialogueController {
     }
 
     /// Realtime WebRTC 세션을 열고 NPC의 첫 인사부터 자동 음성 대화를 시작한다.
+    ///
+    /// 방문자가 이미 키오스크 접근성 배리어를 만나 "직원 호출"까지 요청한 뒤에 이 대화에
+    /// 도달했더라도, 대화 안에서의 첫 주문 시도는 여전히 키오스크로 되돌려보낸다 — 이
+    /// 리다이렉트 자체가 "그 배리어를 다시 한번 몸으로 느끼게 하는" 의도된 장치라
+    /// 게임 상태로 건너뛰면 안 된다.
     func startEncounter() async {
         await startRealtimeEncounter()
     }
@@ -415,6 +427,7 @@ final class NPCDialogueController {
                 return
             }
             conversationMemory.append(.user, text: transcript)
+            realtimeMission.registerVisitorTurn()
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
@@ -542,7 +555,7 @@ final class NPCDialogueController {
             fulfillmentContext: fulfillmentContext
         ))
 
-        # App-owned order state for this response
+        # 앱이 관리하는 이번 응답의 주문 상태
         \(realtimeMission.snapshot.promptGuide)
         """
     }
@@ -561,7 +574,7 @@ final class NPCDialogueController {
 
         \(realtimeMission.snapshot.promptGuide)
 
-        # Immediate tool result response
+        # 방금 나온 도구 호출 결과에 대한 응답
         \(immediateInstructions)
         """
     }
@@ -578,21 +591,26 @@ final class NPCDialogueController {
         } else {
             requestAnimation(.idle)
         }
-        if let functionCall = realtimeMission.takeFunctionCall() {
+        let functionCalls = realtimeMission.takeFunctionCalls()
+        if !functionCalls.isEmpty {
             realtimeCanAcceptInput = false
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
             armRealtimeGenerationTimeout()
             realtimeCommandTask?.cancel()
+            // 실제 서사에 영향을 주는 followUp은 첫 항목(진짜 처리된 호출)뿐이다. 모델이
+            // 지침을 어기고 같은 응답에 함수를 더 불렀다면 나머지는 API 쪽 tool call을
+            // 완결시키기 위한 빈 거절 응답이라 followUpInstructions가 비어 있다.
+            let narrativeFollowUp = functionCalls.first { !$0.followUpInstructions.isEmpty }?.followUpInstructions
+                ?? functionCalls[0].followUpInstructions
+            let outputs = functionCalls.map { (callID: $0.callID, output: $0.output) }
             realtimeCommandTask = Task { @MainActor [weak self] in
                 do {
-                    try await realtimeSession.completeFunctionCall(
-                        callID: functionCall.callID,
-                        output: functionCall.output,
-                        responseInstructions: self?.realtimeFollowUpInstructions(
-                            functionCall.followUpInstructions
-                        ) ?? functionCall.followUpInstructions
+                    guard let self else { return }
+                    try await realtimeSession.completeFunctionCalls(
+                        outputs,
+                        responseInstructions: self.realtimeFollowUpInstructions(narrativeFollowUp)
                     )
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -603,10 +621,16 @@ final class NPCDialogueController {
         }
         if let event = realtimeMission.takeCompletedEvent() {
             publishMissionEvent(event)
-            if event == .orderPlaced || event == .exited {
+            if event == .exited {
                 cancelEncounter()
                 status = .idle
                 return
+            }
+            if event == .orderPlaced {
+                // 승낙 대사가 막 끝난 참이다. 곧장 마이크를 끊는 대신, 유저가 "감사합니다"
+                // 처럼 짧게 반응할 시간을 잠깐 주고 그래도 말이 없으면 자연스럽게 마친다
+                // (beginRealtimeListeningIfReady가 이 표시를 한 번만 소비한다).
+                pendingPostOrderFarewell = true
             }
         }
         status = .listening
@@ -622,7 +646,26 @@ final class NPCDialogueController {
               !realtimeResponseDonePending,
               !realtimeInputTurnIsActive else { return }
         realtimeCanAcceptInput = true
-        armRealtimeResponseTimeout()
+        if pendingPostOrderFarewell {
+            pendingPostOrderFarewell = false
+            armRealtimeResponseTimeout(
+                duration: RealtimeConversationTuning.postOrderFarewellTimeout,
+                onTimeout: { @MainActor [weak self] in
+                    self?.finishRealtimeEncounterAfterOrderConfirmation()
+                })
+        } else {
+            armRealtimeResponseTimeout()
+        }
+    }
+
+    /// 주문 확정 뒤 짧은 유예 시간 동안 유저가 아무 반응이 없으면 조용히 대화를 마친다.
+    /// 이미 승낙 대사로 자연스럽게 마무리됐으므로, 평소 무응답 종료와 달리 별도 작별
+    /// 대사나 호감도 페널티는 적용하지 않는다.
+    private func finishRealtimeEncounterAfterOrderConfirmation() {
+        guard isEncounterActive else { return }
+        requestAnimation(.idle)
+        cancelEncounter()
+        status = .idle
     }
 
     private func resetRealtimeTurnState() {
@@ -633,6 +676,7 @@ final class NPCDialogueController {
         realtimeCanAcceptInput = false
         realtimeInputTurnIsActive = false
         realtimeSuppressesCurrentInputTurn = false
+        pendingPostOrderFarewell = false
     }
 
     private func finishPendingCleanup() async {
@@ -644,12 +688,16 @@ final class NPCDialogueController {
 
     /// Realtime API의 서버 VAD에는 "아예 말하지 않음" 이벤트가 없으므로 NPC 응답이
     /// 끝난 시점부터 별도 타이머를 건다. 사용자가 발화를 시작하면 즉시 취소한다.
-    private func armRealtimeResponseTimeout() {
+    /// 기본 동작(평소 무응답 종료)이 아닌 다른 마무리가 필요하면(예: 주문 확정 직후의
+    /// 짧은 유예 시간) duration/onTimeout으로 바꿔 쓸 수 있다.
+    private func armRealtimeResponseTimeout(
+        duration: TimeInterval = RealtimeConversationTuning.responseTimeout,
+        onTimeout: (@MainActor () async -> Void)? = nil
+    ) {
         realtimeResponseTimeoutTask?.cancel()
         realtimeResponseTimeoutTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(
-                    for: .seconds(RealtimeConversationTuning.responseTimeout))
+                try await Task.sleep(for: .seconds(duration))
             } catch {
                 return
             }
@@ -658,7 +706,11 @@ final class NPCDialogueController {
                   self.realtimeSession != nil,
                   self.status == .listening else { return }
             self.realtimeResponseTimeoutTask = nil
-            await self.finishRealtimeEncounterForInactivity()
+            if let onTimeout {
+                await onTimeout()
+            } else {
+                await self.finishRealtimeEncounterForInactivity()
+            }
         }
     }
 
@@ -721,24 +773,24 @@ final class NPCDialogueController {
 
     private static let reportOrderAttemptTool = RealtimeFunctionTool(
         name: "report_order_attempt",
-        description: "Call this the moment the visitor asks you, in any way, to get/bring/order them ANY item or drink — for any item, not only the mission item. Call it once per distinct order attempt, before place_mission_order and before speaking. Never call it in the same response as place_mission_order.",
+        description: "방문자가 어떤 식으로든 아무 품목이나 음료를 달라고/가져다 달라고/주문하려고 하는 그 순간 호출하라 — 미션 품목이 아닌 다른 품목이어도 상관없다. 서로 다른 주문 시도마다 한 번씩, place_mission_order보다 먼저, 말을 하기 전에 호출하라. place_mission_order와 같은 응답 안에서는 절대 호출하지 마라.",
         parameters: []
     )
 
     private static let placeMissionOrderTool = RealtimeFunctionTool(
         name: "place_mission_order",
-        description: "Place exactly one Rainbow Macaron Smoothie once the visitor has clearly ordered it AND, after the kiosk redirect, has explained why they personally can't use the kiosk (a real accessibility barrier, not just a repeated request). Always available, but the app validates every call and rejects it if the item/quantity do not match, if an order was already placed, or if this encounter has not yet had its first-order kiosk redirect (call report_order_attempt for that instead). Call it as soon as you are sure of the order — do not wait for extra confirmation.",
+        description: "방문자가 명확히 주문했고, 키오스크 리다이렉트 이후 본인이 직접 키오스크를 쓸 수 없는 이유(단순 반복 요청이 아니라 실제 접근성 장벽)를 설명했을 때 레인보우 마카롱 스무디를 정확히 한 잔 접수하라. 항상 호출 가능하지만, 품목·수량이 안 맞거나 이미 주문이 접수됐거나 이 만남에서 아직 첫 주문 시도의 키오스크 리다이렉트가 없었다면(그 경우엔 대신 report_order_attempt를 호출하라) 앱이 모든 호출을 검증해 거절한다. 주문이 확실하다고 판단되는 즉시 호출하라 — 추가 확인을 기다리지 마라.",
         parameters: [
             .init(
                 name: "item",
                 type: .string,
-                description: "Canonical requested menu item.",
+                description: "요청받은 표준 메뉴 품목.",
                 allowedStringValues: [RainbowSmoothieMissionOrder.itemIdentifier]
             ),
             .init(
                 name: "quantity",
                 type: .integer,
-                description: "Explicitly requested number of cups.",
+                description: "명시적으로 요청받은 잔 수.",
                 minimumIntegerValue: RainbowSmoothieMissionOrder.quantity,
                 maximumIntegerValue: RainbowSmoothieMissionOrder.quantity
             ),

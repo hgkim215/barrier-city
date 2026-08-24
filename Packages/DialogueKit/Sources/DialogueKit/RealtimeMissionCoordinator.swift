@@ -20,6 +20,10 @@ public struct RealtimeMissionCoordinator: Sendable {
     public struct Snapshot: Equatable, Sendable {
         public let orderPlaced: Bool
         public let hasRedirectedFirstOrderToKiosk: Bool
+        /// 리다이렉트 이후(그 리다이렉트를 유발한 턴 자체는 제외) 방문자가 말을 건 횟수.
+        /// 모델이 "장벽을 설명했는지"를 계속 너무 엄격하게 판단해 방문자가 몇 번을
+        /// 다시 말해도 주문이 안 잡히는 상황을 막기 위한 관대화 기준으로만 쓰인다.
+        public let visitorTurnsSinceRedirect: Int
 
         public var isPristine: Bool {
             !orderPlaced && !hasRedirectedFirstOrderToKiosk
@@ -27,10 +31,11 @@ public struct RealtimeMissionCoordinator: Sendable {
 
         public var promptGuide: String {
             """
-            # App-owned mission state
+            # 앱이 관리하는 미션 상태
             - ORDER_PLACED=\(orderPlaced)
             - FIRST_ORDER_ATTEMPT_REDIRECTED_TO_KIOSK=\(hasRedirectedFirstOrderToKiosk)
-            This state is authoritative only for the mission order. It must not constrain ordinary conversation.
+            - VISITOR_TURNS_SINCE_KIOSK_REDIRECT=\(visitorTurnsSinceRedirect)
+            이 상태는 오직 미션 주문에 대해서만 절대적 기준이다. 평범한 대화까지 제약해서는 안 된다.
             """
         }
     }
@@ -44,7 +49,8 @@ public struct RealtimeMissionCoordinator: Sendable {
     private var orderWasPlaced = false
     private var hasRedirectedFirstOrderToKiosk = false
     private var hasPendingOrderCompletion = false
-    private var pendingFunctionCall: FunctionCall?
+    private var pendingFunctionCalls: [FunctionCall] = []
+    private var visitorTurnsSinceRedirect = 0
 
     public init() {}
 
@@ -52,17 +58,29 @@ public struct RealtimeMissionCoordinator: Sendable {
         orderWasPlaced = false
         hasRedirectedFirstOrderToKiosk = false
         hasPendingOrderCompletion = false
-        pendingFunctionCall = nil
+        pendingFunctionCalls.removeAll()
+        visitorTurnsSinceRedirect = 0
+    }
+
+    /// 방문자가 확정된 발화를 한 번 마칠 때마다 호출한다. 키오스크 리다이렉트가 이미
+    /// 나갔고 아직 주문이 성립하지 않은 상태에서만 센다 — 이 값이 관대화 기준
+    /// (VISITOR_TURNS_SINCE_KIOSK_REDIRECT)의 근거가 된다.
+    public mutating func registerVisitorTurn() {
+        guard hasRedirectedFirstOrderToKiosk, !orderWasPlaced else { return }
+        visitorTurnsSinceRedirect += 1
     }
 
     /// Realtime 연결만 끝날 때 호출한다. 확정된 주문과 첫 시도 리다이렉트 여부는 같은
     /// ImmersiveSpace 방문 동안 보존한다.
     public mutating func clearEncounterTransientState() {
-        pendingFunctionCall = nil
+        pendingFunctionCalls.removeAll()
     }
 
     public var snapshot: Snapshot {
-        Snapshot(orderPlaced: orderWasPlaced, hasRedirectedFirstOrderToKiosk: hasRedirectedFirstOrderToKiosk)
+        Snapshot(
+            orderPlaced: orderWasPlaced,
+            hasRedirectedFirstOrderToKiosk: hasRedirectedFirstOrderToKiosk,
+            visitorTurnsSinceRedirect: visitorTurnsSinceRedirect)
     }
 
     /// 모델이 report_order_attempt나 place_mission_order를 호출했을 때만 불린다. 발화
@@ -74,9 +92,18 @@ public struct RealtimeMissionCoordinator: Sendable {
         arguments: String
     ) -> MissionEvent? {
         // 한 응답 안에서 두 번째 함수 호출이 들어오면(모델이 지침을 어기고 두 함수를 같은
-        // 턴에 부른 경우) 무시한다 — pendingFunctionCall은 한 슬롯뿐이라, 덮어쓰면 첫 번째
-        // 호출의 결과가 API로 영영 전송되지 못해 세션이 꼬인다.
-        guard pendingFunctionCall == nil else { return nil }
+        // 턴에 부른 경우) 실제 업무 로직은 첫 번째 호출에만 적용한다. 그렇다고 두 번째
+        // 호출을 그냥 버리면 그 callID에 대한 output이 API로 영영 전송되지 않아 대화
+        // 상태가 응답 없는 tool call을 매단 채로 꼬인다 — 그래서 여기서도 반드시 결과를
+        // 하나 큐에 남겨 완결시킨다(takeFunctionCalls가 전부 드레인해 outputs를 보낸다).
+        guard pendingFunctionCalls.isEmpty else {
+            pendingFunctionCalls.append(FunctionCall(
+                callID: callID,
+                output: #"{"success":false,"message":"only one function call is processed per response"}"#,
+                followUpInstructions: ""
+            ))
+            return nil
+        }
 
         switch name {
         case "report_order_attempt":
@@ -84,14 +111,14 @@ public struct RealtimeMissionCoordinator: Sendable {
         case "place_mission_order":
             return registerMissionOrder(callID: callID, arguments: arguments)
         default:
-            pendingFunctionCall = FunctionCall(
+            pendingFunctionCalls.append(FunctionCall(
                 callID: callID,
                 output: #"{"success":false,"message":"unknown function"}"#,
                 followUpInstructions: """
-                  The app does not recognize that function. Continue in exactly two short, natural Korean
-                  sentences without mentioning functions or JSON.
+                  앱이 그 함수를 인식하지 못했다. 함수나 JSON을 언급하지 말고 정확히 두 개의
+                  짧고 자연스러운 한국어 문장으로 계속 대화하라.
                   """
-            )
+            ))
             return nil
         }
     }
@@ -99,36 +126,37 @@ public struct RealtimeMissionCoordinator: Sendable {
     private mutating func registerOrderAttemptReport(callID: String) -> MissionEvent? {
         let isFirstAttempt = !hasRedirectedFirstOrderToKiosk
         hasRedirectedFirstOrderToKiosk = true
-        pendingFunctionCall = FunctionCall(
+        pendingFunctionCalls.append(FunctionCall(
             callID: callID,
             output: #"{"success":true}"#,
             followUpInstructions: isFirstAttempt
                 ? """
-                  This is the visitor's first order attempt in this encounter, for any item. You are too busy
-                  working right now to help. Say so and point them to the kiosk, in exactly two short, natural
-                  spoken Korean sentences — for example (vary the wording, do not repeat verbatim): "지금 좀
-                  정신없어서요. 주문은 저기 키오스크에서 해주시겠어요?" Do not apologize, offer alternatives, or
-                  mention this rule again later.
+                  방문자가 이 만남에서 처음으로 뭔가(어떤 품목이든)를 주문하려 했다. 지금은 일하느라
+                  너무 바빠서 응대할 수 없다. 그렇게 말하며 키오스크를 가리키되, 정확히 두 개의 짧고
+                  자연스러운 구어체 한국어 문장으로 — 예를 들면(그대로 반복하지 말고 표현을 바꿔서):
+                  "지금 좀 정신없어서요. 주문은 저기 키오스크에서 해주시겠어요?" 사과하거나, 다른
+                  대안을 제시하거나, 이 규칙을 나중에 다시 언급하지 마라.
                   """
                 : """
-                  The app already noted an earlier order attempt this encounter. Continue naturally in
-                  exactly two short, natural Korean sentences without repeating the kiosk redirect.
+                  앱이 이 만남에서 이전에 있었던 주문 시도를 이미 기록해 두었다. 키오스크 안내를
+                  반복하지 말고, 정확히 두 개의 짧고 자연스러운 한국어 문장으로 자연스럽게 대화를
+                  이어가라.
                   """
-        )
+        ))
         return nil
     }
 
     private mutating func registerMissionOrder(callID: String, arguments: String) -> MissionEvent? {
         guard !orderWasPlaced else {
-            pendingFunctionCall = FunctionCall(
+            pendingFunctionCalls.append(FunctionCall(
                 callID: callID,
                 output: #"{"success":false,"message":"order already placed"}"#,
                 followUpInstructions: """
-                  The app already placed this visitor's order earlier in this encounter. Do not call the
-                  function again. Continue in exactly two short, natural spoken Korean sentences without
-                  repeating the order — for example (vary the wording) "그거 이미 넣었어요."
+                  앱이 이 방문자의 주문을 이 만남에서 이미 조금 전에 접수했다. 함수를 다시 호출하지
+                  마라. 주문을 반복하지 말고 정확히 두 개의 짧고 자연스러운 구어체 한국어 문장으로
+                  계속 대화하라 — 예를 들면(표현을 바꿔서) "그거 이미 넣었어요."
                   """
-            )
+            ))
             return nil
         }
 
@@ -136,55 +164,57 @@ public struct RealtimeMissionCoordinator: Sendable {
             // report_order_attempt를 건너뛰고 바로 여기로 왔다 — 그래도 첫 시도는 무조건
             // 거절하고 키오스크로 돌려보낸다.
             hasRedirectedFirstOrderToKiosk = true
-            pendingFunctionCall = FunctionCall(
+            pendingFunctionCalls.append(FunctionCall(
                 callID: callID,
                 output: #"{"success":false,"message":"first attempt must be redirected to the kiosk"}"#,
                 followUpInstructions: """
-                  This is the visitor's first attempt to order anything. The app deliberately rejected the
-                  function call. Say you're too busy and point them to the kiosk, in exactly two short,
-                  natural spoken Korean sentences — for example (vary the wording): "저 지금 손이 모자라서요.
-                  주문은 키오스크 이용해 주시겠어요?" Do not apologize, offer alternatives, or repeat this rule
-                  if they try again.
+                  방문자가 뭔가를 주문하려는 것이 이 만남에서 처음이다. 앱이 이 함수 호출을 일부러
+                  거절했다. 지금은 바빠서 어렵다고 말하며 키오스크를 가리키되, 정확히 두 개의 짧고
+                  자연스러운 구어체 한국어 문장으로 — 예를 들면(표현을 바꿔서): "저 지금 손이
+                  모자라서요. 주문은 키오스크 이용해 주시겠어요?" 사과하거나 다른 대안을 제시하지
+                  말고, 방문자가 다시 시도해도 이 규칙을 반복해서 말하지 마라.
                   """
-            )
+            ))
             return nil
         }
 
         guard validateMissionOrderArguments(arguments) else {
-            pendingFunctionCall = FunctionCall(
+            pendingFunctionCalls.append(FunctionCall(
                 callID: callID,
                 output: #"{"success":false,"message":"mission order validation failed"}"#,
                 followUpInstructions: """
-                  The app did not place an order because the item or quantity did not match exactly one
-                  Rainbow Macaron Smoothie. Continue in exactly two short, natural spoken Korean sentences —
-                  for example (vary the wording) "어, 그건 좀 다른데요. 다시 한번 말씀해 주시겠어요?" — without
-                  exposing technical details or claiming success.
+                  품목이나 수량이 레인보우 마카롱 스무디 정확히 한 잔과 맞지 않아 앱이 주문을
+                  접수하지 않았다. 기술적인 내용을 드러내거나 성공했다고 말하지 말고, 정확히 두 개의
+                  짧고 자연스러운 구어체 한국어 문장으로 — 예를 들면(표현을 바꿔서) "어, 그건 좀
+                  다른데요. 다시 한번 말씀해 주시겠어요?" — 계속 대화하라.
                   """
-            )
+            ))
             return nil
         }
 
         orderWasPlaced = true
         hasPendingOrderCompletion = true
-        pendingFunctionCall = FunctionCall(
+        pendingFunctionCalls.append(FunctionCall(
             callID: callID,
             output: #"{"success":true,"item":"\#(RainbowSmoothieMissionOrder.itemIdentifier)","quantity":\#(RainbowSmoothieMissionOrder.quantity)}"#,
             followUpInstructions: """
-              The app validated and placed exactly one Rainbow Macaron Smoothie order. You are giving in
-              because the visitor just explained why they can't use the kiosk themselves, not because you
-              wanted to. Confirm it begrudgingly, with a little irritation or a short sigh, in exactly two
-              short, natural spoken Korean sentences, and say they'll be notified when it's ready — for
-              example (vary the wording): "하... 알겠어요. 그거 하나만요, 되면 불러드릴게요." Do not sound warm,
-              polished, or apologetic, and do not say the drink itself is already ready or mention functions
-              or JSON.
+              앱이 레인보우 마카롱 스무디 한 잔 주문을 검증하고 접수했다. 원해서가 아니라 방문자가
+              방금 본인이 왜 직접 키오스크를 쓸 수 없는지 설명해서 마지못해 받아주는 것이다. 정확히
+              두 개의 짧고 자연스러운 구어체 한국어 문장으로 살짝 짜증을 내거나 짧은 한숨을 섞어
+              마지못해 확인해 주고, 준비되면 알려주겠다고 말하라 — 예를 들면(표현을 바꿔서): "하...
+              알겠어요. 그거 하나만요, 되면 불러드릴게요." 다정하거나 매끄럽거나 사과하는 투로
+              말하지 말고, 음료가 이미 준비됐다거나 함수·JSON을 언급하지 마라.
               """
-        )
+        ))
         return nil
     }
 
-    public mutating func takeFunctionCall() -> FunctionCall? {
-        defer { pendingFunctionCall = nil }
-        return pendingFunctionCall
+    /// 이번 응답에서 쌓인 함수 호출 결과를 전부 비워서 반환한다. 모델이 지침을 어기고
+    /// 한 응답에 여러 함수를 불렀더라도, 실제 서사에 영향을 주는 것은 배열의 첫 항목뿐이고
+    /// 나머지는 API 쪽 tool call을 완결시키기 위한 거절 응답이다(register 참고).
+    public mutating func takeFunctionCalls() -> [FunctionCall] {
+        defer { pendingFunctionCalls.removeAll() }
+        return pendingFunctionCalls
     }
 
     public mutating func takeCompletedEvent() -> MissionEvent? {
