@@ -67,10 +67,10 @@ final class NPCGuestCoordinator {
         /// seatedPool 인원을 나눠 서로 다른 테이블에 앉힐 그룹 크기(합이
         /// seatedPoolCount와 같아야 한다).
         static let seatedPoolGroupSizes: [Int] = [1, 2, 3]
-        /// 이보다 가까운 좌석들은 "같은 테이블"로 묶어 seatedPool 그룹 배정에 쓴다.
-        /// facing용 기준보다 넉넉해서, 한 테이블에 여러 좌석이 줄지어 있어도(예: 벽
-        /// 쪽 긴 벤치) 하나의 테이블로 인식한다.
-        static let seatTableGroupLinkDistance: Float = 1.6
+        /// cycler가 입장 즉시 확정 배정받은 좌석 근처(반경 이내)에 스폰돼, 배회 없이
+        /// 곧장 좌석으로 걸어가게 한다. 착석 + 디저트 생성이 입장 후 5초 안에 보이도록
+        /// 보장하기 위한 값으로, moveSpeed(0.68~1.02m/s) 최저치로도 여유 있게 도착한다.
+        static let cyclerSpawnRadius: Float = 1.2
         /// 테이블·의자 군집 주변을 배회 목적지에서 제외할 때 두는 여백(m).
         static let seatClusterExclusionMargin: Float = 0.9
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
@@ -103,14 +103,17 @@ final class NPCGuestCoordinator {
     private var seats: [GuestSeat] = []
     /// seats와 같은 길이. 각 자리를 점유 중인 guests 인덱스, 비어 있으면 nil.
     private var seatOccupants: [Int?] = []
-    /// seats 인덱스를 "같은 테이블" 단위로 묶은 것(거리 기반 클러스터링). seatedPool
-    /// 그룹(1/2/3명) 배정과 디저트 테이블 배정이 예전에는 서로 다른 두 기준(이 거리
-    /// 클러스터링 vs "가장 가까운 테이블 엔티티" identity)을 각자 썼는데, 실측해보니
-    /// 물리적 테이블 하나가 tripo_mesh_* 리프 여러 개(상판+다리 등)로 나뉘어 있어
-    /// (Indoor.usda 기준 물리적 테이블 5개에 리프 16개) identity 기준 그룹이 물리적
-    /// 테이블보다 훨씬 잘게 쪼개지는 문제가 있었다(한 테이블에 디저트가 중복 배정되거나,
-    /// 다리처럼 작은 리프의 바운즈를 테이블 표면으로 오인). 이제 두 용도 모두 이 배열
-    /// 하나로 통일한다 — 아래 seatIndexToTableGroupIndex/tableSurfaceBoundsByGroupIndex 참고.
+    /// seats 인덱스를 "같은 테이블" 단위로 묶은 것 — 좌석이 "가장 가까운 테이블"로 연결된
+    /// 엔티티(tripo_mesh_* 리프 하나, collectSittingPoints 참고)가 같으면 같은 그룹이다.
+    /// 좌석 위치 거리로 묶는 방식(예전)도 시도해봤는데, Indoor.usda를 실측해보니 tripo_mesh_*
+    /// 리프 하나하나가 이미 "물리적 테이블 인스턴스 하나"와 정확히 대응해서(상판/다리로 쪼개진
+    /// 게 아니라, 예를 들어 작은 2인용 테이블 14개 + 긴 벤치 2개가 각각 리프 하나씩) 거리
+    /// 클러스터링은 오히려 가까이 붙여둔 서로 다른 물리적 테이블들을 하나로 잘못 합쳐버렸다
+    /// (예: linkDistance 1.6m 안에 있는 옆 테이블까지 같은 그룹으로 묶여, 그 그룹의 디저트
+    /// 표면 높이가 가장 큰/작은 테이블 기준으로 뒤섞여 케이크가 공중에 뜨는 등 오배치가
+    /// 발생했다). 그래서 entity identity 기준으로 되돌렸다 — seatedPool 그룹(1/2/3명)
+    /// 배정과 디저트 테이블 배정 모두 이 배열 하나로 통일한다(아래
+    /// seatIndexToTableGroupIndex/tableSurfaceBoundsByGroupIndex 참고).
     private var seatTableGroups: [[Int]] = []
     private var queuerIndices: Set<Int> = []
     private var wasOrdering = false
@@ -134,10 +137,9 @@ final class NPCGuestCoordinator {
     /// seats와 같은 길이. 좌석 인덱스 → seatTableGroups에서 그 좌석이 속한 그룹 인덱스
     /// (seatTableGroups의 역인덱스일 뿐이라 매 프레임 배열을 훑지 않고 바로 찾을 수 있다).
     private var seatIndexToTableGroupIndex: [Int?] = []
-    /// 테이블 그룹 인덱스별로, 그 그룹 좌석들이 "가장 가까운 테이블"로 연결된 모든
-    /// tripo_mesh_* 앵커 엔티티의 바운즈를 합친 값(min/max, worldRoot 기준). 물리적
-    /// 테이블 하나가 여러 리프로 나뉘어 있어도 합치면 실제 테이블 부피에 가까운 바운즈가
-    /// 나온다 — 디저트를 놓을 표면 계산(spawnDessertProps)에 쓴다.
+    /// 테이블 그룹 인덱스별로, 그 그룹 좌석들이 연결된 tripo_mesh_* 앵커 엔티티(그룹 내
+    /// 전부 동일)의 바운즈(min/max, worldRoot 기준) — 디저트를 놓을 표면 계산
+    /// (spawnDessertProps)에 쓴다.
     private var tableSurfaceBoundsByGroupIndex: [(min: SIMD3<Float>, max: SIMD3<Float>)?] = []
     /// 이미 디저트를 배정한 테이블 그룹 인덱스(같은 테이블에 손님이 여러 명 앉아도 한 번만).
     private var dessertAssignedTableGroups: Set<Int> = []
@@ -203,33 +205,33 @@ final class NPCGuestCoordinator {
             filteredSeatTableEntities.append(tableEntity)
         }
         seats = filteredSeats
-        seatTableGroups = clusterIndices(of: seats.map(\.position), linkDistance: Tuning.seatTableGroupLinkDistance)
         seatOccupants = Array(repeating: nil, count: seats.count)
 
-        // 디저트 표면 바운즈는 seatTableGroups(위) 하나로 통일해서 구한다: 그룹의 각 좌석이
-        // "가장 가까운 테이블"로 연결된 앵커 엔티티들을 모아 바운즈를 합친다. 물리적 테이블
-        // 하나가 tripo_mesh_* 리프 여러 개(상판+다리 등)로 나뉘어 있어도, 그 그룹에 속한
-        // 좌석들이 링크한 리프를 전부 합치면 실제 테이블 부피에 가까운 바운즈가 나온다.
+        // seatTableGroups는 "가장 가까운 테이블" 엔티티 identity로 묶는다(위 프로퍼티
+        // 주석 참고 — 좌석 위치 거리 클러스터링은 서로 다른 물리적 테이블을 잘못 합쳤다).
+        var groupIndexByAnchor: [ObjectIdentifier: Int] = [:]
+        var groupsBuilder: [[Int]] = []
+        for (seatIndex, anchor) in filteredSeatTableEntities.enumerated() {
+            guard let anchor else { continue }
+            let key = ObjectIdentifier(anchor)
+            if let existing = groupIndexByAnchor[key] {
+                groupsBuilder[existing].append(seatIndex)
+            } else {
+                groupIndexByAnchor[key] = groupsBuilder.count
+                groupsBuilder.append([seatIndex])
+            }
+        }
+        seatTableGroups = groupsBuilder
+
         seatIndexToTableGroupIndex = Array(repeating: nil, count: seats.count)
         for (groupIndex, seatIndices) in seatTableGroups.enumerated() {
             for seatIndex in seatIndices { seatIndexToTableGroupIndex[seatIndex] = groupIndex }
         }
         tableSurfaceBoundsByGroupIndex = seatTableGroups.map { seatIndices -> (min: SIMD3<Float>, max: SIMD3<Float>)? in
-            var seenAnchors: Set<ObjectIdentifier> = []
-            var anchorEntities: [Entity] = []
-            for seatIndex in seatIndices {
-                guard let anchor = filteredSeatTableEntities[seatIndex] else { continue }
-                if seenAnchors.insert(ObjectIdentifier(anchor)).inserted { anchorEntities.append(anchor) }
-            }
-            guard !anchorEntities.isEmpty else { return nil }
-            var combinedMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
-            var combinedMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
-            for anchor in anchorEntities {
-                let bounds = anchor.visualBounds(relativeTo: worldRoot)
-                combinedMin = simd_min(combinedMin, bounds.min)
-                combinedMax = simd_max(combinedMax, bounds.max)
-            }
-            return (min: combinedMin, max: combinedMax)
+            guard let firstSeatIndex = seatIndices.first,
+                  let anchor = filteredSeatTableEntities[firstSeatIndex] else { return nil }
+            let bounds = anchor.visualBounds(relativeTo: worldRoot)
+            return (min: bounds.min, max: bounds.max)
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
@@ -274,6 +276,22 @@ final class NPCGuestCoordinator {
                    seatOccupants[seatIndex] == nil {
                     seatOccupants[seatIndex] = guests.count
                     guest.placeSeated(entity: entity, worldRoot: worldRoot, seatIndex: seatIndex, seat: seats[seatIndex])
+                    maybeSpawnDessert(forSeatIndex: seatIndex)
+                } else if role == .cycler, let seatIndex = bestFreeSeatIndex() {
+                    // 배회하다 우연히 좌석을 원할 확률(sitDesireChance)에 기대면 유저가
+                    // 카페에 들어온 뒤 몇 초 안에 착석·디저트가 보인다는 보장이 안 된다.
+                    // cycler는 입장 즉시 이 좌석으로 걸어가도록 확정 배정하되, "초반엔
+                    // 서서 걸어온다"는 연출은 유지하려고 좌석 바로 뒤(테이블 반대쪽,
+                    // cyclerSpawnRadius 이내)에서만 스폰해 이동 거리를 짧게 둔다 —
+                    // moveSpeed 최저치(0.68m/s)로도 5초 안에 넉넉히 도착한다. 도중에
+                    // 실제 장애물에 막혀 updateMovingToSeat가 자리를 반납하면(seatState
+                    // = .none), 기존 배회→확률적 재시도 경로가 자연스럽게 이어받는다.
+                    seatOccupants[seatIndex] = guests.count
+                    let seat = seats[seatIndex]
+                    let spawn = seat.position - seat.facing * Float.random(in: 0.5...Tuning.cyclerSpawnRadius)
+                    spawnedPositions.append(spawn)
+                    guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
+                    guest.grantSeat(index: seatIndex, seat: seat)
                     maybeSpawnDessert(forSeatIndex: seatIndex)
                 } else {
                     let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
@@ -377,30 +395,6 @@ final class NPCGuestCoordinator {
                 in: child, relativeTo: worldRoot, insideTable: inTableSubtree))
         }
         return anchors
-    }
-
-    /// 거리 기반 union-find로 서로 가까운 좌석끼리 묶는다. linkDistance보다 가까운
-    /// 두 좌석은 같은 그룹이 되고, 체인으로 연결되면 전이적으로 하나의 그룹이 된다.
-    private func clusterIndices(of positions: [SIMD2<Float>], linkDistance: Float) -> [[Int]] {
-        var parent = Array(positions.indices)
-        func find(_ x: Int) -> Int {
-            if parent[x] != x { parent[x] = find(parent[x]) }
-            return parent[x]
-        }
-        func union(_ a: Int, _ b: Int) {
-            let rootA = find(a), rootB = find(b)
-            if rootA != rootB { parent[rootA] = rootB }
-        }
-        for i in positions.indices {
-            for j in (i + 1)..<positions.count {
-                if simd_distance(positions[i], positions[j]) <= linkDistance {
-                    union(i, j)
-                }
-            }
-        }
-        var groups: [Int: [Int]] = [:]
-        for i in positions.indices { groups[find(i), default: []].append(i) }
-        return Array(groups.values)
     }
 
     /// seatedPoolCount 인원을 groupSizes(예: [1, 2, 3])대로 나눠, 각 그룹을 서로 다른
