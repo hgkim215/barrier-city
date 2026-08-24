@@ -94,11 +94,13 @@ final class NPCGuestCoordinator {
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
-        /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 씬 전체 좌석의 평균
-        /// SittingPoint 높이를 가진 "평균적인" 의자라면 이 값을 그대로 쓴다. 실제로
-        /// 시각 확인하며 튜닝한 값으로, GuestSeat.sittingHeightOffset이 이 값에
-        /// 의자별 편차(SittingPoint 높이 - 평균)를 더해 최종 오프셋을 계산한다.
-        static let baselineSittingHeightOffset: Float = 0.05
+        /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
+        /// 좌석(= 정규화된 SittingPoint 높이가 최소인 의자)에 적용되는 오프셋이다.
+        /// 다른 의자들은 여기에 각자의 실측 바운즈 차이만큼만 더해서 쓴다
+        /// (GuestSeat.sittingHeightOffset 계산부 참고). 시각 확인 후 이 숫자 하나만
+        /// 조정하면 전체가 같이 움직인다 — 더 올리면(+) 전원이 더 높게, 내리면(-)
+        /// 전원이 더 낮게 앉는다.
+        static let baselineSittingHeightOffset: Float = 0.08
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
@@ -233,17 +235,17 @@ final class NPCGuestCoordinator {
             filteredSeats.append(seat)
             filteredSeatTableEntities.append(tableEntity)
         }
-        // 각 좌석의 sittingHeightOffset은 지금까지 SittingPoint의 raw authored 월드 Y를
-        // 담고 있다(위 collectSittingPoints 참고). 이 씬 전체 좌석의 평균 높이를 구해,
-        // 그 평균보다 얼마나 높은/낮은 의자인지를 baselineSittingHeightOffset(기존에
-        // 시각 확인으로 튜닝한 값) 기준으로 보정한 최종 오프셋으로 다시 채운다 —
-        // 의자 종류마다 다른 높이가 하드코딩 없이 자동으로 반영된다.
-        let averageSeatHeight = filteredSeats.isEmpty ? 0
-            : filteredSeats.map(\.sittingHeightOffset).reduce(0, +) / Float(filteredSeats.count)
+        // 각 좌석의 sittingHeightOffset은 지금까지 "SittingPoint 높이를 그 의자 자신의
+        // 바운즈 바닥 기준으로 정규화한 값"을 담고 있다(위 collectSittingPoints 참고).
+        // 이 씬에서 가장 낮은 좌석을 기준(0)으로 삼아, 다른 의자들이 그보다 얼마나 더
+        // 높은지를 baselineSittingHeightOffset(가장 낮은 의자에 대해 시각 확인으로
+        // 튜닝한 값) 위에 더한다 — 씬에 있는 다른 의자들의 평균에 좌우되지 않고, 각
+        // 의자 자신의 실측 바운즈 차이만큼만 정확히 더 올라간다.
+        let minimumSeatHeight = filteredSeats.map(\.sittingHeightOffset).min() ?? 0
         filteredSeats = filteredSeats.map { seat in
             GuestSeat(position: seat.position, facing: seat.facing,
                      sittingHeightOffset: Tuning.baselineSittingHeightOffset
-                         + (seat.sittingHeightOffset - averageSeatHeight))
+                         + (seat.sittingHeightOffset - minimumSeatHeight))
         }
         seats = filteredSeats
         seatOccupants = Array(repeating: nil, count: seats.count)
@@ -427,10 +429,14 @@ final class NPCGuestCoordinator {
                 } else {
                     facing = SIMD2(0, 1)
                 }
-                // sittingHeightOffset은 여기서는 SittingPoint의 raw authored 월드 Y를
-                // 그대로 담아 두고(아직 씬 전체 평균을 모르니 보정 전 값), enterIndoor가
-                // 필터링을 마친 뒤 전체 평균 대비 보정된 최종 오프셋으로 다시 채운다.
-                seats.append(GuestSeat(position: position, facing: facing, sittingHeightOffset: world.y))
+                // sittingHeightOffset은 여기서는 "SittingPoint의 authored 월드 Y를 그
+                // 좌석이 속한 의자 인스턴스 자신의 바운즈 바닥(chairBounds.min.y) 기준으로
+                // 정규화한 값"을 담아 두고(아직 씬 전체 최솟값을 모르니 보정 전 값),
+                // enterIndoor가 필터링을 마친 뒤 전체 최솟값 대비 보정된 최종 오프셋으로
+                // 다시 채운다. 의자 인스턴스 자체의 바닥이 정확히 0이 아닐 수 있어(예:
+                // authoring 오차) 이 정규화 없이 raw Y만 쓰면 그 오차가 그대로 새어든다.
+                let chairFloorY = nearestAncestorMeshBounds(of: candidate, relativeTo: worldRoot)?.min.y ?? 0
+                seats.append(GuestSeat(position: position, facing: facing, sittingHeightOffset: world.y - chairFloorY))
                 // 이 좌석이 실제로 속한 테이블(디저트를 얹을 표면)도 같은 "가장 가까운
                 // 테이블" 판정으로 같이 기록해 둔다 — facing 계산과 동일한 근거라
                 // 좌석 클러스터 중심을 거치는 간접 매칭보다 테이블을 놓칠 일이 적다.
@@ -445,6 +451,22 @@ final class NPCGuestCoordinator {
         }
         walk(entity)
         return (seats, seatTableEntities)
+    }
+
+    /// SittingPoint 마커에서 부모를 거슬러 올라가 자신이 속한 의자 인스턴스의 리프
+    /// 메시(tripo_mesh_* — 좌석·테이블과 같은 명명 규칙)를 찾아 그 바운즈를 반환한다.
+    /// 못 찾으면(예: LongChair처럼 계층이 다른 경우) nil — 호출부가 0으로 대체한다.
+    private func nearestAncestorMeshBounds(of marker: Entity, relativeTo worldRoot: Entity) -> BoundingBox? {
+        var current: Entity? = marker.parent
+        var depth = 0
+        while let candidate = current, depth < 12 {
+            if candidate.name.hasPrefix("tripo_mesh_") {
+                return candidate.visualBounds(relativeTo: worldRoot)
+            }
+            current = candidate.parent
+            depth += 1
+        }
+        return nil
     }
 
     /// "Table"/"WoodTable" 계열 서브트리 안의 모든 tripo_mesh_* 리프(실제 배치된
