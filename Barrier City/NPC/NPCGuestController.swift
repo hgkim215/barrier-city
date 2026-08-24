@@ -76,6 +76,11 @@ final class NPCGuestController {
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
+        /// 착석 시 발 기준 정렬(setUpLocomotionRoot)된 루트를 이만큼(m) 들어올린다.
+        /// Sitting 애니메이션 자체는 항상 같은 높이로 앉는 포즈를 취하는데, 의자
+        /// authored 높이와 딱 맞지 않아 캐릭터가 의자보다 살짝 낮게(마치 의자 앞
+        /// 바닥에 앉은 것처럼) 보였다. 시각 확인 후 미세 조정 가능하도록 상수로 뺐다.
+        static let seatedHeightOffset: Float = 0.05
     }
 
     private enum SeatState {
@@ -138,6 +143,11 @@ final class NPCGuestController {
     /// pendingQueueArrival을 한 번만 세우기 위한 상태 추적(도착해 있는 동안 매 프레임
     /// 다시 세우지 않도록).
     private var hasReportedQueueArrival = false
+    /// 배회를 한 바퀴 마친 뒤 곧장 향할 좌석(코디네이터가 reserveSeat로 예약).
+    /// grantSeat와 달리 즉시 이동을 시작하지 않고, 다음 배회 목적지에 도착하는
+    /// 시점에 자동으로 커밋한다 — 입장하자마자 전원이 일제히 좌석으로 직행하면
+    /// 부자연스러워, 일부는 방을 한 바퀴 둘러보다 앉는 것처럼 보이게 한다.
+    private var reservedSeat: (index: Int, seat: GuestSeat)?
     private static var cachedSighResources: [NPCGuestGender: AudioFileResource] = [:]
 
     init(name: String, role: NPCGuestRole = .cycler, gender: NPCGuestGender = .female) {
@@ -148,9 +158,10 @@ final class NPCGuestController {
     }
 
     /// 대기줄 후보 자격: 착석 지향(seatedPool) 역할이 아니고, 지금 좌석으로
-    /// 이동/착석 중이 아닐 때만(= 배회 중일 때만) 후보가 된다.
+    /// 이동/착석 중이거나 좌석을 예약해 둔 상태가 아닐 때만(= 순수 배회 중일 때만)
+    /// 후보가 된다.
     var isQueueEligible: Bool {
-        role != .seatedPool && seatState == .none
+        role != .seatedPool && seatState == .none && reservedSeat == nil
     }
 
     /// 코디네이터가 이번 프레임에 착석을 원하는지 확인할 때 한 번만 읽고 소비한다.
@@ -166,6 +177,13 @@ final class NPCGuestController {
         seatState = .movingToSeat
         wanderTarget = nil
         pauseRemaining = 0
+    }
+
+    /// grantSeat와 달리 즉시 걸어가지 않는다 — 다음 배회 목적지에 도착하는
+    /// 시점(update의 .none 분기)에 자동으로 이 좌석으로 향하게 예약만 해 둔다.
+    /// 자리는 코디네이터가 이미 seatOccupants에 표시해 다른 손님이 못 가져간다.
+    func reserveSeat(index: Int, seat: GuestSeat) {
+        reservedSeat = (index, seat)
     }
 
     /// 방금 자리를 비웠으면 그 좌석 인덱스를 반환하고 소비한다. 코디네이터가 이걸로
@@ -253,6 +271,7 @@ final class NPCGuestController {
         seatState = .sitting
         face(direction: seat.facing, deltaTime: 999)
         playAnimation(.sitting)
+        locomotionRoot?.position.y = NPCGuestTuning.seatedHeightOffset
     }
 
     func teardown() {
@@ -271,6 +290,7 @@ final class NPCGuestController {
         pendingSeatedArrivalIndex = nil
         pendingQueueArrival = false
         hasReportedQueueArrival = false
+        reservedSeat = nil
     }
 
     var currentPosition: SIMD2<Float> {
@@ -394,6 +414,18 @@ final class NPCGuestController {
         }
         if outcome.arrived {
             wanderTarget = nil
+            // 예약된 좌석이 있으면(reserveSeat) 이 배회 목적지 도착을 신호로 곧장 그
+            // 좌석으로 향한다 — 확률을 굴리지 않고 항상 커밋해, "한 바퀴 둘러보고 나서
+            // 앉는다"는 정해진 그림이 실제로 이어지게 한다.
+            if let reserved = reservedSeat {
+                reservedSeat = nil
+                claimedSeatIndex = reserved.index
+                claimedSeat = reserved.seat
+                seatState = .movingToSeat
+                pauseRemaining = 0
+                playAnimation(.idle)
+                return
+            }
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
             // 목적지 도착이라는 자연스러운 결정 지점에서만 착석 여부를 굴린다.
@@ -449,6 +481,7 @@ final class NPCGuestController {
             seatState = .sitting
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
+            locomotionRoot?.position.y = NPCGuestTuning.seatedHeightOffset
             pendingSeatedArrivalIndex = claimedSeatIndex
         } else {
             playAnimation(outcome.moved ? .walk : .idle)

@@ -74,6 +74,11 @@ final class NPCGuestCoordinator {
         /// 기준이 늘어난 만큼 반경도 넓혀 방을 가로질러 걸어오는 좀 더 자연스러운
         /// 그림이 나오게 했다.
         static let cyclerSpawnRadius: Float = 4.0
+        /// cycler 중 이 비율만 입장 즉시 좌석으로 직행하고, 나머지는 배회를 한 바퀴
+        /// 마친 뒤 좌석으로 향한다(reserveSeat) — 전원이 일제히 좌석으로 직행하면
+        /// 너무 빨리 앉는 것처럼 보인다는 피드백으로, 일부는 방을 둘러보다 앉는
+        /// 자연스러운 그림을 섞는다.
+        static let cyclerImmediateSeatChance: Float = 0.4
         /// 테이블·의자 군집 주변을 배회 목적지에서 제외할 때 두는 여백(m).
         static let seatClusterExclusionMargin: Float = 0.9
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
@@ -155,7 +160,11 @@ final class NPCGuestCoordinator {
     private enum DessertTuning {
         /// 케이크/라떼를 이 높이(m)로 균일 스케일한다(원본 에셋 크기가 제각각이라 맞춰준다).
         static let targetCakeHeight: Float = 0.10
-        static let targetLatteHeight: Float = 0.16
+        /// 라떼가 눈에 띄게 커 보인다는 피드백으로 기존 값(0.16)의 0.5배로 줄였다.
+        /// 균일 스케일(targetHeight/authoredHeight)이라 너비·깊이도 함께 절반이 되고,
+        /// 배치 위치는 spawnDessertProps가 스케일 적용 후 바운즈를 다시 재서 표면에
+        /// 맞추므로 이 값만 바꿔도 자동으로 정확히 안착한다.
+        static let targetLatteHeight: Float = 0.08
         /// 테이블 상단면 바로 위로 살짝 띄우는 여백.
         static let surfaceClearance: Float = 0.005
         /// 케이크+라떼를 함께 놓을 때, 손님 쪽을 바라보는 축에 수직으로 서로 반대쪽에
@@ -298,23 +307,32 @@ final class NPCGuestCoordinator {
                 } else if role == .cycler, let seatIndex = bestFreeSeatIndex() {
                     // 배회하다 우연히 좌석을 원할 확률(sitDesireChance)에 기대면 유저가
                     // 카페에 들어온 뒤 몇 초 안에 착석·디저트가 보인다는 보장이 안 된다.
-                    // cycler는 입장 즉시 이 좌석으로 걸어가도록 확정 배정하되, "초반엔
-                    // 서서 걸어온다"는 연출은 유지하려고 좌석 바로 뒤(테이블 반대쪽,
-                    // cyclerSpawnRadius 이내)에서만 스폰해 이동 거리를 짧게 둔다 —
-                    // moveSpeed 최저치(0.68m/s)로도 10초 안에 넉넉히 도착한다. 도중에
-                    // 실제 장애물에 막혀 updateMovingToSeat가 자리를 반납하면(seatState
-                    // = .none), 기존 배회→확률적 재시도 경로가 자연스럽게 이어받는다.
-                    // 디저트는 여기서 바로 놓지 않는다 — update()가
-                    // takeSeatedArrivalSeatIndex()로 실제 도착을 확인한 뒤에 놓아야,
-                    // 걸어가다 막혀 자리를 반납해도 아무도 없는 테이블에 디저트만
-                    // 남는 일이 없다.
+                    // 그래서 cycler는 입장 즉시 이 좌석을 확정 배정받고, 좌석 바로 뒤
+                    // (테이블 반대쪽, cyclerSpawnRadius 이내)에서만 스폰해 이동 거리를
+                    // 짧게 둔다. 도중에 실제 장애물에 막혀 updateMovingToSeat가 자리를
+                    // 반납하면(seatState = .none), 기존 배회→확률적 재시도 경로가
+                    // 자연스럽게 이어받는다. 디저트는 여기서 바로 놓지 않는다 —
+                    // update()가 takeSeatedArrivalSeatIndex()로 실제 도착을 확인한
+                    // 뒤에 놓아야, 걸어가다 막혀 자리를 반납해도 아무도 없는 테이블에
+                    // 디저트만 남는 일이 없다.
+                    //
+                    // 전원이 곧장 좌석으로 직행하면 너무 빨리 앉는 것처럼 보여,
+                    // cyclerImmediateSeatChance 비율만 즉시 걸어가고 나머지는 배회를
+                    // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat) — moveSpeed
+                    // 최저치(0.68m/s)로도 최악의 경우(4.0m) 약 5.9초면 도착해 10초
+                    // 기준 안에서 여유가 있다.
                     seatOccupants[seatIndex] = guests.count
                     let seat = seats[seatIndex]
                     let spawn = seat.position - seat.facing * Float.random(in: 1.0...Tuning.cyclerSpawnRadius)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-                    guest.grantSeat(index: seatIndex, seat: seat)
-                    Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 확정 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
+                    if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
+                        guest.grantSeat(index: seatIndex, seat: seat)
+                        Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
+                    } else {
+                        guest.reserveSeat(index: seatIndex, seat: seat)
+                        Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
+                    }
                 } else {
                     let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas, keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
