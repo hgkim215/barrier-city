@@ -62,8 +62,16 @@ final class NPCGuestController {
         /// 가구 회피 레이 폭 방향 샘플 간격(콜리전 박스 절반 폭과 대략 맞춘다).
         static let bodyHalfWidth: Float = 0.2
         /// 원하는 이동 폭 대비 실제로 이동 가능한 폭이 이 비율보다 작으면 "막혔다"로
-        /// 보고 현재 목적지를 버려 벽/가구 앞에서 제자리걸음하지 않게 한다.
-        static let blockedStepFraction: Float = 0.15
+        /// 보고 현재 목적지를 버려 벽/가구 앞에서 제자리걸음하지 않게 한다. 너무 낮으면
+        /// (예전 0.15) 가구 모서리에 살짝 걸려 15~35%만 전진하는 경우를 "막힘"으로 못
+        /// 잡아내, 실제로는 거의 못 나아가면서도 Walk 애니메이션만 계속 재생되는 것처럼
+        /// 보였다.
+        static let blockedStepFraction: Float = 0.4
+        /// 막혀서 새 목적지를 고른 뒤에도 곧장 다시 움직이면(특히 새 목적지도 같은
+        /// 장애물 방향이면) 같은 프레임에 다시 막혀 Idle↔Walk가 매 프레임 번갈아
+        /// 재생되며 결과적으로 Walk가 끊기지 않는 것처럼 보인다. 잠깐 멈춰 있다가
+        /// 다시 시도하게 해 이 진동을 막는다.
+        static let blockedPauseRange: ClosedRange<Float> = 0.2...0.5
         /// 자유 배회 목적지끼리 이 정도 간격을 우선 확보한다.
         static let preferredTargetSeparation: Float = 1.35
         /// 좌석 도착 판정 거리.
@@ -337,13 +345,16 @@ final class NPCGuestController {
                            separationScale: 1,
                            exclusions: exclusions)
         if outcome.blocked {
-            // 시간을 두고 포기하지 않고, 막힌 걸 확인한 그 프레임에 바로 다른
-            // 목적지를 찾아 방향을 튼다.
+            // 막힌 걸 확인한 그 프레임에 바로 다른 목적지를 찾아 방향을 틀되, 짧게
+            // 멈췄다 가게 해 새 목적지도 같은 장애물에 곧장 다시 막히며 Idle↔Walk가
+            // 매 프레임 번갈아 재생되는(결과적으로 Walk가 안 끊기는 것처럼 보이는)
+            // 진동을 막는다.
             wanderTarget = randomWanderTarget(
                 in: wanderArea,
                 excluding: exclusions,
                 awayFrom: currentPosition,
                 avoiding: occupiedAnchors)
+            pauseRemaining = Float.random(in: NPCGuestTuning.blockedPauseRange)
             playAnimation(.idle)
             return
         }
