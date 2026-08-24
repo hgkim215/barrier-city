@@ -17,15 +17,12 @@ private func expectNear(_ actual: Float, _ expected: Float, _ message: String) {
 struct InteractionFlowRegressionTests {
     static func main() {
         let doorCenter = SIMD2<Float>(0, -6)
-        let outdoorStart = OutdoorSessionStart.positionOutsideCafe(
-            doorCenter: doorCenter,
-            cafeCenter: .zero,
-            fallbackDoorCenter: doorCenter,
-            groundMinimum: SIMD2(repeating: -InteractionTuning.outdoorGroundPlaneSize / 2),
-            groundMaximum: SIMD2(repeating: InteractionTuning.outdoorGroundPlaneSize / 2),
-            preferredDistance: InteractionTuning.outdoorSpawnDistanceFromDoor,
-            safetyMargin: InteractionTuning.outdoorSpawnSafetyMargin)
-        expectNear(outdoorStart.y, -7.5, "outdoor spawn stays inside the supported floor edge")
+        let outdoorStart = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: SIMD2<Float>(-2.7076335, 2.2008963),
+            road24Position: SIMD2<Float>(1.2923665, 2.2008963),
+            fallbackPosition: InteractionTuning.roadMidpointFallbackSpawnPosition)
+        expectNear(outdoorStart.x, -0.7076335, "outdoor spawn is centered on X between Road_23 and Road_24")
+        expectNear(outdoorStart.y, 2.2008963, "outdoor spawn is placed on the road Z")
 
         let door = ProximityTrigger(
             id: "door.enter",
@@ -41,16 +38,16 @@ struct InteractionFlowRegressionTests {
         expect(initialVerdict.showID, nil, "door prompt stays hidden at the outdoor spawn")
 
         let approachedVerdict = InteractionModel.evaluate(
-            playerX: outdoorStart.x,
-            playerZ: outdoorStart.y + 0.5,
+            playerX: doorCenter.x,
+            playerZ: doorCenter.y + 0.5,
             triggers: [door],
             activeID: nil,
             dismissedID: nil)
-        expect(approachedVerdict.showID, "door.enter", "half-meter approach reaches the door trigger")
+        expect(approachedVerdict.showID, "door.enter", "approaching within trigger radius activates the door prompt")
 
         let dismissedVerdict = InteractionModel.evaluate(
-            playerX: outdoorStart.x,
-            playerZ: outdoorStart.y + 0.5,
+            playerX: doorCenter.x,
+            playerZ: doorCenter.y + 0.5,
             triggers: [door],
             activeID: nil,
             dismissedID: "door.enter")
@@ -58,15 +55,15 @@ struct InteractionFlowRegressionTests {
 
         let leftVerdict = InteractionModel.evaluate(
             playerX: doorCenter.x,
-            playerZ: doorCenter.y + 2,
+            playerZ: doorCenter.y + 3.0,
             triggers: [door],
             activeID: nil,
             dismissedID: "door.enter")
         expect(leftVerdict.clearDismissed, true, "leaving the door range clears dismissal")
 
         let reenteredVerdict = InteractionModel.evaluate(
-            playerX: outdoorStart.x,
-            playerZ: outdoorStart.y + 0.5,
+            playerX: doorCenter.x,
+            playerZ: doorCenter.y + 0.5,
             triggers: [door],
             activeID: nil,
             dismissedID: nil)
@@ -77,8 +74,8 @@ struct InteractionFlowRegressionTests {
             toward: SIMD3<Float>(4, 1, 2),
             kind: .yesNoPrompt)
         expectNear(doorPanelPosition.x, 0, "door prompt stays horizontally centered on the user")
-        expectNear(doorPanelPosition.y, 1.45, "door prompt stays at the seated eye line")
-        expectNear(doorPanelPosition.z, -1.2, "door prompt stays at a comfortable eye-front distance")
+        expectNear(doorPanelPosition.y, 1.35, "door prompt stays at the seated direct-touch height")
+        expectNear(doorPanelPosition.z, -0.60, "door prompt stays at a direct-touch hand distance")
 
         let kioskPanelPosition = InteractionPanelPlacement.worldPosition(
             SIMD3<Float>(3, 1.7, 4),
@@ -103,11 +100,13 @@ struct InteractionFlowRegressionTests {
             isGuideLocked: false)
         expect(interactions.kioskMenuVisible, true, "Indoor menu remains visible")
         expect(interactions.kioskInputEnabled, true, "Mission 2 proximity enables input")
-        expect(interactions.selectKioskCategory(.coffee), .selected, "general category switches")
-        expect(interactions.kioskSelectedCategory, .coffee, "coffee remains selected")
-        expect(interactions.kioskBarrierVisible, false, "general category stays usable")
-        expect(interactions.selectKioskCategory(.other), .blocked, "other exposes barrier")
-        expect(interactions.kioskSelectedCategory, .coffee, "blocked tab does not select")
+        expect(interactions.selectKioskCategory(.coffee), .blocked, "category tab is blocked")
+        expect(interactions.kioskSelectedCategory, .best, "category remains best")
+        expect(interactions.kioskBarrierVisible, true, "category attempt opens barrier")
+        _ = interactions.dismissKioskBarrier()
+        expect(interactions.kioskBarrierVisible, false, "barrier dismisses")
+        expect(interactions.selectKioskCategory(.other), .blocked, "other tab is also blocked")
+        expect(interactions.kioskSelectedCategory, .best, "category remains best")
         expect(interactions.kioskBarrierVisible, true, "other opens barrier")
 
         let quest = QuestModel()

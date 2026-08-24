@@ -139,7 +139,7 @@ struct KioskOrderView: View {
         .accessibilityLabel("\(category.title) 카테고리")
         .accessibilityHint(
             im.kioskInputEnabled
-                ? (category == .other ? "선택하면 접근성 장벽 안내가 열립니다" : "메뉴를 표시합니다")
+                ? "선택하면 접근성 장벽 안내가 열립니다"
                 : "키오스크 가까이에서 선택할 수 있습니다")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -270,7 +270,7 @@ struct KioskOrderView: View {
                 .foregroundStyle(.black)
                 .multilineTextAlignment(.center)
 
-            Text("앉은 자세에서는 기타 카테고리에 손이 닿지 않습니다. 카페 직원에게 직접 주문해 보세요.")
+            Text("앉은 자세에서는 상단 카테고리에 손이 닿지 않습니다. 카페 직원에게 직접 주문해 보세요.")
                 .font(.system(size: 19, weight: .bold, design: .rounded))
                 .foregroundStyle(.black)
                 .multilineTextAlignment(.center)
