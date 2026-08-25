@@ -47,7 +47,7 @@ final class NPCGuestCoordinator {
         /// 항상 배회만 하는 손님 수(대기줄 후보).
         static let wandererCount = 1
         /// 배회↔착석↔기립을 반복하는 손님 수(대기줄 후보).
-        static let cyclerCount = 3
+        static let cyclerCount = 2
         /// 동시에 Walk 애니메이션 중인 손님을 이 인원으로 제한한다 — 카페 전체가
         /// 한꺼번에 돌아다니면 붐벼 보인다는 피드백. 이미 걷던 손님은 막지 않고
         /// "새로 걷기 시작하는" 순간만 이 예산을 넘지 않을 때 허용한다.
@@ -328,6 +328,10 @@ final class NPCGuestCoordinator {
         roles += Array(repeating: .seatedPool, count: Tuning.seatedPoolCount)
         roles.shuffle()
         var nextRoleIndex = 0
+        // displayNames 총원(genderGroups 참고)이 위 세 카운트 합보다 많을 수 있다 —
+        // 그 초과분엔 항상 배회만 하는 역할을 준다. 예전엔 기본값이 .cycler라
+        // cyclerCount를 줄여도 이 초과분이 조용히 cycler로 채워져 실제로는 줄지
+        // 않는 문제가 있었다.
 
         // seatedPool을 groupSizes(1/2/3명)대로 서로 다른 테이블에 배정하기 위한 좌석
         // 큐. 앞에서부터 하나씩 꺼내 쓰고, 다 떨어지면(테이블이 부족하면)
@@ -343,7 +347,7 @@ final class NPCGuestCoordinator {
                 // indoorMap에 붙어 있어 clone()이 콜리전을 포함한 컴포넌트를 그대로 상속한다.
                 let entity = index == 0 ? template : template.clone(recursive: true)
                 entity.name = displayName
-                let role = nextRoleIndex < roles.count ? roles[nextRoleIndex] : .cycler
+                let role = nextRoleIndex < roles.count ? roles[nextRoleIndex] : .alwaysWandering
                 nextRoleIndex += 1
                 let guest = NPCGuestController(name: displayName, role: role, gender: group.gender)
 
