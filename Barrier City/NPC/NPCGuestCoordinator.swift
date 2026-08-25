@@ -639,7 +639,7 @@ final class NPCGuestCoordinator {
     /// 무작위 탐색과 격자 전수 탐색이 모두 실패했을 때의 최후 폴백. 손님을 아예
     /// 생성 취소하는 대신, 최소한 제외 구역(AreaK 등) 밖으로는 반드시 밀어낸
     /// 지점에 배치한다 — 가구 겹침 정도는 감수하되 손님이 통째로 사라지는 것보다는
-    /// 낫다(b87e765의 pushedOutsideExclusions와 같은 방식).
+    /// 낫다.
     private func guaranteedFallbackSpawn(near preferred: SIMD2<Float>,
                                          in area: NPCGuestArea,
                                          excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
