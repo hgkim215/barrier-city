@@ -253,10 +253,20 @@ closestDistance   = length(relPos + relVel * tClosest)
 이웃은 강하게 밀어내는" 즉시 반발이 마지막으로 다듬는 순서다. 새 튜닝 파라미터를 최소화
 하기 위해 기존 값 두 개를 그대로 재사용한다:
 
-- **`separationScale`**(대기줄 0.35 / 좌석 접근 0.5 / 자유 배회 1.0)을 예측 회피 세기
-  배율로도 그대로 쓴다 — 컨텍스트별 새 파라미터 없이 대기줄·좌석 접근이 자연히 더
-  약하게 반응한다.
+- **`separationScale`**(대기줄 0.35 / 자유 배회 1.0)을 예측 회피 세기 배율로도
+  그대로 쓴다 — 컨텍스트별 새 파라미터 없이 대기줄이 자연히 더 약하게 반응한다.
 - **`movementProfile.separationSide`**를 좌/우 결정에 그대로 쓴다(위 설명 참고).
+
+**좌석 접근(`updateMovingToSeat`)에서는 이 레이어 전체를 끈다**
+(`move`/`moveAlongPath`의 `usePredictiveAvoidance` 파라미터, 기본값 `true` —
+배회·대기줄은 영향 없음). 정지 이웃 제외, 막힘 시 원래 방향 재시도, stall 즉시
+탈출, 도착 판정 완화까지 다섯 차례 개별 완화를 거쳤는데도 좌석 근처에서 멈춰
+서는 재현이 실기에서 계속 나왔다 — 좌석으로 걸어가는 짧고 목적이 분명한 구간은
+"아직 멀리 있을 때부터 미리 피하기"가 굳이 필요하지 않고, 지금까지 발견된 회귀가
+전부 그 조기 보정이 마지막 접근과 충돌해서 생겼다는 공통점이 있었다. 즉시 반발
+(`crowdSteeredDirection`)과 하드 세이프티 넷(`NPCObstacleAvoidance`)은 그대로
+살아있으므로 다른 손님·유저와 실제로 겹치는 일은 없다 — 빠지는 건 예측 레이어의
+"조기 개입"뿐이다.
 
 `avoidObstacles`가 꺼지는 구간(좌석 코앞 `seatCollisionBypassDistance` 이내)에서는
 이 레이어도 같이 꺼진다 — `NPCObstacleAvoidance`의 이웃 하드 블록이 같은 구간에서
