@@ -86,6 +86,16 @@ final class NPCGuestController {
         static let stallMinimumDistance: Float = 0.15
         /// 자유 배회 목적지끼리 이 정도 간격을 우선 확보한다.
         static let preferredTargetSeparation: Float = 1.35
+        /// randomWanderTarget이 후보를 고를 때, 지금 위치에서 그 방향으로 실제
+        /// 충돌 레이가 최소 이만큼은 뚫려 있어야 후보로 인정한다. 논리적으로는
+        /// 유효한(바닥 안·제외 구역 밖) 후보라도 바로 앞이 가구에 막혀 있으면
+        /// 걷기 시작하자마자 다시 막혀, 같은 자리에서 걷다 멈췄다를 반복하게 된다.
+        static let clearPathMinimumDistance: Float = 1.0
+        /// 이 횟수만큼 연속으로 막히면(consecutiveBlockedCount) 먼 무작위 목적지
+        /// 대신 지금 위치 주변을 원형으로 훑어 실제로 뚫린 방향을 찾는
+        /// nearbyEscapeTarget으로 전환한다 — 막다른 구석에 몰려 무작위 후보가
+        /// 계속 같은 방향으로만 뽑히는 경우까지 확실히 벗어나게 하는 마지막 안전망.
+        static let stuckEscapeThreshold = 3
         /// 좌석 도착 판정 거리.
         static let seatArrivalDistance: Float = 0.08
         /// 좌석 콜리전 프록시를 넘는 마지막 구간에서만 장애물 레이를 끈다. 좌석까지
@@ -156,6 +166,9 @@ final class NPCGuestController {
     private var stallCheckTarget: SIMD2<Float>?
     private var stallCheckTimer: Float = 0
     private var stallCheckStartPosition: SIMD2<Float>?
+    /// 배회 중 연속으로 막힌 횟수(NPCGuestTuning.stuckEscapeThreshold 참고). 막히지
+    /// 않고 이동/도착하면 즉시 0으로 리셋된다.
+    private var consecutiveBlockedCount = 0
     private let movementProfile: MovementProfile
 
     private var seatState: SeatState = .none
@@ -331,6 +344,7 @@ final class NPCGuestController {
         pendingQueueArrival = false
         hasReportedQueueArrival = false
         reservedSeat = nil
+        consecutiveBlockedCount = 0
     }
 
     var currentPosition: SIMD2<Float> {
@@ -480,11 +494,22 @@ final class NPCGuestController {
             // 멈췄다 가게 해 새 목적지도 같은 장애물에 곧장 다시 막히며 Idle↔Walk가
             // 매 프레임 번갈아 재생되는(결과적으로 Walk가 안 끊기는 것처럼 보이는)
             // 진동을 막는다.
-            let newTarget = randomWanderTarget(
-                in: wanderArea,
-                excluding: exclusions,
-                awayFrom: currentPosition,
-                avoiding: occupiedAnchors)
+            consecutiveBlockedCount += 1
+            // randomWanderTarget은 논리적 유효성(바닥 안·제외 구역 밖)만 보고 후보를
+            // 고르는데, 지금 위치가 이미 막다른 구석이면 그렇게 고른 새 목적지도
+            // 같은 장애물 너머라 다시 막히길 반복할 수 있다. 연속으로
+            // stuckEscapeThreshold번 이상 막히면, 먼 무작위 후보 대신 지금 위치
+            // 주변에서 실제로(레이캐스트로 확인된) 뚫린 방향을 찾는 nearbyEscapeTarget로
+            // 전환해 확실히 벗어나게 한다.
+            let newTarget: SIMD2<Float>?
+            if consecutiveBlockedCount >= NPCGuestTuning.stuckEscapeThreshold {
+                newTarget = nearbyEscapeTarget(from: currentPosition, in: wanderArea, excluding: exclusions)
+                    ?? randomWanderTarget(in: wanderArea, excluding: exclusions,
+                                          awayFrom: currentPosition, avoiding: occupiedAnchors)
+            } else {
+                newTarget = randomWanderTarget(in: wanderArea, excluding: exclusions,
+                                               awayFrom: currentPosition, avoiding: occupiedAnchors)
+            }
             wanderTarget = newTarget
             // move()는 실제로 이동한(moved) 프레임에만 face()를 호출한다. 막힌 프레임은
             // moved가 false라 이 회전이 없으면 벽/가구를 향한 채로 그대로 멈춰 서서,
@@ -497,6 +522,7 @@ final class NPCGuestController {
             playAnimation(.idle)
             return
         }
+        consecutiveBlockedCount = 0
         if outcome.arrived {
             wanderTarget = nil
             // 예약된 좌석이 있으면(reserveSeat) 이 배회 목적지 도착을 신호로 곧장 그
@@ -776,6 +802,7 @@ final class NPCGuestController {
         // 지금 위치를 포함하는 구역만 이번 탐색에서 빼고, 아직 들어가 있지 않은
         // 다른 구역은 그대로 피한다.
         let activeExclusions = exclusions.filter { !$0.contains(current) }
+        let scene = locomotionRoot?.scene
         var fallback: SIMD2<Float>?
         var bestSeparation: Float = -1
         for _ in 0..<40 {
@@ -789,6 +816,10 @@ final class NPCGuestController {
             // 후보는 애초에 고르지 않는다.
             if pathCrosses(activeExclusions, from: current, to: candidate) { continue }
             guard simd_distance(candidate, current) >= NPCGuestTuning.minimumRoamDistance else { continue }
+            // 논리적으로는 유효해도 출발 방향이 바로 가구에 막혀 있으면 걷기
+            // 시작하자마자 다시 막힌다 — 실제 충돌 레이로 최소한의 출발 여유가
+            // 있는 후보만 고른다(같은 자리에서 걷다 멈췄다를 반복하던 문제의 원인).
+            guard hasImmediateClearPath(from: current, to: candidate, scene: scene) else { continue }
             let separation = occupiedAnchors
                 .map { simd_distance(candidate, $0) }
                 .min() ?? .greatestFiniteMagnitude
@@ -801,6 +832,63 @@ final class NPCGuestController {
             }
         }
         return fallback
+    }
+
+    /// candidate까지 직선으로 걸어갈 때 출발 방향이 실제 충돌(레이캐스트)로 곧장
+    /// 막혀 있지는 않은지 확인한다. 씬이 아직 없으면(테스트 등) 통과시킨다.
+    private func hasImmediateClearPath(from start: SIMD2<Float>, to end: SIMD2<Float>,
+                                       scene: RealityKit.Scene?) -> Bool {
+        guard let scene else { return true }
+        let delta = end - start
+        let distance = simd_length(delta)
+        guard distance > 0.001 else { return true }
+        let direction = delta / distance
+        let allowed = NPCObstacleAvoidance.allowedStep(
+            scene: scene,
+            from: SIMD3(start.x, 0, start.y),
+            direction: SIMD3(direction.x, 0, direction.y),
+            desiredStep: distance,
+            halfWidth: NPCGuestTuning.bodyHalfWidth,
+            playerPosition: .zero,
+            avoidPlayer: false)
+        return allowed >= min(distance, NPCGuestTuning.clearPathMinimumDistance)
+    }
+
+    /// 연속으로 막힌 끝에 부르는 최후 탈출: 먼 무작위 목적지 대신, 지금 위치
+    /// 주변을 원형으로 훑어 논리적으로 유효하고 실제로도(레이캐스트) 가장 많이
+    /// 뚫린 방향을 찾는다. randomWanderTarget이 매번 같은 막다른 방향의 후보만
+    /// 뽑는 막다른 구석에서도 확실히 벗어나게 하는 안전망이다.
+    private func nearbyEscapeTarget(from current: SIMD2<Float>,
+                                    in area: NPCGuestArea,
+                                    excluding exclusions: [NPCGuestArea]) -> SIMD2<Float>? {
+        let scene = locomotionRoot?.scene
+        let activeExclusions = exclusions.filter { !$0.contains(current) }
+        let sampleCount = 16
+        let probeDistance: Float = 1.0
+        var best: SIMD2<Float>?
+        var bestClearance: Float = 0
+        for index in 0..<sampleCount {
+            let angle = Float(index) / Float(sampleCount) * 2 * Float.pi
+            let direction = SIMD2<Float>(cos(angle), sin(angle))
+            let probe = current + direction * probeDistance
+            // randomWanderTarget과 동일하게, 지금 이미 들어가 있는 구역은 "빠져나갈
+            // 곳"이지 "들어가면 안 되는 곳"이 아니라 이번 탐색에서는 뺀다.
+            guard NPCGuestNavigation.isValid(probe, inside: area, excluding: activeExclusions) else { continue }
+            let clearance: Float
+            if let scene {
+                clearance = NPCObstacleAvoidance.allowedStep(
+                    scene: scene, from: SIMD3(current.x, 0, current.y),
+                    direction: SIMD3(direction.x, 0, direction.y),
+                    desiredStep: probeDistance, halfWidth: NPCGuestTuning.bodyHalfWidth,
+                    playerPosition: .zero, avoidPlayer: false)
+            } else {
+                clearance = probeDistance
+            }
+            guard clearance > bestClearance else { continue }
+            bestClearance = clearance
+            best = current + direction * clearance * 0.9
+        }
+        return best
     }
 
     /// start→end 직선 경로 위 몇 지점을 샘플링해 제외 구역을 가로지르는지 대략
