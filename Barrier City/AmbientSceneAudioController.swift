@@ -1,5 +1,6 @@
 import RealityKit
 import Foundation
+import OSLog
 
 /// 현재 배경(실외/실내)의 환경음 한 트랙을 재생한다. AVAudioPlayer로 그냥 틀면
 /// 헤드폰으로 듣는 것처럼 머리에 딱 붙어 들린다. 대신 RealityKit의
@@ -17,6 +18,10 @@ final class AmbientSceneAudioController {
         static let fadeInDuration: TimeInterval = 1.5
     }
 
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "AmbientSceneAudioController")
+
     private var currentResourceName: String?
     private var audioEntity: Entity?
     private var playback: AudioPlaybackController?
@@ -31,14 +36,20 @@ final class AmbientSceneAudioController {
     func play(resource resourceName: String, worldRoot: Entity) {
         guard currentResourceName != resourceName else { return }
         stopTrack()
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3") else { return }
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3") else {
+            Self.logger.error("배경음 리소스 없음: \(resourceName, privacy: .public).mp3 (번들에 포함되지 않음)")
+            return
+        }
         currentResourceName = resourceName
 
         if !hasAudioSessionClaim {
             do {
                 try AudioSessionCoordinator.shared.acquire(.playback)
                 hasAudioSessionClaim = true
-            } catch { return }
+            } catch {
+                Self.logger.error("오디오 세션 확보 실패(\(resourceName, privacy: .public)): \(String(describing: error), privacy: .public)")
+                return
+            }
         }
 
         let entity = Entity()
@@ -48,15 +59,25 @@ final class AmbientSceneAudioController {
         audioEntity = entity
 
         loadTask = Task { [weak self] in
-            guard let resource = try? await AudioFileResource(
-                contentsOf: url,
-                configuration: .init(shouldLoop: true)) else { return }
-            guard let self, self.audioEntity === entity else { return }
+            let resource: AudioFileResource
+            do {
+                resource = try await AudioFileResource(
+                    contentsOf: url,
+                    configuration: .init(shouldLoop: true))
+            } catch {
+                Self.logger.error("배경음 로드 실패(\(resourceName, privacy: .public)): \(String(describing: error), privacy: .public)")
+                return
+            }
+            guard let self, self.audioEntity === entity else {
+                Self.logger.error("배경음 재생 취소: 로드 중 트랙이 교체됨(\(resourceName, privacy: .public))")
+                return
+            }
             let controller = entity.playAudio(resource)
             controller.gain = -60
             controller.fade(to: Tuning.targetGain, duration: Tuning.fadeInDuration)
             self.playback = controller
             self.loadTask = nil
+            Self.logger.info("배경음 재생 시작: \(resourceName, privacy: .public)")
         }
     }
 

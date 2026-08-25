@@ -62,9 +62,21 @@ final class BootLoadingOverlay {
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let loaded = Self.loadSplashMaterials()
-            guard !Task.isCancelled, self.anchor === anchor, let firstMaterial = loaded.first else { return }
+            guard !Task.isCancelled else {
+                Self.logger.error("스플래시 로드 취소됨(Task.isCancelled)")
+                return
+            }
+            guard self.anchor === anchor else {
+                Self.logger.error("스플래시 부착 취소: install()이 재호출되어 anchor가 이미 교체됨")
+                return
+            }
+            guard let firstMaterial = loaded.first else {
+                Self.logger.error("스플래시 부착 취소: 로드된 머티리얼이 없음(위 로드 실패 로그 참고)")
+                return
+            }
             self.materials = loaded
             self.attachSplashPlane(to: anchor, firstMaterial: firstMaterial)
+            Self.logger.info("스플래시 평면 부착 완료: \(loaded.count, privacy: .public)개 머티리얼")
         }
     }
 
