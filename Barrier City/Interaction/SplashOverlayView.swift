@@ -14,23 +14,38 @@ struct SplashOverlayView: View {
     @State private var swapTask: Task<Void, Never>?
 
     var body: some View {
-        Group {
-            if images.indices.contains(frame) {
-                Image(uiImage: images[frame])
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+        VStack(spacing: 14) {
+            Group {
+                if !images.isEmpty {
+                    Image(uiImage: images[frame % images.count])
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                }
             }
+            .frame(width: 360, height: 325)
+
+            HStack(spacing: 8) {
+                Text("도로 공사중")
+                Text(SplashSequence.progressDots(atFrame: frame) ?? "")
+                    .frame(width: 54, alignment: .leading)
+            }
+            .font(.system(size: 22, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 9)
+            .background(.black.opacity(0.58), in: Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("도로 공사중")
         }
         .frame(width: 400, height: 400)
         .task {
             images = Self.loadImages()
             frame = 0
-            guard images.count > 1 else { return }
             swapTask = Task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: SplashSequence.frameDuration)
                     guard !Task.isCancelled else { return }
-                    frame = (frame + 1) % images.count
+                    frame = (frame + 1) % SplashSequence.combinedCycleLength
                 }
             }
         }

@@ -3,10 +3,22 @@ import simd
 
 /// 손님/바리스타 NPC가 목적지를 향해 걸을 때 가구·벽 콜리전(groundGroup)을 뚫고
 /// 지나가지 않도록, 이동 방향으로 짧은 레이를 쏴서 실제로 갈 수 있는 거리로 이동
-/// 폭을 줄인다. 휠체어의 WheelchairMovementSystem.wallDistance()와 같은 원리이지만
-/// 몸이 좁아 샘플을 3개로 줄인다. NPC끼리는(npcGroup) 서로 밀어내며 걷지 않도록
+/// 폭을 줄인다. 휠체어의 WheelchairMovementSystem.wallDistance()와 같은 원리이며,
+/// 얇은 가구 다리가 레이 사이로 빠지지 않도록 몸 폭을 5개 지점에서 검사한다.
+/// NPC끼리는(npcGroup) 서로 밀어내며 걷지 않도록
 /// groundGroup만 검사한다.
 enum NPCObstacleAvoidance {
+    enum Blocker: String {
+        case sceneGeometry
+        case player
+        case neighboringNPC
+    }
+
+    struct StepResult {
+        let step: Float
+        let blocker: Blocker?
+    }
+
     /// Indoor.usda의 /Root/collision/Cube 프록시 대부분은 중심 y≈0.19m,
     /// 높이≈0.4m라 상단이 약 0.39m다. 0.5m 레이는 그 위를 지나가므로 몸통 하단
     /// 높이에서 검사한다.
@@ -32,47 +44,82 @@ enum NPCObstacleAvoidance {
                             halfWidth: Float,
                             playerPosition: SIMD2<Float>,
                             avoidPlayer: Bool = true,
+                            avoidSceneGeometry: Bool = true,
                             neighborPositions: [SIMD2<Float>] = []) -> Float {
-        guard desiredStep > 0 else { return 0 }
+        allowedStepResult(
+            scene: scene,
+            from: position,
+            direction: direction,
+            desiredStep: desiredStep,
+            halfWidth: halfWidth,
+            playerPosition: playerPosition,
+            avoidPlayer: avoidPlayer,
+            avoidSceneGeometry: avoidSceneGeometry,
+            neighborPositions: neighborPositions).step
+    }
+
+    /// allowedStep과 같은 계산을 하되 최종 스텝을 실제로 가장 많이 줄인 차단 주체를
+    /// 함께 돌려준다. 좌석 접근 포기 로그가 가구/유저/다른 NPC를 구분하는 데 쓴다.
+    static func allowedStepResult(scene: RealityKit.Scene,
+                                  from position: SIMD3<Float>,
+                                  direction: SIMD3<Float>,
+                                  desiredStep: Float,
+                                  halfWidth: Float,
+                                  playerPosition: SIMD2<Float>,
+                                  avoidPlayer: Bool = true,
+                                  avoidSceneGeometry: Bool = true,
+                                  neighborPositions: [SIMD2<Float>] = []) -> StepResult {
+        guard desiredStep > 0 else { return StepResult(step: 0, blocker: nil) }
         let perpendicular = SIMD3<Float>(direction.z, 0, -direction.x)
         var nearest: Float = desiredStep
-        for fraction: Float in [-1, 0, 1] {
-            let offset = perpendicular * (halfWidth * fraction)
-            let origin = SIMD3(position.x + offset.x,
-                               position.y + rayHeight,
-                               position.z + offset.z)
-            let hits = scene.raycast(origin: origin, direction: direction,
-                                     length: desiredStep + skin, query: .all,
-                                     mask: AppModel.groundGroup)
-            for hit in hits where abs(hit.normal.y) < 0.5 {
-                let hitDistance = simd_distance(hit.position, origin)
-                nearest = min(nearest, max(0, hitDistance - skin))
+        var blocker: Blocker?
+        func reduceStep(to candidate: Float, blockedBy candidateBlocker: Blocker) {
+            if candidate < nearest {
+                nearest = candidate
+                blocker = candidateBlocker
+            }
+        }
+        if avoidSceneGeometry {
+            for fraction: Float in [-1, -0.5, 0, 0.5, 1] {
+                let offset = perpendicular * (halfWidth * fraction)
+                let origin = SIMD3(position.x + offset.x,
+                                   position.y + rayHeight,
+                                   position.z + offset.z)
+                let hits = scene.raycast(origin: origin, direction: direction,
+                                         length: desiredStep + skin, query: .all,
+                                         mask: AppModel.groundGroup)
+                for hit in hits where abs(hit.normal.y) < 0.5 {
+                    let hitDistance = simd_distance(hit.position, origin)
+                    reduceStep(to: max(0, hitDistance - skin), blockedBy: .sceneGeometry)
+                }
             }
         }
         let position2D = SIMD2(position.x, position.z)
         let direction2D = SIMD2(direction.x, direction.z)
         if avoidPlayer {
-            nearest = min(nearest, allowedStepPastCircle(
+            reduceStep(to: allowedStepPastCircle(
                 from: position2D,
                 direction: direction2D,
                 desiredStep: desiredStep,
                 clearance: halfWidth + wheelchairRadius + skin,
-                targetPosition: playerPosition))
+                targetPosition: playerPosition),
+                blockedBy: .player)
         }
         if !neighborPositions.isEmpty {
             // 두 NPC 모두 halfWidth 반경의 원으로 근사하므로, 두 반경의 합이 서로
             // 겹치지 않을 최소 간격이다.
             let neighborClearance = halfWidth * 2 + skin
             for neighbor in neighborPositions {
-                nearest = min(nearest, allowedStepPastCircle(
+                reduceStep(to: allowedStepPastCircle(
                     from: position2D,
                     direction: direction2D,
                     desiredStep: desiredStep,
                     clearance: neighborClearance,
-                    targetPosition: neighbor))
+                    targetPosition: neighbor),
+                    blockedBy: .neighboringNPC)
             }
         }
-        return nearest
+        return StepResult(step: nearest, blocker: blocker)
     }
 
     /// NPC도 직접 transform으로 움직이므로, 대상(사용자 휠체어 또는 다른 NPC)이

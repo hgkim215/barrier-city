@@ -6,6 +6,9 @@ import simd
 /// 착석 가능한 좌석 하나. Furnitures 하위의 "SittingPoint" 마커에서 만들어진다.
 struct GuestSeat {
     let position: SIMD2<Float>
+    /// NPC가 가구 충돌을 유지한 채 걸어서 도착할 수 있는 좌석 뒤쪽의 보행 셀.
+    /// 착석/기립 애니메이션 동안에만 이 점과 실제 SittingPoint 사이를 보간한다.
+    let approachPosition: SIMD2<Float>
     /// 착석 시 바라볼 방향. SittingPoint 마커의 실제 authored 회전(디자이너가 각
     /// 의자 복제본을 배치하며 직접 돌려놓은 값)에서 뽑아낸다.
     let facing: SIMD2<Float>
@@ -58,7 +61,7 @@ final class NPCGuestCoordinator {
         static let walkableCellSpacing: Float = 0.3
         /// 항상 배회만 하는 손님 수(대기줄 후보).
         static let wandererCount = 1
-        /// 배회↔착석↔기립을 반복하는 손님 수(대기줄 후보).
+        /// 좌석 이동↔착석↔기립을 반복하는 손님 수(좌석 순환 우선, 대기줄 제외).
         static let cyclerCount = 2
         /// 동시에 Walk 애니메이션 중인 손님을 이 인원으로 제한한다 — 카페 전체가
         /// 한꺼번에 돌아다니면 붐벼 보인다는 피드백. 이미 걷던 손님은 막지 않고
@@ -76,18 +79,21 @@ final class NPCGuestCoordinator {
         /// 빈자리 없이 인접하게 채우려 한다. 일반 2~4인 테이블은 그보다 훨씬
         /// 작아서 이 문턱을 넘지 않는다.
         static let communalTableSeatThreshold = 6
-        /// cycler 중 이 비율만 입장 즉시 좌석으로 직행하고, 나머지는 배회를 한 바퀴
-        /// 마친 뒤 좌석으로 향한다(reserveSeat) — 전원이 일제히 좌석으로 직행하면
-        /// 너무 빨리 앉는 것처럼 보인다는 피드백으로, 일부는 방을 둘러보다 앉는
-        /// 자연스러운 그림을 섞는다.
-        static let cyclerImmediateSeatChance: Float = 0.4
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
+        /// 좌석 뒤 보행 셀에서 SittingPoint까지 착석 전환 애니메이션으로 연결할 수 있는
+        /// 최대 거리. 이보다 깊게 가구 프록시 안에 있는 좌석은 cycler 후보에서 제외한다.
+        /// 충돌을 끄고 1m 이상 걸어 들어가던 기존 관통 경로를 구조적으로 없앤다.
+        static let maximumSeatApproachDistance: Float = 0.65
         /// isClearOfFurniture가 "바닥"으로 인정하는 높이 상한(m). collision/Cube
         /// 프록시 상단이 대략 0.39m라, 그보다 훨씬 낮은 여유를 둬 바닥 요철과
         /// 가구를 확실히 구분한다.
         static let furnitureClearanceHeight: Float = 0.05
+        /// walkable 셀의 중심만 Cube 밖인지 보면 반폭 0.2m인 NPC의 어깨가 가구에
+        /// 걸린다. 실시간 이동의 bodyHalfWidth(0.2m)+skin(0.03m)과 같은 여유를
+        /// 보행 격자에도 적용한다.
+        static let furnitureFootprintClearance: Float = 0.23
         /// AreaK/AreaB 경계에서 NPC 중심뿐 아니라 몸통 반경까지 완전히 빠지게 하는 여유.
         static let restrictedAreaClearance: Float = 0.25
         /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
@@ -100,8 +106,8 @@ final class NPCGuestCoordinator {
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
-    /// 손님 6명은 코드에서 entity.clone(recursive:)로 이 원본을 복제해 만든다 —
-    /// usda에 직접 6개의 중복 def 블록을 추가하는 대신 단일 소스를 유지한다.
+    /// 손님 9명은 코드에서 entity.clone(recursive:)로 이 원본을 복제해 만든다 —
+    /// usda에 직접 중복 def 블록을 추가하는 대신 단일 소스를 유지한다.
     /// 콜리전은 원본 authoring과 무관하게 place()에서 매번 코드로 부여한다
     /// (Entity.applyNPCBodyCollision 참고).
     private struct GenderGroup {
@@ -110,10 +116,10 @@ final class NPCGuestCoordinator {
         let displayNames: [String]
     }
 
-    /// wandererCount + cyclerCount + seatedPoolCount(1+3+6=10)에 맞춘 인원 구성.
+    /// wandererCount + cyclerCount + seatedPoolCount(1+2+6=9)에 맞춘 인원 구성.
     private static let genderGroups: [GenderGroup] = [
         GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3", "Guest_Female_4", "Guest_Female_5"]),
-        GenderGroup(templateName: "MaleIdle", gender: .male, displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4", "Guest_Male_5"]),
+        GenderGroup(templateName: "MaleIdle", gender: .male, displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4"]),
     ]
 
     private var guests: [NPCGuestController] = []
@@ -187,8 +193,9 @@ final class NPCGuestCoordinator {
         /// 배치 위치는 spawnDessert가 스케일 적용 후 바운즈를 다시 재서 표면에
         /// 맞추므로 이 값만 바꿔도 자동으로 정확히 안착한다.
         static let targetLatteHeight: Float = 0.08
-        /// 테이블 상단면 바로 위로 살짝 띄우는 여백.
-        static let surfaceClearance: Float = 0.005
+        /// 모델의 실측 바운즈 바닥을 테이블 상단면에 정확히 붙인다. 별도의 시각적
+        /// 여백을 더하면 작은 케이크/라떼에서는 몇 mm도 공중에 뜬 것으로 보인다.
+        static let surfaceClearance: Float = 0
         /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨 그 손님
         /// 바로 앞자리에 디저트를 놓는다. 시각 확인 후 필요하면 이 값만 조정한다.
         static let perSeatForwardOffset: Float = 0.18
@@ -264,11 +271,28 @@ final class NPCGuestCoordinator {
         let sittingPoints = collectSittingPoints(in: indoorMap, relativeTo: worldRoot)
         var filteredSeats: [GuestSeat] = []
         var filteredSeatTableEntities: [Entity?] = []
+        var inaccessibleSeatCount = 0
         for (seat, tableEntity) in zip(sittingPoints.seats, sittingPoints.seatTableEntities) {
             guard floorArea.contains(seat.position),
                   !staffAreaExclusions.contains(where: { $0.contains(seat.position) }) else { continue }
-            filteredSeats.append(seat)
+            guard let approachPosition = grid.bestApproachPosition(
+                to: seat.position,
+                preferredDirection: -seat.facing,
+                maximumDistance: Tuning.maximumSeatApproachDistance)
+            else {
+                inaccessibleSeatCount += 1
+                continue
+            }
+            filteredSeats.append(GuestSeat(
+                position: seat.position,
+                approachPosition: approachPosition,
+                facing: seat.facing,
+                sittingHeightOffset: seat.sittingHeightOffset))
             filteredSeatTableEntities.append(tableEntity)
+        }
+        if inaccessibleSeatCount > 0 {
+            Self.seatingLogger.notice(
+                "가구를 통과해야 하는 접근 불가 좌석 \(inaccessibleSeatCount)개 제외")
         }
         // 각 좌석의 sittingHeightOffset은 지금까지 "SittingPoint 높이를 그 의자 자신의
         // 바운즈 바닥 기준으로 정규화한 값"을 담고 있다(위 collectSittingPoints 참고).
@@ -278,7 +302,8 @@ final class NPCGuestCoordinator {
         // 의자 자신의 실측 바운즈 차이만큼만 정확히 더 올라간다.
         let minimumSeatHeight = filteredSeats.map(\.sittingHeightOffset).min() ?? 0
         filteredSeats = filteredSeats.map { seat in
-            GuestSeat(position: seat.position, facing: seat.facing,
+            GuestSeat(position: seat.position, approachPosition: seat.approachPosition,
+                     facing: seat.facing,
                      sittingHeightOffset: Tuning.baselineSittingHeightOffset
                          + (seat.sittingHeightOffset - minimumSeatHeight))
         }
@@ -362,11 +387,13 @@ final class NPCGuestCoordinator {
         roles += Array(repeating: .cycler, count: Tuning.cyclerCount)
         roles += Array(repeating: .seatedPool, count: Tuning.seatedPoolCount)
         roles.shuffle()
+        let configuredGuestCount = Self.genderGroups.reduce(0) { $0 + $1.displayNames.count }
+        guard roles.count == configuredGuestCount else {
+            Self.seatingLogger.error(
+                "손님 역할 수(\(roles.count))와 엔티티 수(\(configuredGuestCount)) 불일치 — 생성을 중단")
+            return
+        }
         var nextRoleIndex = 0
-        // displayNames 총원(genderGroups 참고)이 위 세 카운트 합보다 많을 수 있다 —
-        // 그 초과분엔 항상 배회만 하는 역할을 준다. 예전엔 기본값이 .cycler라
-        // cyclerCount를 줄여도 이 초과분이 조용히 cycler로 채워져 실제로는 줄지
-        // 않는 문제가 있었다.
 
         // seatedPool을 groupSizes(1/2/3명)대로 서로 다른 테이블에 배정하기 위한 좌석
         // 큐. 앞에서부터 하나씩 꺼내 쓰고, 다 떨어지면(테이블이 부족하면)
@@ -382,7 +409,8 @@ final class NPCGuestCoordinator {
                 // indoorMap에 붙어 있어 clone()이 콜리전을 포함한 컴포넌트를 그대로 상속한다.
                 let entity = index == 0 ? template : template.clone(recursive: true)
                 entity.name = displayName
-                let role = nextRoleIndex < roles.count ? roles[nextRoleIndex] : .alwaysWandering
+                guard nextRoleIndex < roles.count else { continue }
+                let role = roles[nextRoleIndex]
                 nextRoleIndex += 1
                 let guest = NPCGuestController(name: displayName, role: role, gender: group.gender)
 
@@ -395,30 +423,18 @@ final class NPCGuestCoordinator {
                     guest.placeSeated(entity: entity, worldRoot: worldRoot, seatIndex: seatIndex, seat: seats[seatIndex])
                     spawnDessert(forSeatIndex: seatIndex)
                 } else if role == .cycler, let seatIndex = pickSeatIndex() {
-                    // cycler는 다른 배회 손님과 똑같이 좌석과 무관하게 무작위 지점에
-                    // 먼저 스폰한 뒤(randomSpawnPoint), 그 다음 좌석을 배정한다 —
-                    // 좌석 근처에서 스폰해 이동 거리를 짧게 두던 예전 방식(cyclerSpawnPoint)은
-                    // 스폰 위치를 특정 좌석에 묶어, 여러 cycler가 같은 좌석 주변에
-                    // 몰리는 문제와도 얽혀 있었다. 디저트는 여기서 바로 놓지 않는다 —
+                    // cycler는 좌석과 무관한 walkable 지점에 스폰한 뒤 즉시 좌석으로
+                    // 이동한다. 디저트는 여기서 바로 놓지 않는다 —
                     // update()가 takeSeatedArrivalSeatIndex()로 실제 도착을 확인한
                     // 뒤에 놓아야, 걸어가다 막혀 자리를 반납해도 아무도 없는 테이블에
                     // 디저트만 남는 일이 없다.
-                    //
-                    // 전원이 곧장 좌석으로 직행하면 너무 빨리 앉는 것처럼 보여,
-                    // cyclerImmediateSeatChance 비율만 즉시 걸어가고 나머지는 배회를
-                    // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat).
                     let seat = seats[seatIndex]
                     let spawn = randomSpawnPoint(keepingAwayFrom: spawnedPositions)
                     seatOccupants[seatIndex] = guests.count
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-                    if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
-                        guest.grantSeat(index: seatIndex, seat: seat)
-                        Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
-                    } else {
-                        guest.reserveSeat(index: seatIndex, seat: seat)
-                        Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
-                    }
+                    guest.grantSeat(index: seatIndex, seat: seat)
+                    Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
                 } else {
                     let spawn = randomSpawnPoint(keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
@@ -443,8 +459,10 @@ final class NPCGuestCoordinator {
     /// 골랐는데(같은 테이블 좌석끼리 배열에서 이웃해 있어 몰아 앉는 걸 막으려는
     /// 의도였다), cycler가 자리를 옮길 때마다 매번 같은(가장 외딴) 자리로
     /// 되돌아가 "고정석에 앉는 것처럼" 보이는 부작용이 있었다.
-    private func pickSeatIndex() -> Int? {
-        let freeIndices = Set(seatOccupants.indices.filter { seatOccupants[$0] == nil })
+    private func pickSeatIndex(avoiding excludedSeatIndices: Set<Int> = []) -> Int? {
+        let freeIndices = NPCGuestSeatingPolicy.freeSeatIndices(
+            occupants: seatOccupants,
+            avoiding: excludedSeatIndices)
         guard !freeIndices.isEmpty else { return nil }
 
         var adjacentToOccupiedCandidates: [Int] = []
@@ -516,7 +534,8 @@ final class NPCGuestCoordinator {
                 // 다시 채운다. 의자 인스턴스 자체의 바닥이 정확히 0이 아닐 수 있어(예:
                 // authoring 오차) 이 정규화 없이 raw Y만 쓰면 그 오차가 그대로 새어든다.
                 let chairFloorY = nearestAncestorMeshBounds(of: candidate, relativeTo: worldRoot)?.min.y ?? 0
-                seats.append(GuestSeat(position: position, facing: facing, sittingHeightOffset: world.y - chairFloorY))
+                seats.append(GuestSeat(position: position, approachPosition: position,
+                                       facing: facing, sittingHeightOffset: world.y - chairFloorY))
                 // 이 좌석이 실제로 속한 테이블(디저트를 얹을 표면)도 같은 "가장 가까운
                 // 테이블" 판정으로 같이 기록해 둔다 — facing 계산과 동일한 근거라
                 // 좌석 클러스터 중심을 거치는 간접 매칭보다 테이블을 놓칠 일이 적다.
@@ -694,20 +713,41 @@ final class NPCGuestCoordinator {
         return result
     }
 
-    /// 좌표(XZ) 위로 레이를 내려 쏴서 가구 콜리전(groundGroup, 이동 중 실시간 장애물
-    /// 회피와 같은 그룹) 위/안에 있는지 확인한다. NPCGuestArea 제외 구역은 직원
-    /// 구역·키오스크·좌석 클러스터처럼 수동으로 지정한 영역만 커버해서, 거기 안 잡힌
-    /// 장식용 테이블·화분·진열대 위에 스폰이 순간이동으로 그대로 얹히는 경우가 있었다.
+    /// 좌표(XZ)의 NPC 몸통 footprint 전체에 레이를 내려 쏴서 가구 콜리전(groundGroup,
+    /// 이동 중 실시간 장애물 회피와 같은 그룹) 위/안에 있는지 확인한다. 중심점 하나만
+    /// 검사하면 보행 격자는 안전하다고 보지만 실제 이동의 좌우 몸통 레이는 Cube에
+    /// 걸리는 판정 불일치가 생기므로, 중심+원주 8방향을 모두 검사한다. NPCGuestArea
+    /// 제외 구역은 직원 구역·키오스크·좌석 클러스터처럼 수동으로 지정한 영역만
+    /// 커버해서, 거기 안 잡힌 장식용 테이블·화분·진열대 위에 스폰이 순간이동으로
+    /// 그대로 얹히는 경우가 있었다.
     /// 실시간 이동은 레이캐스트로 장애물을 피해 걷지만, 스폰은 순간이동이라 이 검사가
     /// 따로 필요하다. 바닥(y≈0)이 아니라 그보다 뚜렷이 높은 지점에서 걸리면 가구
     /// 위/안이라고 본다(collision/Cube 프록시 상단이 대략 0.39m 높이).
     private func isClearOfFurniture(_ point: SIMD2<Float>) -> Bool {
         guard let scene = worldRoot?.scene else { return true }
         let probeHeight: Float = 2.0
-        let hits = scene.raycast(origin: [point.x, probeHeight, point.y], direction: [0, -1, 0],
-                                 length: probeHeight, query: .nearest, mask: AppModel.groundGroup)
-        guard let hit = hits.first else { return true }
-        return hit.position.y <= Tuning.furnitureClearanceHeight
+        let radius = Tuning.furnitureFootprintClearance
+        let diagonal = radius / sqrt(2)
+        let offsets: [SIMD2<Float>] = [
+            .zero,
+            [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+            [diagonal, diagonal], [diagonal, -diagonal],
+            [-diagonal, diagonal], [-diagonal, -diagonal],
+        ]
+        for offset in offsets {
+            let sample = point + offset
+            let hits = scene.raycast(
+                origin: [sample.x, probeHeight, sample.y],
+                direction: [0, -1, 0],
+                length: probeHeight,
+                query: .nearest,
+                mask: AppModel.groundGroup)
+            if let hit = hits.first,
+               hit.position.y > Tuning.furnitureClearanceHeight {
+                return false
+            }
+        }
+        return true
     }
 
     func tearDownForOutdoor() {
@@ -771,8 +811,16 @@ final class NPCGuestCoordinator {
         let x = min(max(desired.x + jitterX, centerX - insetHalfWidth), centerX + insetHalfWidth)
         let z = min(max(desired.y + jitterZ, centerZ - insetHalfDepth), centerZ + insetHalfDepth)
 
-        let prop = template.clone(recursive: true)
-        worldRoot.addChild(prop)
+        // 모델 자체의 authored 회전/원점과 "월드에서 어디에 놓을지"를 한 엔티티에서
+        // 같이 다루며 setPosition 뒤 월드 bounds를 다시 읽어 보정하면, 모델 바닥 정렬이
+        // 부모/월드 변환과 두 번의 bounds 평가에 의존한다. 모델을 먼저 identity 배치
+        // 루트 안에서 바닥 정렬하고 배치 루트의 원점을 상판에 놓으면, 월드 변환과
+        // 무관하게 `모델 바닥=루트 y 0=테이블 표면` 계약이 한 번에 성립한다.
+        let placementRoot = Entity()
+        placementRoot.name = "GuestDessert_\(seatIndex)"
+        let model = template.clone(recursive: true)
+        placementRoot.addChild(model)
+        worldRoot.addChild(placementRoot)
         // Entity.load 결과를 직접 조사해 보면 Cake/Latte의 루트 엔티티에는 RainbowSmoothie와
         // 완전히 동일한 회전(X축 -90°)이 authored돼 있다 — Tripo가 Z-up으로 내보낸 원본을
         // RealityKit이 임포트하며 항상 붙이는 표준 Z-up→Y-up 보정이라, 세 에셋 모두 이
@@ -781,19 +829,20 @@ final class NPCGuestCoordinator {
         // 두면 world Y 바운즈 하단이 이미 0에 온다 — 여기서 다시 회전을 만지면(예전의
         // identity 리셋) 오히려 이 보정을 지워버려 옆으로 누운 것처럼 보인다. 그래서
         // RainbowSmoothiePresenter와 마찬가지로 orientation은 아예 건드리지 않는다.
-        let authoredHeight = prop.visualBounds(relativeTo: worldRoot).extents.y
+        let modelBounds = model.visualBounds(relativeTo: placementRoot)
+        let authoredHeight = modelBounds.extents.y
         guard authoredHeight.isFinite, authoredHeight > 0.0001 else {
-            prop.removeFromParent()
+            placementRoot.removeFromParent()
             return
         }
-        prop.scale *= SIMD3(repeating: targetHeight / authoredHeight)
-        prop.setPosition([x, surfaceY, z], relativeTo: worldRoot)
-        // 스케일을 반영한 실측 바운즈 하단을 테이블 표면에 맞춰, 모델 원점이 바닥과
-        // 어긋나 있어도(제각각인 에셋 원점) 붕 뜨거나 파묻히지 않게 한다.
-        let restingOffset = surfaceY - prop.visualBounds(relativeTo: worldRoot).min.y
-        prop.position.y += restingOffset
+        // 모델 바운즈 바닥을 배치 루트의 y=0에 먼저 고정한다. 이후 placementRoot에
+        // 균일 스케일을 적용해도 0은 그대로 0이므로, 에셋 원점/회전과 무관하게 바닥은
+        // 항상 루트 원점에 붙는다.
+        model.position.y -= modelBounds.min.y
+        placementRoot.scale = SIMD3(repeating: targetHeight / authoredHeight)
+        placementRoot.setPosition([x, surfaceY, z], relativeTo: worldRoot)
 
-        placedDessertPropBySeatIndex[seatIndex] = prop
+        placedDessertPropBySeatIndex[seatIndex] = placementRoot
     }
 
     /// 이 좌석의 손님이 일어나거나 자리를 반납하면 그 앞의 디저트를 치운다.
@@ -835,6 +884,10 @@ final class NPCGuestCoordinator {
         wasOrdering = isOrdering
 
         let orderedQueuers = queuerIndices.sorted()
+        let movementContext = NPCGuestMovementContext(
+            floor: floorArea,
+            roamingExclusions: exclusionAreas,
+            staffOnlyExclusions: staffAreaExclusions)
         // 프레임 시작 시 스냅샷을 만들어 업데이트 순서에 따라 뒤쪽 NPC만 더 강하게
         // 반응하는 편향을 없앤다. velocities도 같은 이유로 같이 스냅샷한다 —
         // guest 1의 update()가 이미 velocity를 갱신한 뒤에 guest 2가 그 새 값을
@@ -868,9 +921,7 @@ final class NPCGuestCoordinator {
             }
             let wasWalking = guest.isWalking
             guest.update(deltaTime: deltaTime,
-                        wanderArea: floorArea,
-                        exclusions: exclusionAreas,
-                        staffExclusions: staffAreaExclusions,
+                        movementContext: movementContext,
                         pathGrid: walkableGrid,
                         queueSlot: slot,
                         facing: facing,
@@ -894,9 +945,12 @@ final class NPCGuestCoordinator {
                 Self.seatingLogger.notice("\(guest.name) 좌석 \(vacatedIndex) 비움(막힘 또는 자동 기립), 위치=(\(guest.currentPosition.x), \(guest.currentPosition.y))")
                 removeDessert(forSeatIndex: vacatedIndex)
             }
-            if guest.takeSeatRequest(), let freeSeatIndex = pickSeatIndex() {
+            if let request = guest.takeSeatRequest(),
+               let freeSeatIndex = pickSeatIndex(avoiding: request.excludedSeatIndices) {
                 seatOccupants[freeSeatIndex] = index
                 guest.grantSeat(index: freeSeatIndex, seat: seats[freeSeatIndex])
+                Self.seatingLogger.notice(
+                    "\(guest.name) 좌석 \(freeSeatIndex) 배정(현재 순회 제외 \(request.excludedSeatIndices.count)개)")
             }
             // 디저트는 배정(grantSeat) 시점이 아니라 실제로 걸어가 도착한 시점에
             // 놓는다 — 걸어가다 막혀 자리를 반납하면 아무도 없는 테이블에 디저트만

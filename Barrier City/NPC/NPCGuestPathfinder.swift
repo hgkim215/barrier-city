@@ -70,6 +70,48 @@ enum NPCGuestPathfinder {
             }
             return nil
         }
+
+        /// 좌석에 걸어 들어갈 때 사용할 보행 가능 접근점을 찾는다. 좌석 정면은 테이블
+        /// 쪽이므로 `preferredDirection`에는 좌석에서 뒤쪽(보통 `-seat.facing`)을 넘긴다.
+        /// 단순 최근접 셀은 테이블 반대편을 고를 수 있어 NPC가 상판을 가로지르게 되므로,
+        /// 좌석과 거의 같은 셀이 아니면 반드시 뒤쪽 반평면의 셀만 후보로 삼는다.
+        func bestApproachPosition(
+            to point: SIMD2<Float>,
+            preferredDirection: SIMD2<Float>,
+            maximumDistance: Float
+        ) -> SIMD2<Float>? {
+            guard maximumDistance > 0 else { return nil }
+            let preferred = simd_length(preferredDirection) > 0.001
+                ? simd_normalize(preferredDirection)
+                : SIMD2<Float>(0, 1)
+            var bestPosition: SIMD2<Float>?
+            var bestScore = Float.greatestFiniteMagnitude
+
+            for row in 0..<rows {
+                for column in 0..<columns where isWalkable(row: row, column: column) {
+                    let candidate = worldPosition(row: row, column: column)
+                    let offset = candidate - point
+                    let distance = simd_length(offset)
+                    guard distance <= maximumDistance else { continue }
+
+                    let alignment: Float
+                    if distance <= 0.15 {
+                        // 좌석 자체가 이미 보행 셀에 가까우면 방향 제약은 불필요하다.
+                        alignment = 1
+                    } else {
+                        alignment = simd_dot(offset / distance, preferred)
+                        guard alignment >= 0 else { continue }
+                    }
+                    // 거리 우선이되, 비슷한 거리라면 좌석 바로 뒤쪽에 가까운 셀을 고른다.
+                    let score = distance + (1 - alignment) * 0.2
+                    if score < bestScore {
+                        bestScore = score
+                        bestPosition = candidate
+                    }
+                }
+            }
+            return bestPosition
+        }
     }
 
     /// `isWalkable`은 호출부(NPCGuestCoordinator)가 raycast 기반 가구 검사까지 포함해
@@ -100,11 +142,14 @@ enum NPCGuestPathfinder {
     /// 대각선으로 파고드는 경로를 막는다. 직선으로 이어지는 구간은 중간 웨이포인트를
     /// 쳐내 move()가 매 프레임 재조준하지 않고 곧장 걷게 한다. start/goal이 격자 밖이면
     /// 가장 가까운 유효 셀로 스냅한다. 경로를 못 찾으면 nil.
+    ///
     static func findPath(from start: SIMD2<Float>, to goal: SIMD2<Float>,
                          in grid: WalkableGrid) -> [SIMD2<Float>]? {
         guard let startCell = grid.nearestWalkableCell(to: start),
               let goalCell = grid.nearestWalkableCell(to: goal) else { return nil }
-        if startCell == goalCell { return [goal] }
+        if startCell == goalCell {
+            return [goal]
+        }
 
         struct Node: Comparable {
             let row: Int
@@ -173,7 +218,6 @@ enum NPCGuestPathfinder {
 
         var worldPath = cellPath.map { grid.worldPosition(row: $0.row, column: $0.column) }
         worldPath[worldPath.count - 1] = goal
-
         return simplify(worldPath)
     }
 

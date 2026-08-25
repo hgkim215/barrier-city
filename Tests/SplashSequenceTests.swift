@@ -26,6 +26,17 @@ struct SplashSequenceTests {
         guard SplashSequence.resourceName(atFrame: -1) == nil else {
             fail("negative frame index must be rejected safely")
         }
+        guard (0..<6).compactMap(SplashSequence.progressDots(atFrame:)) == [
+            ".", ". .", ". . .", ".", ". .", ". . .",
+        ] else {
+            fail("road-construction dots must advance one at a time and repeat")
+        }
+        guard SplashSequence.progressDots(atFrame: -1) == nil else {
+            fail("negative progress frame index must be rejected safely")
+        }
+        guard SplashSequence.combinedCycleLength == 6 else {
+            fail("image and progress animation must reset together after six ticks")
+        }
 
         for name in SplashSequence.resourceNames {
             let file = resources.appendingPathComponent(name).appendingPathExtension("png")

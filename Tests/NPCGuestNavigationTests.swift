@@ -24,6 +24,16 @@ struct NPCGuestNavigationTests {
         expect(!NPCGuestNavigation.isValid([.nan, 0], inside: floor, excluding: [staff]),
                "non-finite point must never be valid")
 
+        expect(
+            !NPCGuestNavigation.isDifferentEscapeDirection([1, 0], from: [1, 0]),
+            "escape must not retry the direction that was just blocked")
+        expect(
+            NPCGuestNavigation.isDifferentEscapeDirection([-1, 0], from: [1, 0]),
+            "escape must allow the opposite direction")
+        expect(
+            NPCGuestNavigation.isDifferentEscapeDirection([0, 1], from: [1, 0]),
+            "escape must allow a perpendicular sidestep")
+
         expect(NPCGuestNavigation.isAllowedStep(from: [-3, 2], to: [3, 2],
                                                 inside: floor, excluding: [staff]),
                "clear route must remain walkable")
@@ -50,7 +60,7 @@ struct NPCGuestNavigationTests {
         // 전에는 이분 탐색이 Float32 정밀도 밑으로 수렴해 항상 0을 반환했고,
         // 그 결과 NPC가 제자리에서 걷다 멈췄다를 반복(지지거림)했다.
         let tinyEscapeFraction = NPCGuestNavigation.allowedFraction(
-            from: [0.5, 0], to: [0.5 + 0.0079, 0], inside: floor, excluding: [staff])
+            from: [0.5, 0], to: [Float(0.5 + 0.0079), 0], inside: floor, excluding: [staff])
         expect(tinyEscapeFraction == 1,
                "a tiny escaping step out of a restricted area must not be clipped to zero")
 
@@ -68,5 +78,17 @@ struct NPCGuestNavigationTests {
                                    axisV: [-diagonal, diagonal])
         expect(rotated.contains([10, 10]), "rotated area must contain its center")
         expect(!rotated.contains([13, 10]), "rotated area must reject a distant point")
+
+        let roamingOnly = NPCGuestArea(center: [3, 0], axisU: [0.5, 0], axisV: [0, 0.5])
+        let movementContext = NPCGuestMovementContext(
+            floor: floor,
+            roamingExclusions: [staff, roamingOnly],
+            staffOnlyExclusions: [staff])
+        expect(movementContext.exclusions(for: .roaming).count == 2,
+               "roaming must use the full exclusion set")
+        expect(movementContext.exclusions(for: .seating).count == 1,
+               "seating must use staff-only exclusions")
+        expect(movementContext.exclusions(for: .queueing).count == 1,
+               "queueing must use staff-only exclusions")
     }
 }

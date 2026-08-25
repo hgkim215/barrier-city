@@ -57,6 +57,31 @@ struct NPCGuestArea {
     }
 }
 
+/// 이동 목적에 따라 적용해야 하는 제외 구역을 한곳에서 결정한다. 일반 배회는 모든
+/// 가구/키오스크 제외 구역을 피하지만, 좌석 접근과 대기줄은 목적지가 그 제외 구역 안에
+/// 있을 수 있어 직원 전용 구역만 피해야 한다. 호출부가 두 배열을 개별 파라미터로 넘기면
+/// 서로 뒤바뀌어도 컴파일러가 잡지 못하므로, 이동 의도를 타입으로 전달해 여기서 매핑한다.
+enum NPCGuestMovementIntent {
+    case roaming
+    case queueing
+    case seating
+}
+
+struct NPCGuestMovementContext {
+    let floor: NPCGuestArea
+    let roamingExclusions: [NPCGuestArea]
+    let staffOnlyExclusions: [NPCGuestArea]
+
+    func exclusions(for intent: NPCGuestMovementIntent) -> [NPCGuestArea] {
+        switch intent {
+        case .roaming:
+            roamingExclusions
+        case .queueing, .seating:
+            staffOnlyExclusions
+        }
+    }
+}
+
 enum NPCGuestNavigation {
     /// 이미 위반 상태(바닥 밖/제외 구역 안)에서 "탈출" 판정에 쓰는 여유치. 실제
     /// 한 프레임 이동 폭(수 mm)은 이미 아주 작은데, allowedFraction이 이걸 12번
@@ -77,6 +102,19 @@ enum NPCGuestNavigation {
     /// 0으로 고정되는 문제가 실기에서 확인됐다(escapeTolerance로 해결한 "이미
     /// 구역 안" 케이스와는 다른, "구역 밖에서 경계를 스치는" 케이스).
     private static let tunnelingCheckMinimumStepLength: Float = 0.5
+
+    /// 막힌 방향과 60도 이내로 비슷한 후보는 escape 방향으로 다시 고르지 않는다.
+    /// blockedDirection이 없거나 유효하지 않으면 모든 후보를 허용한다.
+    static func isDifferentEscapeDirection(
+        _ candidate: SIMD2<Float>,
+        from blockedDirection: SIMD2<Float>?,
+        maximumDot: Float = 0.5
+    ) -> Bool {
+        guard simd_length(candidate) > 0.001,
+              let blockedDirection,
+              simd_length(blockedDirection) > 0.001 else { return true }
+        return simd_dot(simd_normalize(candidate), simd_normalize(blockedDirection)) <= maximumDot
+    }
 
     static func isValid(_ point: SIMD2<Float>,
                         inside floor: NPCGuestArea,

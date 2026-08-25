@@ -27,9 +27,9 @@ enum NPCGuestAnimationCue: String {
 enum NPCGuestRole {
     /// 절대 앉지 않고 계속 배회한다. 대기줄 후보.
     case alwaysWandering
-    /// 배회↔착석을 실제로 반복한다: 좌석을 찾아 앉고, 10~15초(NPCGuestTuning.
-    /// sittingDurationRange) 뒤 자동으로 일어나 다시 배회하다 새 좌석에 앉는다.
-    /// 배회 중일 때만 대기줄 후보(착석 중이거나 좌석으로 이동 중일 때는 제외).
+    /// 좌석 이동↔착석을 반복한다: 좌석을 찾아 앉고, 15~20초(NPCGuestTuning.
+    /// sittingDurationRange) 뒤 자동으로 일어나 즉시 다음 좌석으로 이동한다.
+    /// 좌석 순환을 우선하므로 대기줄 후보에서는 제외된다.
     case cycler
     /// 입장 시 가능하면 이미 앉은 채로 시작하고, 한 번 앉으면 다시 일어나지 않는
     /// "그냥 앉아만 있는" 손님이다. 좌석이 부족해 배회로 시작하더라도 자리를
@@ -48,6 +48,12 @@ enum NPCGuestGender {
         case .female: "female_sigh"
         }
     }
+}
+
+/// 좌석 요청과 함께 현재 순회에서 이미 배정받았던 좌석들을 전달한다. 가능한 좌석이
+/// 남아 있으면 모두 피해서 cycler가 두 자리만 왕복하지 않고 새로운 자리로 이동한다.
+struct NPCGuestSeatRequest {
+    let excludedSeatIndices: Set<Int>
 }
 
 /// 손님 NPC 한 명의 배치·이동·애니메이션을 담당한다. 대화·근접 감지는 다루지 않는
@@ -69,11 +75,6 @@ final class NPCGuestController {
         /// 잡아내, 실제로는 거의 못 나아가면서도 Walk 애니메이션만 계속 재생되는 것처럼
         /// 보였다.
         static let blockedStepFraction: Float = 0.4
-        /// 막혀서 새 목적지를 고른 뒤에도 곧장 다시 움직이면(특히 새 목적지도 같은
-        /// 장애물 방향이면) 같은 프레임에 다시 막혀 Idle↔Walk가 매 프레임 번갈아
-        /// 재생되며 결과적으로 Walk가 끊기지 않는 것처럼 보인다. 잠깐 멈춰 있다가
-        /// 다시 시도하게 해 이 진동을 막는다.
-        static let blockedPauseRange: ClosedRange<Float> = 0.2...0.5
         /// 이 시간(초) 동안의 순 이동 거리가 stallMinimumDistance보다 작으면 "제자리
         /// 걸음"으로 본다. blockedStepFraction은 프레임 하나만 보지만, 장애물에 얕은
         /// 각도로 걸려 매 프레임 방향이 조금씩 상쇄되면(예: 밀렸다 되밀렸다) 프레임별
@@ -86,46 +87,32 @@ final class NPCGuestController {
         static let stallMinimumDistance: Float = 0.15
         /// 자유 배회 목적지끼리 이 정도 간격을 우선 확보한다.
         static let preferredTargetSeparation: Float = 1.35
-        /// 이 횟수만큼 연속으로 막히면(consecutiveBlockedCount) 먼 무작위 목적지
-        /// 대신 지금 위치 주변을 원형으로 훑어 실제로 뚫린 방향을 찾는
-        /// nearbyEscapeTarget으로 전환한다 — 막다른 구석에 몰려 무작위 후보가
-        /// 계속 같은 방향으로만 뽑히는 경우까지 확실히 벗어나게 하는 마지막 안전망.
-        static let stuckEscapeThreshold = 3
-        /// 좌석 도착 판정 거리. 8cm처럼 너무 좁으면 다른 손님이나 좌석 주변
-        /// 콜리전에 조금만 걸려도 이 문턱 안으로 못 들어와 계속 재시도만 하다
-        /// vacate/stall 경로를 타게 된다 — 여유를 넉넉히 둬 "거의 다 왔으면
-        /// 앉는다"로 완화한다. seatCollisionBypassDistance(0.6m)보다는 항상
-        /// 작아야 한다(그래야 도착 판정 전에 레이캐스트 회피가 이미 꺼진 구간에
-        /// 들어와 있다).
-        static let seatArrivalDistance: Float = 0.3
-        /// 좌석 콜리전 프록시를 넘는 마지막 구간에서만 장애물 레이를 끈다. 좌석까지
-        /// 먼 구간은 계속 벽/가구 충돌을 검사해 방을 가로질러 관통하지 못하게 한다.
-        static let seatCollisionBypassDistance: Float = 0.6
-        /// 좌석으로 걸어가는 경로(activePath)의 한 웨이포인트가 막힌 걸 이 횟수만큼
-        /// 연속으로 확인하기 전까지는 자리를 포기하지 않고 그 자리에서 재시도한다.
-        /// 경로 자체는 NPCGuestPathfinder가 정적 장애물을 피해 미리 찾아 두므로,
-        /// 여기서 막히는 건 대개 다른 손님·유저가 일시적으로 그 자리에 서 있는
-        /// 경우다 — 잠깐 기다리면 대개 풀린다. 예전(경로 탐색 도입 전)에는 막힌
-        /// 첫 프레임에 곧장 자리를 반납해 cycler가 좌석 근처까지 가보지도 못하고
-        /// 영원히 배회만 반복했다.
-        static let seatApproachEscapeThreshold = 3
+        /// 막힘 후 주변 360도를 탐색할 거리와, 실제 escape로 인정할 최소 이동 거리.
+        /// 좌석 배정 여부와 무관하게 이 거리만큼 안전한 방향으로 먼저 빠져나간 뒤
+        /// 원래 행동(다음 좌석 요청/배회/대기줄)을 재개한다.
+        static let escapeProbeDistance: Float = 1.0
+        static let escapeMinimumDistance: Float = 0.2
+        /// 좌석으로 가는 A* 경로가 군중 조향 때문에 가구 경계에 밀렸을 때 좌석을 바로
+        /// 반납하지 않고, 열린 옆 방향으로 빠진 뒤 같은 좌석 경로를 다시 잡는 최대 횟수.
+        static let maximumSeatGeometryRecoveryAttempts = 3
         /// cycler가 한 좌석에 계속 앉아있는 시간(초). 이 시간이 지나면 자동으로
-        /// 일어나 다시 배회하다 새 좌석을 찾는다 — 카페가 계속 사람이 들고 나는
-        /// 느낌을 주기 위함이다. cycler는 3명뿐이라 이 순환에 참여하는 인원이
-        /// 동시에 3명을 넘는 일은 구조적으로 없다.
-        static let sittingDurationRange: ClosedRange<Float> = 10...15
-        /// Sit_to_Stand 애니메이션이 다 재생될 시간(초). 이 시간 동안은 새 배회
-        /// 목적지를 고르지 않는다 — 그렇지 않으면 일어나자마자 Walk가 요청돼
-        /// 기립 애니메이션이 한 프레임만 보이고 바로 끊긴다.
-        static let standUpAnimationDuration: Float = 1.0
+        /// 일어나 즉시 다음 좌석을 찾는다 — 카페가 계속 사람이 들고 나는 느낌을
+        /// 주기 위함이다. cycler는 2명이라 이 순환에 참여하는 인원이 동시에 2명을
+        /// 넘는 일은 구조적으로 없다.
+        static let sittingDurationRange: ClosedRange<Float> = 15...20
+        /// 애니메이션 리소스의 duration을 읽지 못했을 때만 쓰는 착석/기립 전환 시간.
+        /// 정상 경로에서는 Sit_to_Stand 클립의 실측 duration을 양방향 모두 사용한다.
+        static let seatingTransitionFallbackDuration: Float = 1.0
     }
 
     private enum SeatState {
         case none
         case movingToSeat
+        /// Sit_to_Stand를 역재생해 서 있는 자세에서 앉은 자세로 전환하는 구간.
+        case sittingDown
         case sitting
-        /// Sit_to_Stand 애니메이션이 재생되는 짧은 구간(standUpAnimationDuration).
-        /// 이 동안은 배회 목적지를 고르지 않아 애니메이션이 끊기지 않는다.
+        /// Sit_to_Stand 정방향 애니메이션이 재생되는 짧은 구간. 실제 클립 duration
+        /// 동안 다음 좌석 이동을 시작하지 않아 애니메이션이 끊기지 않는다.
         case standingUp
     }
 
@@ -137,10 +124,8 @@ final class NPCGuestController {
         let personalSpace: Float
         let separationStrength: Float
         let separationSide: Float
-        /// 배회 목적지에 도착할 때마다 착석을 시도할 확률(cycler 개인차). 전원이 같은
-        /// 확률로 앉으면 기계적으로 보여, 손님마다 성향을 다르게 둔다. 입장 후 너무
-        /// 오래 아무도 안 앉는 것처럼 보이지 않도록 평균적으로 배회 1~2번 만에는
-        /// 앉기 시작하게 높게 잡았다.
+        /// 좌석 부족으로 배회 중인 seatedPool이 목적지에 도착했을 때 착석을 다시
+        /// 시도할 확률. cycler는 확률 없이 항상 즉시 다음 좌석을 요청한다.
         let sitDesireChance: Float
 
         static func random() -> MovementProfile {
@@ -171,6 +156,13 @@ final class NPCGuestController {
     /// 목록. 첫 번째 원소가 다음 목표이고, 마지막 원소는 항상 최종 목적지와 같다.
     /// moveAlongPath가 도착한 웨이포인트를 하나씩 지워 나간다.
     private var activePath: [SIMD2<Float>] = []
+    /// 막힘이 발생하면 좌석 배정/역할보다 우선하는 명시적 탈출 단계로 들어간다.
+    /// escapeTarget은 주변 레이 검사로 실제 뚫린 방향에서만 고르고, 도착하기 전에는
+    /// cycler도 새 좌석을 요청하지 않는다.
+    private var escapeRequested = false
+    private var escapeTarget: SIMD2<Float>?
+    /// 방금 막힌 이동 방향. escape 후보가 같은 방향을 다시 고르지 않도록 보존한다.
+    private var lastBlockedDirection: SIMD2<Float>?
     private var pauseRemaining: Float = 0
     /// "제자리걸음" 감지용(NPCGuestTuning.stallCheckInterval 참고). move()의 목적지가
     /// 바뀌면(새 배회 목적지, 좌석 이동 시작 등) 그 즉시 리셋해, 정상적으로 도착한 뒤
@@ -178,23 +170,34 @@ final class NPCGuestController {
     private var stallCheckTarget: SIMD2<Float>?
     private var stallCheckTimer: Float = 0
     private var stallCheckStartPosition: SIMD2<Float>?
-    /// 배회 중 연속으로 막힌 횟수(NPCGuestTuning.stuckEscapeThreshold 참고). 막히지
-    /// 않고 이동/도착하면 즉시 0으로 리셋된다.
-    private var consecutiveBlockedCount = 0
     private let movementProfile: MovementProfile
 
     private var seatState: SeatState = .none
     private var claimedSeatIndex: Int?
     private var claimedSeat: GuestSeat?
+    /// 착석 경로 중 sceneGeometry에 막혀 좌석 소유권을 유지한 채 수행한 국소 우회 횟수.
+    /// 새 좌석을 배정받거나 실제 착석을 시작하면 0으로 초기화한다.
+    private var seatGeometryRecoveryAttempts = 0
+    /// cycler가 현재 좌석 순회에서 이미 배정받은 좌석들. 실제 착석 전에 접근에
+    /// 실패한 자리도 포함해 같은 막힌 자리를 곧장 다시 배정받는 루프를 끊는다.
+    /// 코디네이터가 이 집합 밖의 빈 좌석을 모두 소진해 폴백 좌석을 배정하면
+    /// grantSeat에서 새 순회로 리셋한다.
+    private var visitedSeatIndices: Set<Int> = []
+    /// seatState == .sittingDown 동안 Sit_to_Stand 역재생이 끝날 때까지 남은 시간.
+    private var sittingDownRemaining: Float?
+    private var sittingDownDuration: Float?
+    /// 착석/기립 전환 중 실제 좌석과 보행 가능한 접근점 사이 XZ 보간의 서 있는 쪽 끝점.
+    private var seatTransitionStandingPosition: SIMD2<Float>?
     /// cycler가 착석한 뒤 자동으로 일어날 때까지 남은 시간(초). role == .cycler로
     /// 착석했을 때만 값이 채워진다 — seatedPool은 영구 착석이라 항상 nil이다.
     private var sittingRemaining: Float?
     /// seatState == .standingUp 동안 Sit_to_Stand 애니메이션이 끊기지 않도록 두는
     /// 남은 시간(초).
     private var standingUpRemaining: Float?
+    private var standingUpDuration: Float?
     /// 코디네이터가 다음 프레임에 한 번만 소비하는 원샷 신호. 착석을 원한다는 요청과,
     /// 방금 자리를 비웠다는 통지에 쓴다(takeSeatRequest/takeVacatedSeatIndex 참고).
-    private var pendingSeatRequest = false
+    private var pendingSeatRequest: NPCGuestSeatRequest?
     private var pendingVacatedSeatIndex: Int?
     /// 좌석까지 실제로 걸어가 도착한(=진짜로 앉은) 프레임에 한 번만 서는 원샷 신호
     /// (takeSeatedArrivalSeatIndex). grantSeat 시점이 아니라 이 시점에 코디네이터가
@@ -206,16 +209,6 @@ final class NPCGuestController {
     /// pendingQueueArrival을 한 번만 세우기 위한 상태 추적(도착해 있는 동안 매 프레임
     /// 다시 세우지 않도록).
     private var hasReportedQueueArrival = false
-    /// 배회를 한 바퀴 마친 뒤 곧장 향할 좌석(코디네이터가 reserveSeat로 예약).
-    /// grantSeat와 달리 즉시 이동을 시작하지 않고, 다음 배회 목적지에 도착하는
-    /// 시점에 자동으로 커밋한다 — 입장하자마자 전원이 일제히 좌석으로 직행하면
-    /// 부자연스러워, 일부는 방을 한 바퀴 둘러보다 앉는 것처럼 보이게 한다.
-    private var reservedSeat: (index: Int, seat: GuestSeat)?
-    /// 좌석으로 이동 중 연속으로 막힌 횟수(seatApproachEscapeThreshold 참고). 정적
-    /// 장애물은 activePath(경로 탐색)가 이미 피해 가므로, 여기서 막히는 건 대개
-    /// 다른 손님이나 유저가 일시적으로 그 자리에 서 있는 경우다 — 몇 번은 그대로
-    /// 재시도하고, 계속 막히면 그제서야 자리를 반납한다.
-    private var seatApproachBlockedCount = 0
     /// 이번 프레임까지의 "실제" 이동 속도(m/s, 바닥 평면). commanded 속도
     /// (movementProfile.moveSpeed)가 아니라 update() 전후 위치 변화량 기반으로
     /// 매 프레임 갱신된다(updateVelocity 참고) — 장애물에 막혀 실제로는 거의 못
@@ -232,35 +225,48 @@ final class NPCGuestController {
         movementProfile = .random()
     }
 
-    /// 대기줄 후보 자격: 착석 지향(seatedPool) 역할이 아니고, 지금 좌석으로
-    /// 이동/착석 중이거나 좌석을 예약해 둔 상태가 아닐 때만(= 순수 배회 중일 때만)
-    /// 후보가 된다.
+    /// cycler는 항상 다음 좌석을 우선하므로 대기줄로 전환하지 않는다. 순수 배회 역할만
+    /// 대기줄 후보가 된다.
     var isQueueEligible: Bool {
-        role != .seatedPool && seatState == .none && reservedSeat == nil
+        role == .alwaysWandering && seatState == .none
     }
 
-    /// 코디네이터가 이번 프레임에 착석을 원하는지 확인할 때 한 번만 읽고 소비한다.
-    func takeSeatRequest() -> Bool {
-        defer { pendingSeatRequest = false }
+    /// 코디네이터가 이번 프레임에 착석 요청을 한 번 읽고 소비한다. cycler 요청이 빈
+    /// 좌석 부족으로 처리되지 못하면 다음 프레임에 다시 생성되어 유실되지 않는다.
+    func takeSeatRequest() -> NPCGuestSeatRequest? {
+        defer { pendingSeatRequest = nil }
         return pendingSeatRequest
     }
 
     /// 코디네이터가 빈 좌석을 찾아 배정할 때 호출한다.
     func grantSeat(index: Int, seat: GuestSeat) {
+        if role == .cycler {
+            if visitedSeatIndices.contains(index) {
+                // 현재 비어 있는 미방문 좌석을 모두 소진해 코디네이터가 폴백한
+                // 경우다. 이번 좌석을 새 순회의 첫 자리로 삼는다.
+                visitedSeatIndices = [index]
+            } else {
+                visitedSeatIndices.insert(index)
+            }
+        }
         claimedSeatIndex = index
         claimedSeat = seat
         seatState = .movingToSeat
+        seatGeometryRecoveryAttempts = 0
+        sittingDownRemaining = nil
+        sittingDownDuration = nil
+        sittingRemaining = nil
+        standingUpRemaining = nil
+        standingUpDuration = nil
         wanderTarget = nil
         activePath = []
+        escapeRequested = false
+        escapeTarget = nil
+        lastBlockedDirection = nil
         pauseRemaining = 0
-        seatApproachBlockedCount = 0
-    }
-
-    /// grantSeat와 달리 즉시 걸어가지 않는다 — 다음 배회 목적지에 도착하는
-    /// 시점(update의 .none 분기)에 자동으로 이 좌석으로 향하게 예약만 해 둔다.
-    /// 자리는 코디네이터가 이미 seatOccupants에 표시해 다른 손님이 못 가져간다.
-    func reserveSeat(index: Int, seat: GuestSeat) {
-        reservedSeat = (index, seat)
+        seatTransitionStandingPosition = nil
+        pendingSeatRequest = nil
+        pendingSeatedArrivalIndex = nil
     }
 
     /// 방금 자리를 비웠으면 그 좌석 인덱스를 반환하고 소비한다. 코디네이터가 이걸로
@@ -346,6 +352,14 @@ final class NPCGuestController {
         claimedSeatIndex = seatIndex
         claimedSeat = seat
         seatState = .sitting
+        seatGeometryRecoveryAttempts = 0
+        sittingDownRemaining = nil
+        sittingDownDuration = nil
+        sittingRemaining = nil
+        standingUpRemaining = nil
+        standingUpDuration = nil
+        seatTransitionStandingPosition = nil
+        pendingSeatRequest = nil
         face(direction: seat.facing, deltaTime: 999)
         playAnimation(.sitting)
         locomotionRoot?.position.y = seat.sittingHeightOffset
@@ -360,19 +374,25 @@ final class NPCGuestController {
         currentCue = nil
         wanderTarget = nil
         activePath = []
+        escapeRequested = false
+        escapeTarget = nil
+        lastBlockedDirection = nil
         seatState = .none
         claimedSeatIndex = nil
         claimedSeat = nil
+        seatGeometryRecoveryAttempts = 0
+        visitedSeatIndices = []
+        sittingDownRemaining = nil
+        sittingDownDuration = nil
         sittingRemaining = nil
         standingUpRemaining = nil
-        pendingSeatRequest = false
+        standingUpDuration = nil
+        seatTransitionStandingPosition = nil
+        pendingSeatRequest = nil
         pendingVacatedSeatIndex = nil
         pendingSeatedArrivalIndex = nil
         pendingQueueArrival = false
         hasReportedQueueArrival = false
-        reservedSeat = nil
-        consecutiveBlockedCount = 0
-        seatApproachBlockedCount = 0
         velocity = .zero
     }
 
@@ -388,24 +408,11 @@ final class NPCGuestController {
     /// 세는 데 쓴다.
     var isWalking: Bool { currentCue == .walk }
 
-    /// queueSlot이 있으면 그 지점으로 이동해 대기하고, 없으면 wanderArea 안에서
-    /// exclusions(직원 구역 + 키오스크 반경 + 테이블별 좌석 클러스터)를 피해 자유롭게
-    /// 걸어 다닌다.
-    ///
-    /// exclusions와 staffExclusions를 분리해서 받는 이유: 좌석으로 걸어가는 중(예:
-    /// updateMovingToSeat)에는 목적지인 좌석 자체가 "그 테이블의 좌석 클러스터
-    /// 제외 구역" 안에 있다(제외 구역이 그 테이블 좌석들을 감싸도록 만들어지므로).
-    /// 그런데 exclusions 전체를 그대로 넘기면 move()의 "제외 구역 안에 있으면
-    /// 바깥으로 밀어낸다" 로직이 매 프레임 목적지 반대 방향으로 계속 밀어내, 좌석에
-    /// 영원히 도착하지 못한 채 Walk만 반복 재생하는 문제가 있었다(seatedPool처럼
-    /// 입장 시 바로 착석 배치되는 손님은 이 이동 자체를 안 거쳐서 증상이 안 보였고,
-    /// cycler처럼 배회하다 실제로 좌석까지 걸어가야 하는 손님만 걸렸다). 그래서
-    /// 좌석으로 걸어갈 때는 직원 구역(AreaK/AreaB)만 담은 staffExclusions만 넘겨,
-    /// 그쪽으로는 안 걸어 들어가되 목적지인 좌석 자체와는 싸우지 않게 한다.
+    /// queueSlot이 있으면 그 지점으로 이동해 대기하고, 없으면 movementContext가
+    /// 이동 의도별로 선택한 제외 구역을 적용한다. 호출부는 더 이상 roaming/staff
+    /// 배열을 따로 넘기지 않아 좌석 접근에 잘못된 목록을 전달할 수 없다.
     func update(deltaTime: Float,
-               wanderArea: NPCGuestArea,
-               exclusions: [NPCGuestArea],
-               staffExclusions: [NPCGuestArea],
+               movementContext: NPCGuestMovementContext,
                pathGrid: NPCGuestPathfinder.WalkableGrid?,
                queueSlot: SIMD2<Float>?,
                facing facingTarget: SIMD2<Float>?,
@@ -425,12 +432,27 @@ final class NPCGuestController {
         switch seatState {
         case .movingToSeat:
             updateMovingToSeat(deltaTime: deltaTime,
-                               movementArea: wanderArea,
+                               movementContext: movementContext,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
                                neighboringVelocities: neighboringVelocities,
-                               exclusions: staffExclusions,
                                pathGrid: pathGrid)
+            return
+        case .sittingDown:
+            guard var remaining = sittingDownRemaining else {
+                finishSittingDown()
+                return
+            }
+            remaining -= deltaTime
+            updateSeatTransitionPose(
+                remaining: remaining,
+                duration: sittingDownDuration,
+                isSittingDown: true)
+            if remaining > 0 {
+                sittingDownRemaining = remaining
+                return
+            }
+            finishSittingDown()
             return
         case .sitting:
             // seatedPool은 sittingRemaining이 nil이라 여기서 끝 — 영구 착석.
@@ -444,48 +466,52 @@ final class NPCGuestController {
             return
         case .standingUp:
             guard var remaining = standingUpRemaining else {
-                seatState = .none
-                vacateClaimedSeat()
+                completeStandingUp()
                 return
             }
             remaining -= deltaTime
+            updateSeatTransitionPose(
+                remaining: remaining,
+                duration: standingUpDuration,
+                isSittingDown: false)
             if remaining > 0 {
                 standingUpRemaining = remaining
                 return
             }
-            standingUpRemaining = nil
-            seatState = .none
-            // 좌석을 실제로 "비웠다"고 코디네이터에 통지하는 시점은 여기(기립
-            // 애니메이션이 끝나 실제로 그 자리를 벗어난 순간)여야 한다.
-            // standUpAndResumeWandering()에서 곧장 통지하면, 코디네이터가 그
-            // 프레임에 바로 좌석을 "빈 자리"로 표시해 다른 손님에게 재배정할 수
-            // 있는데, 정작 이 손님의 몸은 standingUpAnimationDuration(1초) 동안
-            // 그 좌석 위치에 그대로 서 있다(기립 중에는 이동하지 않는다). 그
-            // 사이 새로 배정된 손님이 걸어오면 NPCObstacleAvoidance의 이웃
-            // 하드블록이 아직 그 자리에 서 있는 이 손님의 몸에 막혀, 막힘
-            // 판정이 아슬아슬하게 오락가락하며(3연속 실패 임계값에는 못
-            // 미치면서 순 이동도 없는) 좌석 근처에서 영원히 서성이기만 하고
-            // 앉지 못하는 교착에 빠졌다 — 실기에서 "의자에 앉지 않고 서 있는
-            // NPC"로 관찰된 원인.
-            vacateClaimedSeat()
+            completeStandingUp()
             return
         case .none:
             break
         }
 
-        // 외부 transform 변경이나 이전 프레임의 예외 상황으로 이미 경계를 위반했다면
-        // 정지 타이머/보행 예산보다 복구를 우선한다. move()는 위반 깊이가 줄어드는
-        // 이동만 허용하므로 안전 영역을 향해 빠져나가는 동안 더 깊이 들어갈 수 없다.
+        // 외부 transform 변경이나 막힘 후 회피는 역할/좌석 배정/대기줄보다 우선한다.
+        // cycler가 좌석을 반납한 직후에도 먼저 안전한 방향으로 빠져나간 뒤에야 새
+        // 좌석을 요청한다.
         let requiresRecovery = !NPCGuestNavigation.isValid(
-            currentPosition, inside: wanderArea, excluding: exclusions)
-        if requiresRecovery {
-            pauseRemaining = 0
-            wanderTarget = randomWanderTarget(
-                in: wanderArea,
-                excluding: exclusions,
-                awayFrom: currentPosition,
-                avoiding: occupiedAnchors)
-            activePath = requestPath(to: wanderTarget, grid: pathGrid)
+            currentPosition,
+            inside: movementContext.floor,
+            excluding: movementContext.exclusions(for: .roaming))
+        if requiresRecovery, !escapeRequested, escapeTarget == nil {
+            beginEscape()
+        }
+        if escapeRequested || escapeTarget != nil {
+            updateEscaping(
+                deltaTime: deltaTime,
+                movementContext: movementContext,
+                playerPosition: playerPosition,
+                neighboringPositions: neighboringPositions,
+                neighboringVelocities: neighboringVelocities)
+            return
+        }
+
+        // cycler는 배회/확률 판정을 거치지 않는다. 좌석이 잠시 부족하더라도 매 프레임
+        // 요청을 복구해 빈 자리가 생기는 즉시 곧장 이동한다.
+        if role == .cycler {
+            if pendingSeatRequest == nil {
+                pendingSeatRequest = NPCGuestSeatRequest(excludedSeatIndices: visitedSeatIndices)
+            }
+            playAnimation(.idle)
+            return
         }
 
         if let queueSlot {
@@ -494,13 +520,13 @@ final class NPCGuestController {
             // 제외 구역은 넘기지 않되 AreaK/AreaB만 유지한다 — 키오스크 주변 반경은
             // 줄서기와 충돌하지만 직원 전용 구역은 어떤 행동에서도 침범하면 안 된다.
             let outcome = move(toward: queueSlot, deltaTime: deltaTime,
-                               movementArea: wanderArea,
+                               movementContext: movementContext,
+                               intent: .queueing,
                                arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
                                neighborVelocities: neighboringVelocities,
                                separationScale: 0.35,
-                               exclusions: staffExclusions,
                                avoidPlayer: false)
             if outcome.arrived {
                 // 대기줄에 서서 기다리는 동안은 살짝 짜증난 티를 낸다(Idle 대신 Angry 루프).
@@ -511,7 +537,12 @@ final class NPCGuestController {
                     pendingQueueArrival = true
                 }
             } else {
-                playAnimation(outcome.moved ? .walk : .idle)
+                if outcome.blocked {
+                    beginEscape()
+                    playAnimation(.idle)
+                } else {
+                    playAnimation(outcome.moved ? .walk : .idle)
+                }
             }
             return
         }
@@ -531,8 +562,8 @@ final class NPCGuestController {
                 return
             }
             wanderTarget = randomWanderTarget(
-                in: wanderArea,
-                excluding: exclusions,
+                in: movementContext.floor,
+                excluding: movementContext.exclusions(for: .roaming),
                 awayFrom: currentPosition,
                 avoiding: occupiedAnchors)
             activePath = requestPath(to: wanderTarget, grid: pathGrid)
@@ -542,77 +573,27 @@ final class NPCGuestController {
             return
         }
         let outcome = moveAlongPath(deltaTime: deltaTime,
-                                    movementArea: wanderArea,
+                                    movementContext: movementContext,
+                                    intent: .roaming,
                                     arrivalDistance: NPCGuestTuning.arrivalDistance,
                                     playerPosition: playerPosition,
                                     neighboringPositions: neighboringPositions,
                                     neighborVelocities: neighboringVelocities,
-                                    separationScale: 1,
-                                    exclusions: exclusions)
+                                    separationScale: 1)
         if outcome.blocked {
-            // 막힌 걸 확인한 그 프레임에 바로 다른 목적지를 찾아 방향을 틀되, 짧게
-            // 멈췄다 가게 해 새 목적지도 같은 장애물에 곧장 다시 막히며 Idle↔Walk가
-            // 매 프레임 번갈아 재생되는(결과적으로 Walk가 안 끊기는 것처럼 보이는)
-            // 진동을 막는다.
-            consecutiveBlockedCount += 1
-            // randomWanderTarget은 논리적 유효성(바닥 안·제외 구역 밖)만 보고 후보를
-            // 고르는데, 지금 위치가 이미 막다른 구석이면 그렇게 고른 새 목적지도
-            // 같은 장애물 너머라 다시 막히길 반복할 수 있다. 연속으로
-            // stuckEscapeThreshold번 이상 막히면, 먼 무작위 후보 대신 지금 위치
-            // 주변에서 실제로(레이캐스트로 확인된) 뚫린 방향을 찾는 nearbyEscapeTarget로
-            // 전환해 확실히 벗어나게 한다.
-            // outcome.stalled(1.2초간 순 이동 거의 없음)는 연속 횟수와 무관하게 그
-            // 자체로 즉시 escape 전환 사유다 — 프레임 단위 blocked만 세면, 여러
-            // NPC가 몰려 미묘하게 밀고 밀리는 상황에서 어느 한 프레임이
-            // blockedStepFraction을 살짝 넘겨 카운터가 0으로 리셋되는 게 반복되며
-            // 실제로는 오래 정체돼 있는데도 "3연속"에 영원히 못 미칠 수 있다
-            // (MoveOutcome.stalled 주석 참고).
-            let newTarget: SIMD2<Float>?
-            if outcome.stalled || consecutiveBlockedCount >= NPCGuestTuning.stuckEscapeThreshold {
-                newTarget = nearbyEscapeTarget(from: currentPosition, in: wanderArea, excluding: exclusions)
-                    ?? randomWanderTarget(in: wanderArea, excluding: exclusions,
-                                          awayFrom: currentPosition, avoiding: occupiedAnchors)
-            } else {
-                newTarget = randomWanderTarget(in: wanderArea, excluding: exclusions,
-                                               awayFrom: currentPosition, avoiding: occupiedAnchors)
-            }
-            wanderTarget = newTarget
-            activePath = requestPath(to: newTarget, grid: pathGrid)
-            // move()는 실제로 이동한(moved) 프레임에만 face()를 호출한다. 막힌 프레임은
-            // moved가 false라 이 회전이 없으면 벽/가구를 향한 채로 그대로 멈춰 서서,
-            // Idle로 바뀌어도 여전히 "막혀서 못 가고 있다"는 느낌을 준다. 새 목적지를
-            // 정한 그 즉시 그쪽을 보게 돌려 다른 방향을 시도한다는 게 눈에 보이게 한다.
-            if let newTarget {
-                face(point: newTarget, deltaTime: 999)
-            }
-            pauseRemaining = Float.random(in: NPCGuestTuning.blockedPauseRange)
+            beginEscape()
             playAnimation(.idle)
             return
         }
-        consecutiveBlockedCount = 0
         if outcome.arrived {
             wanderTarget = nil
             activePath = []
-            // 예약된 좌석이 있으면(reserveSeat) 이 배회 목적지 도착을 신호로 곧장 그
-            // 좌석으로 향한다 — 확률을 굴리지 않고 항상 커밋해, "한 바퀴 둘러보고 나서
-            // 앉는다"는 정해진 그림이 실제로 이어지게 한다.
-            if let reserved = reservedSeat {
-                reservedSeat = nil
-                claimedSeatIndex = reserved.index
-                claimedSeat = reserved.seat
-                seatState = .movingToSeat
-                pauseRemaining = 0
-                seatApproachBlockedCount = 0
-                playAnimation(.idle)
-                return
-            }
             pauseRemaining = Float.random(in: movementProfile.pauseRange)
             playAnimation(.idle)
-            // 목적지 도착이라는 자연스러운 결정 지점에서만 착석 여부를 굴린다.
-            // alwaysWandering 역할은 절대 앉지 않는다. 확률은 손님마다 달라(개인차) 전원이
-            // 기계적으로 같은 타이밍에 앉지 않게 한다.
-            if role != .alwaysWandering, Float.random(in: 0...1) < movementProfile.sitDesireChance {
-                pendingSeatRequest = true
+            // 좌석 부족으로 배회하는 seatedPool만 목적지 도착 시 재시도한다. cycler는
+            // 이 경로에 들어오지 않고 항상 즉시 다음 좌석을 요청한다.
+            if role == .seatedPool, Float.random(in: 0...1) < movementProfile.sitDesireChance {
+                pendingSeatRequest = NPCGuestSeatRequest(excludedSeatIndices: [])
             }
         } else {
             // 실제로 위치가 움직인 프레임에만 Walk를 재생한다. 장애물에 막혀 제자리인
@@ -623,23 +604,45 @@ final class NPCGuestController {
 
     // MARK: - Seating
 
-    /// cycler 전용: 앉아있던 시간(sittingDurationRange)이 다 되면 자동으로 일어나
-    /// 다시 배회 상태로 돌아간다. 방금 앉아있던 좌석은 pendingVacatedSeatIndex로
-    /// 코디네이터에 알려 비워지고(그 테이블에 다른 손님이 안 남아있으면 코디네이터가
-    /// 디저트도 함께 치운다), 이후 정상적인 배회→확률적 착석 요청 경로가 새 좌석을
-    /// 찾아준다 — 배회 손님이 카페에 계속 들고 나는 느낌을 준다.
+    /// cycler 전용: 앉아있던 시간이 다 되면 기립 전환을 시작한다. 실제 좌석 반납과
+    /// 다음 좌석 요청은 애니메이션이 끝난 프레임에 함께 처리한다.
     private func standUpAndResumeWandering() {
-        playAnimation(.sitToStand)
-        locomotionRoot?.position.y = 0
+        let transitionDuration: Float
+        if let animationDuration = playSitTransition(reversed: false) {
+            transitionDuration = animationDuration
+        } else {
+            transitionDuration = NPCGuestTuning.seatingTransitionFallbackDuration
+            playAnimation(.idle)
+        }
         // claimedSeatIndex/claimedSeat는 여기서 비우지 않는다 — 기립 애니메이션이
         // 끝나 실제로 자리를 벗어날 때(.standingUp 완료 시점, update() 참고)까지는
         // 이 손님의 몸이 여전히 그 좌석 위치에 있다. 그 전에 코디네이터에 "비었다"고
         // 통지하면 다른 손님이 아직 사람이 서 있는 자리로 걸어오게 된다.
         seatState = .standingUp
         sittingRemaining = nil
-        standingUpRemaining = NPCGuestTuning.standUpAnimationDuration
+        standingUpRemaining = transitionDuration
+        standingUpDuration = transitionDuration
+        seatTransitionStandingPosition = claimedSeat?.approachPosition
         wanderTarget = nil
+        activePath = []
         pauseRemaining = 0
+    }
+
+    /// 기립 애니메이션이 끝난 위치를 가구 밖의 보행 가능 접근점으로 확정한 뒤에만
+    /// 좌석을 반납한다. 이전처럼 SittingPoint에서 다음 경로의 첫 셀까지 충돌을 끄고
+    /// 걸어 나가지 않으므로 가구 관통이 발생하지 않는다.
+    private func completeStandingUp() {
+        standingUpRemaining = nil
+        standingUpDuration = nil
+        if let seat = claimedSeat, let root = locomotionRoot {
+            root.position = SIMD3(seat.approachPosition.x, 0, seat.approachPosition.y)
+        } else {
+            locomotionRoot?.position.y = 0
+        }
+        seatTransitionStandingPosition = nil
+        seatState = .none
+        let vacatedSeatIndex = vacateClaimedSeat()
+        requestNextSeatIfCycler(excluding: vacatedSeatIndex)
     }
 
     /// 지금 붙잡고 있는 좌석(있다면)을 실제로 놓아준다 — pendingVacatedSeatIndex로
@@ -648,51 +651,63 @@ final class NPCGuestController {
     /// — 기립 애니메이션 도중처럼 아직 그 자리에 있는 동안 부르면 다른 손님이
     /// 사람이 서 있는 자리로 걸어오는 원인이 된다(standUpAndResumeWandering 주석
     /// 참고).
-    private func vacateClaimedSeat() {
+    @discardableResult
+    private func vacateClaimedSeat() -> Int? {
+        let vacatedSeatIndex = claimedSeatIndex
         pendingVacatedSeatIndex = claimedSeatIndex
         claimedSeatIndex = nil
         claimedSeat = nil
+        return vacatedSeatIndex
     }
 
-    /// exclusions는 호출부(update)가 staffExclusions(직원 구역만)를 넘긴다 — 테이블
-    /// 좌석 클러스터 제외 구역까지 넘기면 목적지인 좌석 자체와 충돌한다(update의
-    /// 문서 주석 참고).
-    ///
-    /// 좌석까지의 경로는 NPCGuestPathfinder로 미리 찾아 activePath에 웨이포인트로
-    /// 담아 두고 그 순서대로 걷는다(moveAlongPath) — 직선으로 곧장 겨냥하면
-    /// 테이블처럼 큰 장애물을 사이에 두고 매 프레임 다시 막히며 제자리에서
-    /// 왔다갔다만 반복했다.
-    ///
-    /// 좌석 바로 앞 마지막 seatCollisionBypassDistance 구간에서만 레이캐스트 장애물
-    /// 회피를 끈다 — Indoor.usda의 좌석은 사실상 전부(39/39 실측) 휠체어가 테이블을
-    /// 가로지르지 못하게 둘러싼 collision Cube 프록시 안쪽에 있다. NPC 이동도 같은
-    /// 콜리전 그룹(groundGroup)을 검사하므로, 이 회피를 켜 둔 채로는 좌석 코앞까지
-    /// 걸어와도 그 박스 경계에 막혀 마지막 한 걸음을 절대 못 넘고("착석 동작 없이
-    /// 서 있음") seatArrivalDistance 안으로 못 들어왔다. 그 전 이동은 충돌 검사를
-    /// 유지해 먼 거리에서 벽이나 가구를 관통하는 우회는 허용하지 않는다.
+    /// cycler는 좌석을 비운 프레임에 즉시 다음 좌석을 요청한다. 직전 좌석 하나가
+    /// 아니라 이번 순회에서 이미 배정받았던 좌석 전체를 보내 두 자리 왕복과
+    /// 접근 실패 좌석의 즉시 재배정을 함께 막는다.
+    private func requestNextSeatIfCycler(excluding seatIndex: Int?) {
+        guard role == .cycler else { return }
+        if let seatIndex { visitedSeatIndices.insert(seatIndex) }
+        pendingSeatRequest = NPCGuestSeatRequest(excludedSeatIndices: visitedSeatIndices)
+    }
+
+    /// 좌석 자체(SittingPoint)는 가구 콜리전 내부일 수 있으므로 그 지점까지 걷지 않는다.
+    /// Coordinator가 미리 계산한 좌석 뒤 보행 가능 접근점까지만 A*와 씬 충돌을 모두
+    /// 유지한 채 걷고, 접근점↔좌석의 짧은 구간은 착석/기립 애니메이션 진행률에 맞춰
+    /// 보간한다. 접근점이 없는 깊은 좌석은 애초에 배정 후보에서 제외된다.
     private func updateMovingToSeat(deltaTime: Float,
-                                    movementArea: NPCGuestArea,
+                                    movementContext: NPCGuestMovementContext,
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>],
                                     neighboringVelocities: [SIMD2<Float>],
-                                    exclusions: [NPCGuestArea],
                                     pathGrid: NPCGuestPathfinder.WalkableGrid?) {
-        guard let seat = claimedSeat else { seatState = .none; return }
-        if activePath.isEmpty {
-            activePath = requestPath(to: seat.position, grid: pathGrid)
+        guard let seat = claimedSeat else {
+            let vacatedSeatIndex = vacateClaimedSeat()
+            activePath = []
+            seatState = .none
+            requestNextSeatIfCycler(excluding: vacatedSeatIndex)
+            return
         }
-
-        let bypassSeatCollision = simd_distance(currentPosition, seat.position)
-            <= NPCGuestTuning.seatCollisionBypassDistance
+        if activePath.isEmpty {
+            guard let path = requestCollisionSafeSeatPath(
+                to: seat.approachPosition,
+                grid: pathGrid)
+            else {
+                // A*가 "연결된 경로 없음"을 반환했는데 목적지 하나만 넣어 직선으로
+                // 걸으면, 결국 중간의 테이블/카운터 경계까지 간 뒤 sceneGeometry로
+                // 멈춘다. 좌석 이동은 그런 fallback을 절대 쓰지 않는다.
+                vacateSeatDueToBlockage(reason: .pathUnavailable)
+                return
+            }
+            activePath = path
+        }
+        let isFinalApproachWaypoint = activePath.count == 1
         let outcome = moveAlongPath(deltaTime: deltaTime,
-                                    movementArea: movementArea,
-                                    arrivalDistance: NPCGuestTuning.seatArrivalDistance,
+                                    movementContext: movementContext,
+                                    intent: .seating,
+                                    arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                     playerPosition: playerPosition,
                                     neighboringPositions: neighboringPositions,
                                     neighborVelocities: neighboringVelocities,
                                     separationScale: 0.5,
-                                    exclusions: exclusions,
-                                    avoidObstacles: !bypassSeatCollision,
                                     // 좌석으로 걸어가는 짧고 목적이 분명한 구간에서는
                                     // 예측 회피를 아예 끈다 — move()의 usePredictiveAvoidance
                                     // 주석 참고. crowdSteeredDirection(즉시 반발)과
@@ -700,62 +715,186 @@ final class NPCGuestController {
                                     // 적용되므로 다른 손님/유저와 실제로 겹치지는 않는다.
                                     usePredictiveAvoidance: false)
         if outcome.blocked {
-            // 정적 장애물(테이블 등)은 activePath가 이미 피해서 잡은 경로라 여기서는
-            // 잘 안 걸린다 — 막히는 건 대개 다른 손님이나 유저가 일시적으로 그
-            // 웨이포인트를 막고 서 있는 경우다. 몇 번은 그대로 재시도하고, 계속
-            // 막히면 그제서야 포기한다(코디네이터가 seatOccupants를 비워 다른
-            // 손님에게 다시 배정할 수 있게 한다).
-            //
-            // outcome.stalled는 프레임 단위 연속 횟수와 무관하게 그 자체로 즉시
-            // 포기 사유다 — 여러 손님이 좁은 공간(테이블·카운터 주변)에 몰려
-            // 미묘하게 밀고 밀리면, 어느 한 프레임이 blockedStepFraction을 살짝
-            // 넘겨 seatApproachBlockedCount가 0으로 리셋되는 게 반복될 수 있다.
-            // 그러면 실제로는 1.2초 넘게 좌석 근처에서 정체돼 있는데도(=실기에서
-            // "충돌 판정만 나며 계속 서 있는" 증상) "3연속 막힘"에 영원히 못
-            // 미쳐 포기 로직이 발동하지 않는다(MoveOutcome.stalled 주석 참고).
-            seatApproachBlockedCount += 1
-            if !outcome.stalled, seatApproachBlockedCount < NPCGuestTuning.seatApproachEscapeThreshold {
+            let canBeginFromBlockedApproach =
+                NPCGuestSeatTransitionPolicy.canBeginFromBlockedApproach(
+                    currentPosition: currentPosition,
+                    seatPosition: seat.position,
+                    approachPosition: seat.approachPosition,
+                    seatFacing: seat.facing,
+                    isFinalWaypoint: isFinalApproachWaypoint,
+                    isSceneGeometryBlock: outcome.blockReason == .sceneGeometry)
+            if canBeginFromBlockedApproach {
+                Self.movementLogger.notice(
+                    "\(self.name, privacy: .public) 좌석 \(self.claimedSeatIndex ?? -1, privacy: .public) 근접 착석 전환(sceneGeometry, approachDistance=\(simd_distance(self.currentPosition, seat.approachPosition), privacy: .public))")
+                beginSittingDown(at: seat)
+                return
+            }
+            if outcome.blockReason == .sceneGeometry,
+               scheduleSeatGeometryRecovery(
+                   toward: seat,
+                   movementContext: movementContext,
+                   playerPosition: playerPosition,
+                   neighboringPositions: neighboringPositions,
+                   pathGrid: pathGrid) {
                 playAnimation(.idle)
                 return
             }
-            vacateSeatDueToBlockage()
+            vacateSeatDueToBlockage(reason: outcome.blockReason)
             return
         }
-        seatApproachBlockedCount = 0
         if outcome.arrived {
-            seatState = .sitting
-            face(direction: seat.facing, deltaTime: 999)
-            playAnimation(.sitting)
-            // seatArrivalDistance(0.3m)가 넉넉해진 만큼, 도착 판정 시점의 실제 위치는
-            // 좌석 중심에서 최대 그 거리만큼 떨어져 있을 수 있다. 그 위치 그대로
-            // 앉으면 의자 옆 허공에 앉은 것처럼 보이므로, 착석 순간 좌석 위치로
-            // 스냅한다(placeSeated가 입장 시 이미 하는 것과 동일).
-            locomotionRoot?.position = SIMD3(seat.position.x, seat.sittingHeightOffset, seat.position.y)
-            pendingSeatedArrivalIndex = claimedSeatIndex
-            // cycler만 자동으로 다시 일어난다 — seatedPool은 영구 착석이라 타이머를
-            // 두지 않는다(sittingRemaining이 nil로 남아 update()의 .sitting 분기가
-            // 아무것도 하지 않는다).
-            if role == .cycler {
-                sittingRemaining = Float.random(in: NPCGuestTuning.sittingDurationRange)
-            }
+            beginSittingDown(at: seat)
         } else {
             playAnimation(outcome.moved ? .walk : .idle)
         }
     }
 
+    /// 정상 도착과 sceneGeometry 근접 도착이 반드시 같은 상태 전이를 타도록 착석 시작을
+    /// 한곳에 모은다. 호출 시점의 실제 위치를 서 있는 쪽 끝점으로 보존하므로 애니메이션
+    /// 동안 그 위치에서 SittingPoint까지 자연스럽게 보간된다.
+    private func beginSittingDown(at seat: GuestSeat) {
+        seatState = .sittingDown
+        seatGeometryRecoveryAttempts = 0
+        face(direction: seat.facing, deltaTime: 999)
+        seatTransitionStandingPosition = currentPosition
+        activePath = []
+        stallCheckTarget = nil
+        stallCheckTimer = 0
+        stallCheckStartPosition = nil
+        if let transitionDuration = playSitTransition(reversed: true) {
+            sittingDownRemaining = transitionDuration
+            sittingDownDuration = transitionDuration
+        } else {
+            // 리소스 누락 시 상태 머신이 sittingDown에 영구 정지하지 않도록 즉시
+            // Sitting 루프로 폴백한다.
+            finishSittingDown()
+        }
+    }
+
+    /// 정적 가구에 한 번 닿았다고 좌석을 포기하지 않는다. 방금 막힌 방향과 60도 이상
+    /// 다른 열린 방향으로 먼저 빠진 다음, 그 지점에서 같은 좌석 접근점까지 A*를 다시
+    /// 연결한다. detourTarget을 경로의 첫 웨이포인트로 명시해 현재 가구 경계에서 실제로
+    /// 떨어져 나온 뒤에만 재탐색 경로로 합류한다.
+    private func scheduleSeatGeometryRecovery(
+        toward seat: GuestSeat,
+        movementContext: NPCGuestMovementContext,
+        playerPosition: SIMD2<Float>,
+        neighboringPositions: [SIMD2<Float>],
+        pathGrid: NPCGuestPathfinder.WalkableGrid?
+    ) -> Bool {
+        guard seatGeometryRecoveryAttempts < NPCGuestTuning.maximumSeatGeometryRecoveryAttempts,
+              let pathGrid,
+              let detourTarget = nearbyEscapeTarget(
+                  from: currentPosition,
+                  in: movementContext.floor,
+                  excluding: movementContext.exclusions(for: .seating),
+                  playerPosition: playerPosition,
+                  neighboringPositions: neighboringPositions,
+                  avoidingDirection: lastBlockedDirection),
+              let returnPath = NPCGuestPathfinder.findPath(
+                  from: detourTarget,
+                  to: seat.approachPosition,
+                  in: pathGrid)
+        else { return false }
+
+        var recoveryPath = [detourTarget]
+        for waypoint in returnPath {
+            guard let last = recoveryPath.last,
+                  simd_distance(last, waypoint) > NPCGuestTuning.arrivalDistance else { continue }
+            recoveryPath.append(waypoint)
+        }
+        guard let finalWaypoint = recoveryPath.last,
+              simd_distance(finalWaypoint, seat.approachPosition) <= 0.001 else { return false }
+
+        seatGeometryRecoveryAttempts += 1
+        activePath = recoveryPath
+        stallCheckTarget = nil
+        stallCheckTimer = 0
+        stallCheckStartPosition = nil
+        Self.movementLogger.notice(
+            "\(self.name, privacy: .public) 좌석 \(self.claimedSeatIndex ?? -1, privacy: .public) 접근 국소 우회 \(self.seatGeometryRecoveryAttempts, privacy: .public)/\(NPCGuestTuning.maximumSeatGeometryRecoveryAttempts, privacy: .public), 우회점=(\(detourTarget.x, privacy: .public), \(detourTarget.y, privacy: .public))")
+        return true
+    }
+
     /// 좌석까지 걸어가는 걸 완전히 포기하고 자리를 반납한다. 시간을 두고 재시도하지
     /// 않고(코디네이터가 seatOccupants를 즉시 비워 다른 손님에게 다시 배정할 수 있게
     /// 한다), 배회 상태로 되돌린다.
-    private func vacateSeatDueToBlockage() {
+    private func vacateSeatDueToBlockage(reason: MovementBlockReason?) {
         // 아직 좌석에 도착하지 못한 채(걸어가는 도중) 포기하는 경우라 이 손님의
         // 몸은 좌석 위치에 없다 — standUpAndResumeWandering과 달리 즉시 비워도
         // 안전하다.
-        vacateClaimedSeat()
+        let approachDistance = claimedSeat.map {
+            simd_distance(currentPosition, $0.approachPosition)
+        } ?? -1
+        let seatDistance = claimedSeat.map {
+            simd_distance(currentPosition, $0.position)
+        } ?? -1
+        let remainingWaypointCount = activePath.count
+        let recoveryAttempts = seatGeometryRecoveryAttempts
+        let vacatedSeatIndex = vacateClaimedSeat()
+        Self.movementLogger.notice(
+            "\(self.name, privacy: .public) 좌석 접근 포기: seat=\(vacatedSeatIndex ?? -1, privacy: .public) reason=\((reason ?? .unknown).rawValue, privacy: .public) approachDistance=\(approachDistance, privacy: .public) seatDistance=\(seatDistance, privacy: .public) remainingWaypoints=\(remainingWaypointCount, privacy: .public) recoveryAttempts=\(recoveryAttempts, privacy: .public)")
         seatState = .none
         activePath = []
-        seatApproachBlockedCount = 0
-        pauseRemaining = Float.random(in: 0.3...1.0)
+        seatTransitionStandingPosition = nil
+        sittingDownRemaining = nil
+        sittingDownDuration = nil
+        pauseRemaining = 0
+        if role == .cycler, let vacatedSeatIndex {
+            visitedSeatIndices.insert(vacatedSeatIndex)
+        }
+        beginEscape()
         playAnimation(.idle)
+    }
+
+    /// Sit_to_Stand 역재생이 끝난 뒤에만 실제 착석 완료로 처리한다. 디저트 생성 신호와
+    /// cycler의 15~20초 체류 타이머도 이 시점부터 시작해 전환 시간을 착석 시간에
+    /// 섞지 않는다.
+    private func finishSittingDown() {
+        guard case .sittingDown = seatState else { return }
+        guard claimedSeatIndex != nil, claimedSeat != nil else {
+            let vacatedSeatIndex = vacateClaimedSeat()
+            sittingDownRemaining = nil
+            sittingDownDuration = nil
+            seatState = .none
+            requestNextSeatIfCycler(excluding: vacatedSeatIndex)
+            playAnimation(.idle)
+            return
+        }
+        sittingDownRemaining = nil
+        sittingDownDuration = nil
+        if let seat = claimedSeat, let root = locomotionRoot {
+            root.position = SIMD3(
+                seat.position.x,
+                seat.sittingHeightOffset,
+                seat.position.y)
+        }
+        seatTransitionStandingPosition = nil
+        seatState = .sitting
+        playAnimation(.sitting)
+        pendingSeatedArrivalIndex = claimedSeatIndex
+        sittingRemaining = role == .cycler
+            ? Float.random(in: NPCGuestTuning.sittingDurationRange)
+            : nil
+    }
+
+    /// Sit_to_Stand 클립의 진행률과 로코모션 루트 높이를 함께 보간한다. 스켈레톤
+    /// 애니메이션만 역재생하고 루트 Y를 한 번에 스냅하면 착석/기립 시작점에서 몸 전체가
+    /// 위아래로 튀므로, 앉을 때는 0→좌석 높이, 일어날 때는 좌석 높이→0으로 맞춘다.
+    private func updateSeatTransitionPose(
+        remaining: Float,
+        duration: Float?,
+        isSittingDown: Bool
+    ) {
+        guard let duration, duration > 0,
+              let seat = claimedSeat,
+              let root = locomotionRoot else { return }
+        let remainingFraction = min(1, max(0, remaining / duration))
+        let seatedFraction = isSittingDown ? 1 - remainingFraction : remainingFraction
+        let standingPosition = seatTransitionStandingPosition ?? seat.approachPosition
+        root.position.x = standingPosition.x + (seat.position.x - standingPosition.x) * seatedFraction
+        root.position.y = seat.sittingHeightOffset * seatedFraction
+        root.position.z = standingPosition.y + (seat.position.y - standingPosition.y) * seatedFraction
     }
 
     // MARK: - Movement
@@ -766,21 +905,98 @@ final class NPCGuestController {
     /// 애니메이션을 정한다.
     ///
     /// stalled: stallCheckInterval(1.2초) 동안 순 이동이 stallMinimumDistance보다
-    /// 작았는지 — blocked와 별개 필드로 둔 이유는 호출부(update/updateMovingToSeat)의
-    /// "연속 N회 막히면 포기" 카운터(consecutiveBlockedCount/seatApproachBlockedCount)가
-    /// 프레임 단위 blocked만 보면 취약하기 때문이다. 여러 NPC가 좁은 공간에 몰려
-    /// 서로 미묘하게 밀고 밀리면, 어느 한 프레임은 blockedStepFraction을 살짝 넘겨
-    /// "막힘 아님"으로 판정되고 카운터가 0으로 리셋되는 일이 반복될 수 있다 —
-    /// 그러면 실제로는 1.2초 넘게 제자리인데도 "3연속 막힘"에는 영원히 도달하지
-    /// 못해 포기/탈출 로직이 아예 발동하지 않는다(실기에서 관찰된 "충돌 판정만
-    /// 나며 계속 서 있는" 현상의 근본 원인). stalled는 프레임 단위 흔들림과 무관하게
-    /// "1.2초간 순 이동이 거의 없었다"는 사실 자체를 보므로, 호출부는 이 신호
-    /// 하나만으로도(연속 횟수를 더 쌓지 않고) 즉시 탈출/포기로 넘어간다.
+    /// 작았는지. 한 프레임의 스텝은 충분해 보여도 제자리에서 흔들리는 경우를 잡아,
+    /// blocked와 동일하게 즉시 명시적 escape 단계로 전환한다.
+    private enum MovementBlockReason: String {
+        case sceneGeometry
+        case player
+        case neighboringNPC
+        case restrictedArea
+        case stalled
+        case pathUnavailable
+        case unknown
+    }
+
     private struct MoveOutcome {
         let arrived: Bool
         let moved: Bool
         let blocked: Bool
         let stalled: Bool
+        let blockReason: MovementBlockReason?
+    }
+
+    /// 현재 행동을 버리고 주변의 실제 뚫린 방향으로 빠져나가는 단계를 예약한다.
+    /// 좌석 요청도 지워 Coordinator가 escape 도중 새 좌석을 배정하지 못하게 한다.
+    private func beginEscape() {
+        escapeRequested = true
+        escapeTarget = nil
+        pendingSeatRequest = nil
+        wanderTarget = nil
+        activePath = []
+        pauseRemaining = 0
+        stallCheckTarget = nil
+        stallCheckTimer = 0
+        stallCheckStartPosition = nil
+    }
+
+    /// 역할과 좌석 배정 여부에 관계없이 막힘 다음 프레임부터 가장 넓게 열린 방향으로
+    /// 직접 빠져나간다. 이 경로에서는 씬/유저/NPC 충돌을 모두 유지한다. escape가 끝난
+    /// 뒤에만 cycler의 다음 좌석 요청을 복구한다.
+    private func updateEscaping(
+        deltaTime: Float,
+        movementContext: NPCGuestMovementContext,
+        playerPosition: SIMD2<Float>,
+        neighboringPositions: [SIMD2<Float>],
+        neighboringVelocities: [SIMD2<Float>]
+    ) {
+        if escapeTarget == nil {
+            guard let target = nearbyEscapeTarget(
+                from: currentPosition,
+                in: movementContext.floor,
+                excluding: movementContext.exclusions(for: .roaming),
+                playerPosition: playerPosition,
+                neighboringPositions: neighboringPositions,
+                avoidingDirection: lastBlockedDirection)
+            else {
+                playAnimation(.idle)
+                return
+            }
+            escapeTarget = target
+            activePath = [target]
+            face(point: target, deltaTime: 999)
+        }
+
+        let outcome = moveAlongPath(
+            deltaTime: deltaTime,
+            movementContext: movementContext,
+            intent: .roaming,
+            arrivalDistance: NPCGuestTuning.arrivalDistance,
+            playerPosition: playerPosition,
+            neighboringPositions: neighboringPositions,
+            neighborVelocities: neighboringVelocities,
+            separationScale: 1,
+            usePredictiveAvoidance: false)
+        if outcome.blocked {
+            // 동적 장애물이 방향을 다시 막았으면 다음 프레임에 360도 후보를 새로 잰다.
+            escapeTarget = nil
+            activePath = []
+            stallCheckTarget = nil
+            playAnimation(.idle)
+            return
+        }
+        if outcome.arrived {
+            escapeRequested = false
+            escapeTarget = nil
+            activePath = []
+            stallCheckTarget = nil
+            lastBlockedDirection = nil
+            if role == .cycler {
+                requestNextSeatIfCycler(excluding: nil)
+            }
+            playAnimation(.idle)
+            return
+        }
+        playAnimation(outcome.moved ? .walk : .idle)
     }
 
     /// grid가 있으면 NPCGuestPathfinder로 destination까지의 웨이포인트 경로를 찾는다.
@@ -796,57 +1012,69 @@ final class NPCGuestController {
         return path
     }
 
+    /// 좌석 접근에는 "경로가 없으면 목적지로 직진"하는 일반 배회 fallback을 허용하지
+    /// 않는다. grid가 준비되지 않았거나 A*로 연결된 경로가 없으면 nil을 반환해 호출부가
+    /// 좌석을 반납하고 탈출하도록 한다.
+    private func requestCollisionSafeSeatPath(
+        to destination: SIMD2<Float>,
+        grid: NPCGuestPathfinder.WalkableGrid?
+    ) -> [SIMD2<Float>]? {
+        guard let grid else { return nil }
+        return NPCGuestPathfinder.findPath(from: currentPosition, to: destination, in: grid)
+    }
+
     /// activePath의 웨이포인트를 순서대로 밟아 최종 목적지에 도달한다. 중간
     /// 웨이포인트 도착은 "아직 도착 안 함(moved: true)"으로만 보고하고, 마지막
     /// 웨이포인트(경로의 끝, 항상 최종 목적지와 같다)에 닿아야 진짜 arrived를
     /// 반환한다 — 호출부(update/updateMovingToSeat)는 이 시점에만 도착 후속
     /// 처리(착석 시작, 다음 배회 결정 등)를 해야 한다.
     private func moveAlongPath(deltaTime: Float,
-                               movementArea: NPCGuestArea,
+                               movementContext: NPCGuestMovementContext,
+                               intent: NPCGuestMovementIntent,
                                arrivalDistance: Float,
                                playerPosition: SIMD2<Float>,
                                neighboringPositions: [SIMD2<Float>],
                                neighborVelocities: [SIMD2<Float>] = [],
                                separationScale: Float,
-                               exclusions: [NPCGuestArea] = [],
                                avoidPlayer: Bool = true,
-                               avoidObstacles: Bool = true,
                                usePredictiveAvoidance: Bool = true) -> MoveOutcome {
         guard let waypoint = activePath.first else {
-            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false)
+            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false,
+                               blockReason: nil)
         }
         let isFinalWaypoint = activePath.count == 1
         let outcome = move(toward: waypoint, deltaTime: deltaTime,
-                           movementArea: movementArea,
+                           movementContext: movementContext,
+                           intent: intent,
                            arrivalDistance: isFinalWaypoint ? arrivalDistance : NPCGuestTuning.arrivalDistance,
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
                            neighborVelocities: neighborVelocities,
                            separationScale: separationScale,
-                           exclusions: exclusions,
                            avoidPlayer: avoidPlayer,
-                           avoidObstacles: avoidObstacles,
                            usePredictiveAvoidance: usePredictiveAvoidance)
         guard outcome.arrived else { return outcome }
         activePath.removeFirst()
         return isFinalWaypoint
             ? outcome
-            : MoveOutcome(arrived: false, moved: true, blocked: false, stalled: false)
+            : MoveOutcome(arrived: false, moved: true, blocked: false, stalled: false,
+                          blockReason: nil)
     }
 
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
-                      movementArea: NPCGuestArea,
+                      movementContext: NPCGuestMovementContext,
+                      intent: NPCGuestMovementIntent,
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
                       neighborVelocities: [SIMD2<Float>] = [],
                       separationScale: Float,
-                      exclusions: [NPCGuestArea] = [],
                       avoidPlayer: Bool = true,
-                      avoidObstacles: Bool = true,
                       usePredictiveAvoidance: Bool = true) -> MoveOutcome {
         guard let root = locomotionRoot else {
-            return MoveOutcome(arrived: false, moved: false, blocked: false, stalled: false)
+            return MoveOutcome(arrived: false, moved: false, blocked: false, stalled: false,
+                               blockReason: nil)
         }
+        let exclusions = movementContext.exclusions(for: intent)
         let current = SIMD2<Float>(root.position.x, root.position.z)
         // 목적지가 바뀌었으면(새 배회 목적지, 좌석 이동 시작 등) 제자리걸음 감지 창을
         // 새로 시작한다 — 그대로 두면 방금 도착해 다음 다리를 반대 방향으로 걷기
@@ -861,7 +1089,8 @@ final class NPCGuestController {
         let delta = target - current
         let distance = simd_length(delta)
         guard distance > arrivalDistance else {
-            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false)
+            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false,
+                               blockReason: nil)
         }
 
         let targetDirection = delta / distance
@@ -876,14 +1105,8 @@ final class NPCGuestController {
         // 이미 존재하는 separationScale을 avoidance 세기에도 그대로 재사용한다 —
         // 대기줄(0.35)·좌석 접근(0.5)·자유 배회(1.0)마다 반발을 다르게 눌러 둔 값이
         // 그대로 예측 회피에도 맞는 감쇠 지표라 컨텍스트별 새 파라미터가 필요 없다.
-        // avoidObstacles가 꺼진 좌석 바로 앞 구간(seatCollisionBypassDistance)에서는
-        // NPCObstacleAvoidance의 이웃 하드 블록도 같이 꺼지므로, 이 레이어도 같은
-        // 구간에서는 끈다 — "좌석 콜리전 프록시를 관통해 마지막 한 걸음을 확실히
-        // 딛는다"는 그 구간의 의도를 옆으로 미는 보정이 방해하지 않게 한다.
-        //
         // usePredictiveAvoidance가 false면(좌석 접근 전체 — updateMovingToSeat 호출부
-        // 참고) avoidObstacles 상태와 무관하게 이 레이어를 통째로 끈다. 정지 이웃
-        // 제외/막힘 시 원래 방향 재시도/stall 즉시 탈출 등 여러 차례 개별 완화를
+        // 참고) 이 레이어를 통째로 끈다. 정지 이웃 제외/막힘 시 원래 방향 재시도 등
         // 거쳤는데도 "좌석 근처에서 계속 서 있다"는 재현이 실기에서 반복돼, 좌석으로
         // 걸어가는 짧고 목적이 분명한 구간에서는 예측(먼 거리에서 미리 피하기)
         // 대신 반응형(crowdSteeredDirection의 즉시 반발)과 하드 세이프티 넷
@@ -891,7 +1114,7 @@ final class NPCGuestController {
         // 예측 회피보다 우선한다(원 작업 지시의 "자연스러움을 위해 목적지 도달을
         // 희생하지 않는다" 원칙).
         let preferredDirection: SIMD2<Float>
-        if avoidObstacles, usePredictiveAvoidance, !neighborVelocities.isEmpty {
+        if usePredictiveAvoidance, !neighborVelocities.isEmpty {
             let neighborKinematics = zip(neighboringPositions, neighborVelocities).map {
                 NPCNeighborKinematics(position: $0, velocity: $1)
             }
@@ -921,8 +1144,9 @@ final class NPCGuestController {
         }
         let desiredStep = min(distance, movementProfile.moveSpeed * deltaTime)
         var step = desiredStep
-        if avoidObstacles, let scene = root.scene {
-            step = NPCObstacleAvoidance.allowedStep(
+        var obstacleBlocker: NPCObstacleAvoidance.Blocker?
+        if let scene = root.scene {
+            let stepResult = NPCObstacleAvoidance.allowedStepResult(
                 scene: scene,
                 from: SIMD3(current.x, 0, current.y),
                 direction: SIMD3(direction.x, 0, direction.y),
@@ -931,23 +1155,33 @@ final class NPCGuestController {
                 playerPosition: playerPosition,
                 avoidPlayer: avoidPlayer,
                 neighborPositions: neighboringPositions)
-            // 예측 회피(NPCGuestLocalAvoidance)가 targetDirection을 실제로 옆으로
-            // 틀었는데 그 방향이 하필 정적 장애물(테이블·카운터 등)로 막혀 있으면,
-            // A*가 원래 뚫려 있다고 골라준 targetDirection 자체는 멀쩡한데도 좌/우
-            // 보정 때문에 가만히 못 나아가는 경우가 있었다(좁은 통로에서 다른 NPC와
-            // 마주쳤을 때 특히 그랬다 — 옆으로 피할 공간 자체가 없는데 계속 옆으로
-            // 틀려고 하니 매 프레임 다시 막힘). 그 방향이 원래 방향과 실제로
-            // 달랐고 사실상 막혔다면, 예측 회피 보정만 뺀 방향(즉시 반발은 유지)으로
-            // 한 번 더 재시도해 실제로 더 나아갈 수 있으면 그쪽을 쓴다. A* 경로/
-            // 웨이포인트는 전혀 건드리지 않는다 — 이번 한 스텝의 방향만 되돌린다.
+            step = stepResult.step
+            obstacleBlocker = stepResult.blocker
+            // 스티어링이 A* 방향을 옆으로 틀어 가구에 닿았으면 경로 원방향으로 한 번
+            // 더 검사한다. 착석 이동은 predictive를 끈 상태라 예전 조건은 항상 false였고,
+            // crowdSteeredDirection의 즉시 반발이 Cube 쪽으로 미는 경우 원방향 재시도가
+            // 전혀 실행되지 않았다. 착석에서는 raw targetDirection을 쓰되, 같은
+            // allowedStepResult가 유저/NPC 원형 충돌을 다시 검사하므로 사람을 통과하지는
+            // 않는다. 다른 이동은 기존처럼 predictive 보정만 제거하고 즉시 반발은 유지한다.
             let isPredictiveAvoidanceEngaged = simd_length_squared(preferredDirection - targetDirection) > 0.0001
-            if step < desiredStep * NPCGuestTuning.blockedStepFraction, isPredictiveAvoidanceEngaged {
-                let fallbackDirection = crowdSteeredDirection(
+            let isFinalSteeringAdjusted = simd_length_squared(direction - targetDirection) > 0.0001
+            let shouldRetryOriginalDirection: Bool
+            let fallbackDirection: SIMD2<Float>
+            switch intent {
+            case .seating:
+                shouldRetryOriginalDirection = isFinalSteeringAdjusted
+                fallbackDirection = targetDirection
+            case .roaming, .queueing:
+                shouldRetryOriginalDirection = isPredictiveAvoidanceEngaged
+                fallbackDirection = crowdSteeredDirection(
                     targetDirection: targetDirection,
                     from: current,
                     neighbors: neighboringPositions,
                     scale: separationScale)
-                let fallbackStep = NPCObstacleAvoidance.allowedStep(
+            }
+            if step < desiredStep * NPCGuestTuning.blockedStepFraction,
+               shouldRetryOriginalDirection {
+                let fallbackResult = NPCObstacleAvoidance.allowedStepResult(
                     scene: scene,
                     from: SIMD3(current.x, 0, current.y),
                     direction: SIMD3(fallbackDirection.x, 0, fallbackDirection.y),
@@ -956,9 +1190,10 @@ final class NPCGuestController {
                     playerPosition: playerPosition,
                     avoidPlayer: avoidPlayer,
                     neighborPositions: neighboringPositions)
-                if fallbackStep > step {
+                if fallbackResult.step > step {
                     direction = fallbackDirection
-                    step = fallbackStep
+                    step = fallbackResult.step
+                    obstacleBlocker = fallbackResult.blocker
                 }
             }
         }
@@ -970,16 +1205,9 @@ final class NPCGuestController {
         let areaFraction = NPCGuestNavigation.allowedFraction(
             from: current,
             to: proposed,
-            inside: movementArea,
+            inside: movementContext.floor,
             excluding: exclusions)
         step *= areaFraction
-        // 진단용: "지지거림"(걷다 멈췄다 반복) 원인이 실제 장애물(레이캐스트)인지
-        // 논리적 경계 클램프(allowedFraction)인지 분리해서 남긴다 — 둘 다 같은
-        // step에 누적되므로 이 로그 없이는 blocked 판정만 보고는 구분이 안 된다.
-        if step < desiredStep * NPCGuestTuning.blockedStepFraction {
-            Self.movementLogger.notice(
-                "\(self.name, privacy: .public) 막힘 진단: desired=\(desiredStep, privacy: .public) rayAfter=\(stepAfterObstacles, privacy: .public) areaFraction=\(areaFraction, privacy: .public) final=\(step, privacy: .public)")
-        }
         root.position.x += direction.x * step
         root.position.z += direction.y * step
         // 장애물에 거의 다 막혀 한 프레임에 1mm 안팎만 겨우 밀리는 경우까지 "이동
@@ -1006,12 +1234,31 @@ final class NPCGuestController {
             stallCheckTimer = 0
             stallCheckStartPosition = newPosition
         }
+        if isBlocked || isStalled {
+            lastBlockedDirection = direction
+        }
         // wanderTarget/pauseRemaining 갱신은 호출부(update의 배회·좌석 이동 분기)가
         // blocked를 보고 즉시 처리한다 — 여기서 같이 건드리면 호출부가 막 고른 새
         // 목적지를 다시 지워버리거나, 다음 프레임에 남은 pauseRemaining 때문에
         // "즉시 방향 전환"이 지연될 수 있다.
+        let blockReason: MovementBlockReason?
+        if isStalled {
+            blockReason = .stalled
+        } else if stepAfterObstacles < desiredStep * NPCGuestTuning.blockedStepFraction {
+            switch obstacleBlocker {
+            case .sceneGeometry: blockReason = .sceneGeometry
+            case .player: blockReason = .player
+            case .neighboringNPC: blockReason = .neighboringNPC
+            case nil: blockReason = .unknown
+            }
+        } else if isBlocked {
+            blockReason = .restrictedArea
+        } else {
+            blockReason = nil
+        }
         return MoveOutcome(arrived: step >= distance, moved: moved,
-                          blocked: isBlocked || isStalled, stalled: isStalled)
+                           blocked: isBlocked || isStalled, stalled: isStalled,
+                           blockReason: blockReason)
     }
 
     /// update() 호출 전후의 실제 위치 변화량을 deltaTime으로 나눠 velocity를 갱신한다.
@@ -1113,44 +1360,87 @@ final class NPCGuestController {
         return fallback
     }
 
-    /// 연속으로 막힌 끝에 부르는 최후 탈출: 먼 무작위 목적지 대신, 지금 위치
-    /// 주변을 원형으로 훑어 논리적으로 유효하고 실제로도(레이캐스트) 가장 많이
-    /// 뚫린 방향을 찾는다. randomWanderTarget이 매번 같은 막다른 방향의 후보만
-    /// 뽑는 막다른 구석에서도 확실히 벗어나게 하는 안전망이다.
+    /// 막힘 직후 부르는 탈출 방향 탐색. 먼 무작위 목적지 대신 지금 위치 주변을
+    /// 원형으로 훑어 논리적으로 유효하고 가구·유저·NPC에도 실제로 열린 방향을 찾는다.
     private func nearbyEscapeTarget(from current: SIMD2<Float>,
                                     in area: NPCGuestArea,
-                                    excluding exclusions: [NPCGuestArea]) -> SIMD2<Float>? {
+                                    excluding exclusions: [NPCGuestArea],
+                                    playerPosition: SIMD2<Float>,
+                                    neighboringPositions: [SIMD2<Float>],
+                                    avoidingDirection: SIMD2<Float>?) -> SIMD2<Float>? {
         let scene = locomotionRoot?.scene
-        let activeExclusions = exclusions.filter { !$0.contains(current) }
         let sampleCount = 16
-        let probeDistance: Float = 1.0
+        let probeDistance = NPCGuestTuning.escapeProbeDistance
         var best: SIMD2<Float>?
-        var bestClearance: Float = 0
+        var bestTravel: Float = 0
         for index in 0..<sampleCount {
             let angle = Float(index) / Float(sampleCount) * 2 * Float.pi
             let direction = SIMD2<Float>(cos(angle), sin(angle))
-            let probe = current + direction * probeDistance
-            // randomWanderTarget과 동일하게, 지금 이미 들어가 있는 구역은 "빠져나갈
-            // 곳"이지 "들어가면 안 되는 곳"이 아니라 이번 탐색에서는 뺀다.
-            guard NPCGuestNavigation.isValid(probe, inside: area, excluding: activeExclusions) else { continue }
+            guard NPCGuestNavigation.isDifferentEscapeDirection(
+                direction,
+                from: avoidingDirection)
+            else { continue }
             let clearance: Float
             if let scene {
                 clearance = NPCObstacleAvoidance.allowedStep(
                     scene: scene, from: SIMD3(current.x, 0, current.y),
                     direction: SIMD3(direction.x, 0, direction.y),
                     desiredStep: probeDistance, halfWidth: NPCGuestTuning.bodyHalfWidth,
-                    playerPosition: .zero, avoidPlayer: false)
+                    playerPosition: playerPosition,
+                    neighborPositions: neighboringPositions)
             } else {
                 clearance = probeDistance
             }
-            guard clearance > bestClearance else { continue }
-            bestClearance = clearance
-            best = current + direction * clearance * 0.9
+            let travel = min(probeDistance, clearance * 0.9)
+            guard travel >= NPCGuestTuning.escapeMinimumDistance,
+                  travel > bestTravel else { continue }
+            let candidate = current + direction * travel
+            // 정상 위치에서는 금지 구역에 새로 진입하지 않고, 이미 위반 상태라면
+            // 위반 깊이가 얕아지는 방향만 허용한다.
+            guard NPCGuestNavigation.isAllowedStep(
+                from: current,
+                to: candidate,
+                inside: area,
+                excluding: exclusions)
+            else { continue }
+            bestTravel = travel
+            best = candidate
         }
         return best
     }
 
     // MARK: - Animation
+
+    /// 같은 Sit_to_Stand 리소스를 정방향(기립) 또는 역방향(착석)으로 재생한다.
+    /// 역재생은 paused 상태로 컨트롤러를 만든 뒤 클립 끝으로 이동하고 음수 speed를
+    /// 적용한 다음 resume해, 렌더 프레임 사이에 원래 시작 자세가 노출되지 않게 한다.
+    /// 반환값은 상태 전이 타이머에 사용할 실제 클립 길이다.
+    private func playSitTransition(reversed: Bool) -> Float? {
+        guard let model = modelEntity,
+              let match = findAnimation(named: NPCGuestAnimationCue.sitToStand.rawValue, in: model)
+        else { return nil }
+
+        animationPlayback?.stop(blendOutDuration: 0.15)
+        let playback = match.entity.playAnimation(
+            match.resource,
+            transitionDuration: 0.2,
+            startsPaused: reversed)
+        let duration = playback.duration
+        guard duration.isFinite, duration > 0 else {
+            playback.stop()
+            animationPlayback = nil
+            currentCue = nil
+            return nil
+        }
+        if reversed {
+            playback.speed = -1
+            playback.time = duration
+            playback.resume()
+        }
+        animationPlayback = playback
+        currentCue = .sitToStand
+        return Float(duration)
+    }
 
     private func playAnimation(_ cue: NPCGuestAnimationCue) {
         guard currentCue != cue, let model = modelEntity else { return }

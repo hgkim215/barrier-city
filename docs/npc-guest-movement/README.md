@@ -36,7 +36,7 @@
 graph TD
     SS["SceneSwitcher\n(실내 진입 시 1회)"] -->|enterIndoor| COORD[NPCGuestCoordinator]
     IS["InteractionSetup\n(매 프레임)"] -->|update deltaTime| COORD
-    COORD -->|"per-guest update()"| CTRL["NPCGuestController × N\n(현재 총 10명)"]
+    COORD -->|"per-guest update()"| CTRL["NPCGuestController × N\n(현재 총 9명)"]
     CTRL -->|영역/경계 판정| NAV[NPCGuestNavigation]
     CTRL -->|"웨이포인트 경로 요청"| PATH[NPCGuestPathfinder]
     CTRL -->|"미래 충돌 예측·방향 보정"| LOCAL[NPCGuestLocalAvoidance]
@@ -54,13 +54,13 @@ graph TD
 | 역할 | 인원 | 행동 | 대기줄 후보 |
 |---|---|---|---|
 | `alwaysWandering` | 1 | 절대 앉지 않고 계속 배회 | 항상 후보 |
-| `cycler` | 2 | 배회 ↔ 착석(10~15초) ↔ 기립을 반복 | 배회 중일 때만 후보 |
+| `cycler` | 2 | 좌석 이동 ↔ 착석(15~20초) ↔ 기립을 반복 | 제외(좌석 순환 우선) |
 | `seatedPool` | 6 | 입장부터 가능하면 착석 상태로 시작, 한 번 앉으면 영구 착석 | 항상 제외 |
 
-총 9명이 세 역할에 배정되고, `genderGroups`가 제공하는 표시 이름(성별당 5명, 총 10명)
-중 배정되지 않은 나머지는 자동으로 `alwaysWandering`으로 폴백한다
-(`NPCGuestCoordinator.swift:366-369`). 원본 엔티티는 `Female`/`MaleIdle` 단 2개뿐이며
-나머지는 `entity.clone(recursive:)`로 복제해서 만든다.
+역할 수와 `genderGroups` 표시 이름 수가 모두 9명으로 일치한다(여성 5명, 남성 4명).
+두 수가 다시 어긋나면 `enterIndoor`가 로그를 남기고 생성을 중단해 조용한 폴백으로
+실제 인원이 달라지지 않게 한다. 원본 엔티티는 `Female`/`MaleIdle` 단 2개뿐이며
+나머지는 `entity.clone(recursive:)`로 복제한다.
 
 역할은 **입장 시 1회 고정**이며 이후 런타임에 바뀌지 않는다. `cycler`가 앉았다 일어나도
 역할 자체는 그대로 `cycler`다.
@@ -85,7 +85,7 @@ flowchart TD
     I --> J["역할 배열 shuffle: wanderer 1 + cycler 2 + seatedPool 6"]
     J --> K["genderGroups 순회하며 손님 생성"]
     K --> L1["seatedPool: 좌석 큐(1/2/3인 그룹)에서 배정\n→ placeSeated로 즉시 착석 배치"]
-    K --> L2["cycler: 무작위 walkable 지점에 스폰\n→ 40% 즉시 착석행, 60% reserveSeat(배회 후 착석)"]
+    K --> L2["cycler: 무작위 walkable 지점에 스폰\n→ 전원 즉시 좌석으로 이동"]
     K --> L3["나머지: 무작위 walkable 지점에 배회 상태로 스폰"]
 ```
 
@@ -133,6 +133,13 @@ flowchart TD
 
 - **좌석 점유/해제는 그 프레임의 `update()` 결과를 반영해 즉시 처리한다.** 방금 일어난
   자리를 같은 프레임에 바로 다른 손님에게 재배정할 수 있어, 빈 프레임 없이 이어진다.
+- **cycler마다 현재 순회의 방문 좌석 집합을 갖는다.** 좌석을 `grantSeat`하는 순간
+  (도착 실패 포함) 이력에 넣고, `takeSeatRequest`가 그 전체 집합을 Coordinator에
+  전달한다. `pickSeatIndex`는 미방문 빈 좌석을 우선하며, 현재 비어 있는 좌석을 모두
+  방문했을 때만 전체 빈 좌석으로 폴백해 새 순회를 시작한다. 직전 한 자리만 제외하던
+  구조에서 발생하던 두 자리 왕복을 막는다.
+- **중복 배정은 `seatOccupants`를 즉시 갱신해 차단한다.** 한 cycler를 배정한 직후 같은
+  프레임의 다음 cycler가 좌석을 고르므로, 먼저 배정된 인덱스는 이미 후보에서 빠진다.
 - **동시 배회 인원 제한(`maxConcurrentWalkers = 3`)은 "새로 걷기 시작하는" 순간에만
   적용**되고, 이미 걷고 있던 손님은 막지 않는다. 그렇지 않으면 벽 앞에서 뚝 멈추는
   것처럼 보이기 때문이다.
@@ -146,7 +153,7 @@ flowchart TD
 
 ## 5. 개별 NPC 상태 머신 — `NPCGuestController`
 
-내부 `SeatState`(`none`/`movingToSeat`/`sitting`/`standingUp`)가 골격이고, 대기줄
+내부 `SeatState`(`none`/`movingToSeat`/`sittingDown`/`sitting`/`standingUp`)가 골격이고, 대기줄
 (`queueSlot`)은 이 상태와 **직교하는 오버레이**로 처리된다 — `.none` 상태에서
 `queueSlot`이 주어지면 배회 대신 대기줄로 이동하고, 대기줄이 사라지면 다시 원래 배회로
 복귀한다.
@@ -154,12 +161,13 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> none
-    none --> movingToSeat: grantSeat() 즉시\n또는 reservedSeat 커밋(배회 목적지 도착 시)
-    movingToSeat --> sitting: 좌석 도착(seatArrivalDistance)
-    movingToSeat --> none: seatApproachEscapeThreshold(3회)\n연속 막힘 → vacateSeatDueToBlockage()
-    sitting --> standingUp: cycler만, sittingDurationRange(10~15s) 경과
+    none --> movingToSeat: cycler가 즉시 다음 좌석 요청\n또는 seatedPool 착석 요청 승인
+    movingToSeat --> sittingDown: 좌석 뒤 보행 접근점 도착\nSit_to_Stand 역재생 + 좌석까지 보간
+    sittingDown --> sitting: 실제 클립 duration 경과
+    movingToSeat --> none: 막힘 즉시 좌석 반납\n명시적 escape 완료 후 다음 좌석 요청
+    sitting --> standingUp: cycler만, sittingDurationRange(15~20s) 경과
     sitting --> sitting: seatedPool은 sittingRemaining=nil → 영구
-    standingUp --> none: standUpAnimationDuration(1.0s) 경과
+    standingUp --> movingToSeat: Sit_to_Stand 실제 duration 경과\n좌석 반납 + 다음 좌석 즉시 배정
     note right of none
         이 상태에서만 queueSlot 오버레이가
         배회 대신 대기줄 이동으로 대체한다
@@ -168,13 +176,14 @@ stateDiagram-v2
 
 `none`(=배회) 상태 안에서는 다시 다음 하위 흐름이 있다(`NPCGuestController.swift:434-576`):
 
-1. 경계 위반 복구가 최우선(`requiresRecovery`) — 정지 타이머·보행 예산보다 앞선다.
+1. 경계 위반 복구 또는 직전 막힘의 `escapeRequested`가 최우선이다. 역할과 좌석 배정보다
+   먼저 주변 360도에서 실제로 열린 다른 방향으로 이동한다.
 2. `pauseRemaining > 0`이면 Idle 유지.
 3. `wanderTarget`이 없으면 새 목적지 선택 — 단, `allowNewWander`(동시 배회 예산)를
    만족하거나 경계 복구 중일 때만 **새로** 걷기 시작한다.
 4. `moveAlongPath`로 이동, 결과에 따라 `blocked`/`arrived`/진행 중 분기.
-5. 도착 시 `reservedSeat`가 있으면 확률 없이 항상 그 좌석으로 커밋, 없으면 확률적으로
-   착석 요청(`sitDesireChance`, 개인차 0.55~0.9)을 세운다.
+5. 좌석이 부족해 배회로 시작한 `seatedPool`만 도착 시 확률적으로 착석을 재요청한다.
+   `cycler`는 이 배회 경로를 타지 않고 빈 좌석이 생길 때까지 매 프레임 즉시 요청한다.
 
 ---
 
@@ -194,11 +203,8 @@ flowchart TD
     D -->|예| E["구역 중심 반대 방향으로\n강하게 밀어내는 보정 추가"]
     D -->|아니오| F["desiredStep = moveSpeed × Δt"]
     E --> F
-    F --> G{"avoidObstacles?"}
-    G -->|예| H["NPCObstacleAvoidance.allowedStep:\n좌/중/우 3개 레이 + 유저/이웃 원-원 스윕"]
-    G -->|아니오, 좌석 코앞| I["레이캐스트 생략 (콜리전 프록시 관통 허용)"]
+    F --> H["NPCObstacleAvoidance.allowedStep:\n몸 폭 5개 레이 + 유저/이웃 원-원 스윕"]
     H --> J["allowedFraction: 논리적 영역 경계로\n다시 한 번 스텝 클램프"]
-    I --> J
     J --> K["실제 position 갱신"]
     K --> L{"step < desiredStep × blockedStepFraction(0.4)?"}
     L -->|예| BLOCKED["blocked=true (프레임 단위 판정)"]
@@ -208,22 +214,32 @@ flowchart TD
     N -->|아니오| MOVED["moved=true, face() 회전"]
 ```
 
-### 6.1 "막힘"을 잡는 3중 안전망
+### 6.1 막힘 판정과 명시적 escape
 
 같은 문제(장애물 앞에서 진짜로 못 나아가는데 Walk 애니메이션만 반복되는 현상)를
-세 가지 시간축에서 각각 다르게 감지한다 — 코드 주석에 각 계층이 왜 필요한지
+두 가지 시간축에서 각각 다르게 감지한다 — 코드 주석에 각 계층이 왜 필요한지
 구체적인 과거 증상이 기록되어 있다.
 
 | 계층 | 판정 기준 | 잡아내는 증상 |
 |---|---|---|
 | 프레임 단위 (`blockedStepFraction`) | 이번 스텝이 원하는 폭의 40% 미만 | 정면으로 완전히 막힌 경우 |
 | 시간 누적 (`stallCheckInterval` 1.2s) | 1.2초간 순이동이 0.15m 미만 | 장애물에 얕은 각도로 걸려 매 프레임은 40%를 넘지만 밀렸다 되밀렸다 하며 실제로는 거의 못 나아가는 경우 |
-| 연속 실패 (`stuckEscapeThreshold` 3회 / `seatApproachEscapeThreshold` 3회) | 배회는 3회 연속 blocked, 좌석 이동은 3회 연속 blocked | 막다른 구석이라 무작위 후보가 계속 같은 방향만 뽑히는 경우 → `nearbyEscapeTarget`(원형 레이캐스트 탐색)로 전환 |
+막힘 또는 stall이 확인되면 역할과 좌석 배정 여부에 관계없이 `beginEscape()`로 전환한다.
+좌석 이동 중이었다면 먼저 좌석을 반납하고, escape가 끝날 때까지 새 좌석 요청을 만들지
+않는다. `nearbyEscapeTarget`은 가구·유저·다른 NPC·논리 영역을 모두 검사하고 방금 막힌
+방향과 60도 이내의 후보를 제외한다. 최소 0.2m 이상 이동 가능한 후보 중 가장 긴 방향을
+골라 직접 빠져나간 뒤 원래 행동을 재개한다.
 
-배회 중 막힘과 좌석 이동 중 막힘은 **대응이 다르다**: 배회는 새 무작위 목적지를 즉시
-다시 고르지만, 좌석 이동은 몇 번 그 자리에서 재시도(정적 장애물은 이미 A\*가 피해서
-잡은 경로이므로, 막히는 원인은 대개 다른 손님/유저가 일시적으로 그 웨이포인트를 막고
-서 있는 경우)한 뒤에야 `vacateSeatDueToBlockage()`로 자리를 반납한다.
+막힌 한 프레임에는 실제 이동이 없으므로 Walk 대신 Idle이 보이는 것이 정상이다. 예전의
+`막힘 진단` notice는 이런 재시도 프레임마다 출력돼, NPC가 Idle로 서 있는데도 오류가
+연속 발생하는 것처럼 보였다. 지금은 프레임 로그를 없애고 막힘/stall로 실제 좌석을
+포기할 때만 좌석 인덱스와 `sceneGeometry`/`player`/`neighboringNPC`/
+`restrictedArea`/`stalled` 원인을 한 번 남긴다.
+
+유저 휠체어는 NPC 몸통을 계속 충돌 대상으로 취급하지만 피드백은 정적 환경과 분리한다.
+NPC 접촉은 겹침 방지를 위해 이동 속도만 0으로 만들며 쿵 소리와 시야 반동은 발생시키지
+않는다. 벽·단차도 0.3m/s 미만의 느린 접촉은 조용히 정지해 접촉 경계에서 반복되던
+덜덜거림을 줄인다(`WheelchairCollisionPolicy`).
 
 ### 6.2 예측 동적 회피 — `NPCGuestLocalAvoidance` (반응형 vs 예측형)
 
@@ -259,8 +275,8 @@ closestDistance   = length(relPos + relVel * tClosest)
 
 **좌석 접근(`updateMovingToSeat`)에서는 이 레이어 전체를 끈다**
 (`move`/`moveAlongPath`의 `usePredictiveAvoidance` 파라미터, 기본값 `true` —
-배회·대기줄은 영향 없음). 정지 이웃 제외, 막힘 시 원래 방향 재시도, stall 즉시
-탈출, 도착 판정 완화까지 다섯 차례 개별 완화를 거쳤는데도 좌석 근처에서 멈춰
+배회·대기줄은 영향 없음). 좌석 접근은 정적 A*와 즉시 충돌 검사를 유지하고,
+예측 레이어만 끈다. 여러 완화를 거쳤는데도 좌석 근처에서 멈춰
 서는 재현이 실기에서 계속 나왔다 — 좌석으로 걸어가는 짧고 목적이 분명한 구간은
 "아직 멀리 있을 때부터 미리 피하기"가 굳이 필요하지 않고, 지금까지 발견된 회귀가
 전부 그 조기 보정이 마지막 접근과 충돌해서 생겼다는 공통점이 있었다. 즉시 반발
@@ -268,17 +284,17 @@ closestDistance   = length(relPos + relVel * tClosest)
 살아있으므로 다른 손님·유저와 실제로 겹치는 일은 없다 — 빠지는 건 예측 레이어의
 "조기 개입"뿐이다.
 
-`avoidObstacles`가 꺼지는 구간(좌석 코앞 `seatCollisionBypassDistance` 이내)에서는
-이 레이어도 같이 꺼진다 — `NPCObstacleAvoidance`의 이웃 하드 블록이 같은 구간에서
-이미 꺼지는 것과 동일한 이유(좌석 콜리전 프록시를 관통해 마지막 한 걸음을 확실히
-딛어야 한다)다.
+손님 이동에서 가구 충돌을 끄는 구간은 없다. 좌석에는 뒤쪽 보행 가능 `approachPosition`을
+미리 계산하며, NPC는 그 점까지만 걷는다. 접근점과 SittingPoint 사이의 최대 0.65m는
+Sit_to_Stand 전환 진행률에 맞춰 보간하고, 그 범위 안에 뒤쪽 접근점이 없는 깊은 좌석은
+배정 후보에서 제외한다.
 
 **정지한 이웃(속도 ≈ 0)은 예측 대상에서 완전히 제외한다**
 (`NPCGuestLocalAvoidance.Tuning.minimumNeighborSpeed`). TTC 예측은 원래 "서로
 다가오는 두 이동체"를 다루기 위한 것인데, 좌석으로 걸어가는 손님에게는 목적지
 바로 옆에 이미 앉아있는 손님이 항상 있다 — 그 손님을 계속 "피해야 할 미래
-위험"으로 보면, 막힘 판정을 아슬아슬하게 피해가며(3연속 실패 임계값에는 못
-미치지만 순 이동도 거의 없는) 자기 좌석 근처에서 서성이기만 하고 정작 앉지
+위험"으로 보면, 막힘 판정을 아슬아슬하게 피해가며 순 이동도 거의 없는 상태로
+자기 좌석 근처에서 서성이기만 하고 정작 앉지
 못하는 교착에 빠졌다(실제 관찰된 회귀 — §9.3 참고). 이미 가까워진 뒤의 안전은
 여전히 즉시 반발과 하드 세이프티 넷이 정지한 이웃에도 그대로 적용되므로 담당한다
 — 빠지는 건 "아직 멀리 있을 때부터 미리 피하기"뿐이다. 배회 중 잠깐 멈춰 선
@@ -346,6 +362,11 @@ sequenceDiagram
   예전의 직선 이동과 동일하게 동작한다 — 완전히 멈추지는 않는다.
 - **좌석은 격자 밖(u/v가 [-1,1]을 살짝 넘음)에 있을 수 있어**, `nearestWalkableCell`이
   반경을 넓혀가며 가장 가까운 유효 셀로 스냅한다.
+- **좌석 경로의 목표는 SittingPoint가 아니라 뒤쪽 보행 가능 접근점**이다. 모든 보행
+  구간에서 씬 충돌을 유지한다. 기립 전환도 SittingPoint→접근점을 애니메이션과 함께
+  보간해 끝난 뒤 그 보행점에서 다음 경로를 시작한다.
+- **접근점이 0.65m 안에 없는 깊은 좌석은 배정에서 제외**한다. 가구 프록시를 끄고
+  통과하는 폴백은 존재하지 않는다.
 - **직선 구간은 중간 웨이포인트를 쳐낸다(`simplify`)** — `move()`가 매 셀마다
   재조준하지 않고 곧장 걷게 한다.
 - **A\* 자체는 매 프레임이 아니라 "새 목적지를 고를 때만" 1회 호출**된다. open list는
@@ -361,6 +382,8 @@ sequenceDiagram
 - 좌석이 `communalTableSeatThreshold`(6석) 이상인 "공용 테이블"(벤치형 WoodTable 등)은
   **물리적으로 인접한 빈 자리를 우선** 채운다(빈 자리가 중간에 듬성듬성 남지 않게).
 - 일반 테이블(2~4인)은 문턱을 넘지 않으므로 **전체 빈 좌석 중 완전 무작위**.
+- cycler는 직전에 비운/접근 실패한 좌석을 가능한 경우 후보에서 제외한다. 그 좌석만
+  유일하게 비어 있으면 순환이 멈추지 않도록 폴백으로 다시 허용한다.
 - 예전에는 "이미 앉은 손님들과 가장 멀리 떨어진 자리"를 결정론적으로 골랐는데, cycler가
   자리를 옮길 때마다 매번 같은 자리로 돌아가 "고정석"처럼 보이는 부작용이 있어 지금
   방식으로 바뀌었다.
@@ -380,14 +403,14 @@ sequenceDiagram
 ## 9. 병목 및 리스크
 
 구조적 우려를 성능/설계 두 축으로 나누고, 영향과 확인된 근거(코드 위치)를 표시했다.
-"현재"는 손님 10명 규모에서는 대부분 체감 문제가 없다고 판단되지만, **인원을 늘리거나
+"현재"는 손님 9명 규모에서는 대부분 체감 문제가 없다고 판단되지만, **인원을 늘리거나
 씬을 넓히는 방향의 변경을 검토할 때 먼저 재확인해야 할 지점**들이다.
 
 ### 9.1 성능
 
 | 위치 | 문제 | 스케일 영향 | 참고 |
 |---|---|---|---|
-| `NPCGuestCoordinator.update` | 매 프레임 `guests.map(\.currentPosition)` 등으로 O(N) 스냅샷, guest마다 O(N) neighbor 필터링 → 전체 O(N²) | N=10에서는 무해, N이 수십 단위로 늘면 프레임 비용 급증 | `NPCGuestCoordinator.swift:840-860` |
+| `NPCGuestCoordinator.update` | 매 프레임 `guests.map(\.currentPosition)` 등으로 O(N) 스냅샷, guest마다 O(N) neighbor 필터링 → 전체 O(N²) | N=9에서는 무해, N이 수십 단위로 늘면 프레임 비용 급증 | `NPCGuestCoordinator.swift:840-860` |
 | `NPCObstacleAvoidance.allowedStep` | guest 1명당 최대 3개 레이(좌/중/우) + 유저 1 + 이웃 N개에 대해 원-원 스윕 계산, 매 프레임·이동 중인 모든 guest에 대해 반복 | 레이캐스트는 CPU 비용이 상대적으로 크다 — 동시 이동 인원(`maxConcurrentWalkers=3`)으로 이미 완화되고 있지만, 이 제한을 늘리면 직접 비례해 증가 | `NPCObstacleAvoidance.swift:38-75` |
 | `NPCGuestPathfinder.findPath` | open list가 힙이 아니라 매 pop마다 `sort()` — 주석에도 "격자가 수백~수천 노드일 때만 실용적"이라고 명시 | `walkableCellSpacing=0.3m` 기준 192㎡ 바닥이면 격자가 이미 수천 셀에 근접 — 방이 커지거나 셀을 더 촘촘히 하면 이 부분이 먼저 느려질 후보 | `NPCGuestPathfinder.swift:133-137` |
 | `enterIndoor`의 `buildGrid` | 격자 셀 하나당 레이캐스트 1회(`isSafeSpawn`) | 씬 진입 시 1회성이라 상시 부담은 아니지만, 재진입(실내↔실외 반복)마다 반복 계산됨 | `NPCGuestCoordinator.swift:244-246` |
@@ -396,11 +419,11 @@ sequenceDiagram
 
 | 위치 | 문제 | 리스크 |
 |---|---|---|
-| `exclusions` vs `staffExclusions` 이원화 | 호출부마다 "전체 제외 구역"과 "직원 구역만"을 정확히 구분해 넘겨야 하는 **암묵적 규약**. 실제로 과거에 이걸 잘못 넘겨 cycler가 좌석에 영원히 도착 못 하는 버그가 있었다고 코드 주석에 기록됨(`NPCGuestController.swift:382-391`) | 새 이동 종류를 추가할 때 같은 클래스의 버그가 재발하기 쉬움 — 두 목록의 의미 차이가 타입으로 강제되지 않고 주석으로만 남아 있음 |
+| 이동 제외 구역 매핑 | `NPCGuestMovementContext`가 `.roaming`에는 전체 제외 구역, `.queueing`/`.seating`에는 직원 전용 구역만 반환한다 | 호출부가 두 배열을 위치 인자로 뒤바꾸던 암묵적 규약을 제거했으며 `NPCGuestNavigationTests`로 매핑을 고정한다 |
 | `NPCGuestController` 단일 파일 1000줄+ | 이동 물리(스티어링/레이캐스트 클램프/막힘 감지) + 좌석 상태 머신 + 애니메이션 큐 전환이 한 클래스에 응집 | 세 관심사 중 하나만 바꿔도 전체 파일을 훑어야 함. 예: 애니메이션 큐 전환 로직만 떼어내도 가독성이 오를 여지 |
 | 튜닝 상수가 두 파일에 분산 | `NPCGuestController.NPCGuestTuning`(개인 이동)과 `NPCGuestCoordinator.Tuning`(전역 구성)이 분리되어 있고 서로 참조하는 값도 있음(예: `bodyHalfWidth`를 `Coordinator.Tuning.walkableCellSpacing` 주석이 참조) | 값 하나를 바꿀 때 연쇄로 맞춰야 하는 다른 상수를 놓치기 쉬움 |
 | `pending*` 원샷 신호 5종 (pull 방식) | `takeSeatRequest`/`takeVacatedSeatIndex`/`takeSeatedArrivalSeatIndex`/`takeQueueArrivalSignal`를 Coordinator가 **정해진 순서**(vacate→request→arrival→sigh)로 폴링해야 정상 동작 | 순서가 코드에 텍스트로만 존재 — 이후 리팩터링 중 순서가 바뀌면 조용히 깨질 수 있음(예: request를 vacate보다 먼저 소비하면 같은 프레임 재배정 기회를 놓침) |
-| 좌석 상태 전이가 4곳에 분산 | `update()`(reservedSeat 커밋), `updateMovingToSeat()`(도착/막힘), `standUpAndResumeWandering()`(자동 기립), `vacateSeatDueToBlockage()`(포기) | `SeatState`를 한 곳에서 관리하는 게 아니라 여러 메서드가 각자 필드를 직접 건드림 — 상태 불변식(예: `sittingRemaining`은 cycler만 non-nil)이 코드 전체에 흩어져 있어 추적 비용이 있음 |
+| 좌석 상태 전이가 여러 메서드에 분산 | `updateMovingToSeat()`(도착/막힘), `finishSittingDown()`(착석 확정), `standUpAndResumeWandering()`(자동 기립), `vacateSeatDueToBlockage()`(포기) | 전환별 필드 초기화를 명시하고 계약 테스트를 추가했지만, 장기적으로 transition reducer로 모을 여지는 남아 있음 |
 | `NPCGuestPathfinder`가 씬(`RealityKit.Scene`)에 의존하지 않는 순수 격자 로직인데, `isWalkable` 클로저 주입으로 `NPCObstacleAvoidance`(레이캐스트)에 간접 결합 | 의도된 설계(주석에도 명시)지만, 격자를 캐시하는 한 "씬이 바뀌지 않는다"는 전제가 암묵적으로 필요 — 가구가 동적으로 이동/생성되는 기능이 추가되면 `walkableGrid` 재계산 트리거가 지금은 없음 | 향후 동적 가구/좌석 기능 추가 시 반드시 확인 필요 |
 
 ### 9.3 A\* 도입 + 예측 동적 회피가 해소한 것 / 아직 남긴 것
@@ -427,8 +450,8 @@ sequenceDiagram
   3. *좌석이 실제보다 일찍 "비었다"고 통지됨(예측 회피와 무관한, 더 근본적인
      원인)*: `standUpAndResumeWandering()`이 기립 애니메이션을 "시작"하는 그
      프레임에 곧장 `pendingVacatedSeatIndex`를 세워 코디네이터가 그 좌석을 즉시
-     재배정 가능하게 만들었다. 그런데 `.standingUp` 동안은 `standUpAnimationDuration`
-     (1초) 내내 이 손님의 몸이 그 좌석 위치에 그대로 있다(이동하지 않는다). 그
+     재배정 가능하게 만들었다. 그런데 `.standingUp` 동안은 Sit_to_Stand의 실제
+     duration 내내 이 손님의 몸이 그 좌석 위치에 그대로 있다(이동하지 않는다). 그
      사이 새로 배정된 다른 손님이 걸어오면 아직 사람이 서 있는 자리로 다가가다
      `NPCObstacleAvoidance`의 이웃 하드블록에 아슬아슬하게 걸렸다 풀렸다를
      반복하며(3연속 실패 임계값에는 못 미치면서 순 이동도 없는) 좌석 근처에서
@@ -451,9 +474,7 @@ sequenceDiagram
      것뿐이다.
 - **아직 남은 것:**
   - A\*는 여전히 **정적** 장애물만 경로 자체에 반영한다. 다른 손님/유저가 웨이포인트를
-    일시적으로 막는 경우는 §6.1의 "연속 실패 → 재시도/포기" 로직이 계속 담당한다 —
-    경로 재계산이 아니라 프레임별 스티어링 보정(예측 회피 포함)과 임계값 기반
-    휴리스틱의 몫이라는 기본 구도는 그대로다.
+    막으면 명시적 escape가 360도 후보를 다시 측정해 다른 방향으로 빠져나온다.
   - 예측 회피는 **다른 손님끼리만** 적용된다. 유저(휠체어)와의 충돌 회피는 여전히
     `NPCObstacleAvoidance`의 원-원 스윕(반응형, `avoidPlayer`)에만 의존한다 — 유저는
     NPC처럼 "다음 프레임 속도"를 예측할 근거(commanded velocity)가 없어 이번 범위에서
@@ -478,6 +499,9 @@ sequenceDiagram
 | 경로 요청/소비 | `NPCGuestController.swift:717-760` `requestPath`/`moveAlongPath` |
 | 예측 동적 회피 구현 | `NPCGuestLocalAvoidance.swift` `predictCollision`/`adjustedPreferredDirection` |
 | 예측 회피 단위 테스트 | `Tests/NPCGuestLocalAvoidanceTests.swift` (swiftc 단독 실행) |
+| 좌석 후보 정책 테스트 | `Tests/NPCGuestSeatingPolicyTests.swift` |
+| 휠체어 충돌 피드백 정책 테스트 | `Tests/WheelchairCollisionPolicyTests.swift` |
+| 착석 전환 계약 테스트 | `Tests/NPCGuestSeatingTransitionContractTests.swift` |
 | 인원 구성·역할 배분 | `NPCGuestCoordinator.swift:34-100` `Tuning`, 204-434 `enterIndoor` |
 | 매 프레임 진입점 | `NPCGuestCoordinator.swift:807-903` `update` |
 | 좌석 선택 규칙 | `NPCGuestCoordinator.swift:446-462` `pickSeatIndex` |
