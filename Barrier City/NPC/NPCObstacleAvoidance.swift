@@ -20,13 +20,19 @@ enum NPCObstacleAvoidance {
     ///   사용자 바로 뒤까지 다가가야 하는 이동에는 이 검사를 꺼야 한다. 그렇지
     ///   않으면 대기줄 목표 지점이 이 반경(halfWidth+wheelchairRadius+skin,
     ///   guest 기준 약 0.65m)보다 가까울 때 도착하지 못하고 그 경계에서 멈춘다.
+    /// - Parameter neighborPositions: 배회 중인 다른 NPC들의 현재 위치. crowdSteeredDirection의
+    ///   개인 공간 반발력은 방향만 부드럽게 트는 조향이라, 두 NPC가 정면으로 빠르게
+    ///   마주치면 실제로 몸이 겹쳐 지나가는 순간이 보일 수 있었다. 여기서 각 이웃에
+    ///   대해 사용자와 동일한 원-원 스윕 계산으로 스텝 자체를 하드하게 잘라 겹침을
+    ///   원천 차단한다.
     static func allowedStep(scene: RealityKit.Scene,
                             from position: SIMD3<Float>,
                             direction: SIMD3<Float>,
                             desiredStep: Float,
                             halfWidth: Float,
                             playerPosition: SIMD2<Float>,
-                            avoidPlayer: Bool = true) -> Float {
+                            avoidPlayer: Bool = true,
+                            neighborPositions: [SIMD2<Float>] = []) -> Float {
         guard desiredStep > 0 else { return 0 }
         let perpendicular = SIMD3<Float>(direction.z, 0, -direction.x)
         var nearest: Float = desiredStep
@@ -43,28 +49,44 @@ enum NPCObstacleAvoidance {
                 nearest = min(nearest, max(0, hitDistance - skin))
             }
         }
+        let position2D = SIMD2(position.x, position.z)
+        let direction2D = SIMD2(direction.x, direction.z)
         if avoidPlayer {
-            nearest = min(nearest, allowedStepPastWheelchair(
-                from: SIMD2(position.x, position.z),
-                direction: SIMD2(direction.x, direction.z),
+            nearest = min(nearest, allowedStepPastCircle(
+                from: position2D,
+                direction: direction2D,
                 desiredStep: desiredStep,
                 clearance: halfWidth + wheelchairRadius + skin,
-                playerPosition: playerPosition))
+                targetPosition: playerPosition))
+        }
+        if !neighborPositions.isEmpty {
+            // 두 NPC 모두 halfWidth 반경의 원으로 근사하므로, 두 반경의 합이 서로
+            // 겹치지 않을 최소 간격이다.
+            let neighborClearance = halfWidth * 2 + skin
+            for neighbor in neighborPositions {
+                nearest = min(nearest, allowedStepPastCircle(
+                    from: position2D,
+                    direction: direction2D,
+                    desiredStep: desiredStep,
+                    clearance: neighborClearance,
+                    targetPosition: neighbor))
+            }
         }
         return nearest
     }
 
-    /// NPC도 직접 transform으로 움직이므로, 사용자가 정지해 있을 때에는 휠체어 쪽
-    /// sweep만으로 접촉을 막을 수 없다. 논리 맵 좌표에서 NPC 원과 휠체어 원의 swept
-    /// 교차를 계산해 NPC가 사용자에게 걸어 들어오는 방향도 차단한다.
-    private static func allowedStepPastWheelchair(
+    /// NPC도 직접 transform으로 움직이므로, 대상(사용자 휠체어 또는 다른 NPC)이
+    /// 정지해 있을 때에는 레이 sweep만으로 접촉을 막을 수 없다. 논리 맵 좌표에서
+    /// 이동하는 원과 정지한 원의 swept 교차를 계산해 그 방향으로 걸어 들어오는
+    /// 것도 차단한다.
+    private static func allowedStepPastCircle(
         from position: SIMD2<Float>,
         direction: SIMD2<Float>,
         desiredStep: Float,
         clearance: Float,
-        playerPosition: SIMD2<Float>
+        targetPosition: SIMD2<Float>
     ) -> Float {
-        let relative = position - playerPosition
+        let relative = position - targetPosition
         let distanceSquared = simd_length_squared(relative)
         let clearanceSquared = clearance * clearance
 

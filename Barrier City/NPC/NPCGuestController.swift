@@ -694,7 +694,8 @@ final class NPCGuestController {
                 desiredStep: desiredStep,
                 halfWidth: NPCGuestTuning.bodyHalfWidth,
                 playerPosition: playerPosition,
-                avoidPlayer: avoidPlayer)
+                avoidPlayer: avoidPlayer,
+                neighborPositions: neighboringPositions)
         }
         let stepAfterObstacles = step
         // 레이캐스트는 메시 충돌만 알고 논리적인 바닥/금지 영역은 모른다. 군중 회피로
