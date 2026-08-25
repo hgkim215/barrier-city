@@ -45,6 +45,15 @@ struct NPCGuestNavigationTests {
         expect(fraction > 0.24 && fraction < 0.251,
                "movement must be clipped immediately before the restricted boundary")
 
+        // 실기 재현: 이미 제외 구역 안에 있는 NPC가 아주 작은(한 프레임 크기)
+        // 탈출 이동을 시도하면 전체 스텝이 허용돼야 한다. escapeTolerance 도입
+        // 전에는 이분 탐색이 Float32 정밀도 밑으로 수렴해 항상 0을 반환했고,
+        // 그 결과 NPC가 제자리에서 걷다 멈췄다를 반복(지지거림)했다.
+        let tinyEscapeFraction = NPCGuestNavigation.allowedFraction(
+            from: [0.5, 0], to: [0.5 + 0.0079, 0], inside: floor, excluding: [staff])
+        expect(tinyEscapeFraction == 1,
+               "a tiny escaping step out of a restricted area must not be clipped to zero")
+
         let diagonal = Float(1 / sqrt(2.0))
         let rotated = NPCGuestArea(center: [10, 10],
                                    axisU: [diagonal * 2, diagonal * 2],

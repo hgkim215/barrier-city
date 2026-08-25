@@ -56,6 +56,15 @@ struct NPCGuestArea {
 }
 
 enum NPCGuestNavigation {
+    /// 이미 위반 상태(바닥 밖/제외 구역 안)에서 "탈출" 판정에 쓰는 여유치. 실제
+    /// 한 프레임 이동 폭(수 mm)은 이미 아주 작은데, allowedFraction이 이걸 12번
+    /// 이분해 찾는 후보는 그보다 4096배 더 작아져(수 마이크로미터) Float32
+    /// 정밀도 안에서 시작/끝 깊이가 아예 구분되지 않는다. 완전한 엄격 부등호만
+    /// 쓰면 그 오차 때문에 탈출 이동조차 전부 거부돼 NPC가 제자리에 영원히
+    /// 갇히는 문제가 실기에서 확인됐다(걷다 멈췄다를 반복하는 "지지거림"의
+    /// 실제 원인 — areaFraction이 0으로 고정된 채 반복됨).
+    private static let escapeTolerance: Float = 0.0005
+
     static func isValid(_ point: SIMD2<Float>,
                         inside floor: NPCGuestArea,
                         excluding exclusions: [NPCGuestArea]) -> Bool {
@@ -63,7 +72,8 @@ enum NPCGuestNavigation {
     }
 
     /// 현재 위치가 정상이라면 바닥 밖/금지 구역 안으로 한 발짝도 들어가지 못하게 한다.
-    /// 이미 잘못된 위치라면 위반 깊이가 감소하는 탈출 이동만 예외적으로 허용한다.
+    /// 이미 잘못된 위치라면 위반 깊이가 나빠지지 않는(escapeTolerance만큼의 오차는
+    /// 봐주는) 이동만 예외적으로 허용한다.
     static func isAllowedStep(from start: SIMD2<Float>,
                               to end: SIMD2<Float>,
                               inside floor: NPCGuestArea,
@@ -75,14 +85,14 @@ enum NPCGuestNavigation {
         if startFloorDepth >= 0 {
             guard endFloorDepth >= 0 else { return false }
         } else {
-            guard endFloorDepth > startFloorDepth else { return false }
+            guard endFloorDepth >= startFloorDepth - escapeTolerance else { return false }
         }
 
         for exclusion in exclusions {
             let startDepth = exclusion.interiorDepth(of: start)
             let endDepth = exclusion.interiorDepth(of: end)
             if startDepth >= 0 {
-                guard endDepth < startDepth else { return false }
+                guard endDepth <= startDepth + escapeTolerance else { return false }
             } else {
                 guard endDepth < 0,
                       !exclusion.intersectsSegment(from: start, to: end) else { return false }
@@ -92,6 +102,13 @@ enum NPCGuestNavigation {
     }
 
     /// 전체 이동이 불가능하면 이분 탐색으로 경계 직전까지의 안전한 비율을 구한다.
+    ///
+    /// 이미 위반 상태(탈출 시도)에서 전체 스텝조차 막히면 이분 탐색으로 내려가지
+    /// 않는다 — 탈출 이동은 "경계 직전까지만 허용"할 개념 자체가 없고(위반 중이라
+    /// 이미 경계 너머다), 절반씩 잘라 들어가는 후보는 갈수록 Float32 정밀도 밑으로
+    /// 떨어져 깊이 차이가 안 잡히고 결국 0으로 수렴해버린다(escapeTolerance 도입
+    /// 전 실제로 이 경로에서 NPC가 영원히 갇혔다). 대신 이번 프레임은 안 움직이고,
+    /// 다음 프레임에 move()가 새로 고른 스티어링 방향으로 다시 시도한다.
     static func allowedFraction(from start: SIMD2<Float>,
                                 to proposedEnd: SIMD2<Float>,
                                 inside floor: NPCGuestArea,
@@ -99,6 +116,10 @@ enum NPCGuestNavigation {
         if isAllowedStep(from: start, to: proposedEnd, inside: floor, excluding: exclusions) {
             return 1
         }
+        let isEscaping = floor.interiorDepth(of: start) < 0
+            || exclusions.contains { $0.interiorDepth(of: start) >= 0 }
+        if isEscaping { return 0 }
+
         var low: Float = 0
         var high: Float = 1
         for _ in 0..<12 {
