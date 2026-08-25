@@ -373,35 +373,20 @@ final class NPCGuestCoordinator {
                     // 최저치(0.68m/s)로도 최악의 경우(4.0m) 약 5.9초면 도착해 10초
                     // 기준 안에서 여유가 있다.
                     let seat = seats[seatIndex]
-                    if let spawn = cyclerSpawnPoint(behind: seat, in: floorArea,
-                                                    excluding: exclusionAreas) {
-                        seatOccupants[seatIndex] = guests.count
-                        spawnedPositions.append(spawn)
-                        guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-                        if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
-                            guest.grantSeat(index: seatIndex, seat: seat)
-                            Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
-                        } else {
-                            guest.reserveSeat(index: seatIndex, seat: seat)
-                            Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
-                        }
-                    } else if let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
-                                                           keepingAwayFrom: spawnedPositions) {
-                        spawnedPositions.append(spawn)
-                        guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
-                        Self.seatingLogger.error("\(displayName) 좌석 인근 안전 스폰 실패; 일반 안전 지점으로 대체")
+                    let spawn = cyclerSpawnPoint(behind: seat, in: floorArea, excluding: exclusionAreas)
+                    seatOccupants[seatIndex] = guests.count
+                    spawnedPositions.append(spawn)
+                    guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
+                    if Float.random(in: 0...1) < Tuning.cyclerImmediateSeatChance {
+                        guest.grantSeat(index: seatIndex, seat: seat)
+                        Self.seatingLogger.notice("\(displayName) 입장 시 좌석 \(seatIndex) 즉시 착석 배정: spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y)) 거리=\(simd_distance(spawn, seat.position))m")
                     } else {
-                        entity.removeFromParent()
-                        Self.seatingLogger.error("\(displayName) 안전 스폰 지점 없음; 생성 취소")
-                        continue
+                        guest.reserveSeat(index: seatIndex, seat: seat)
+                        Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
                     }
                 } else {
-                    guard let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
-                                                       keepingAwayFrom: spawnedPositions) else {
-                        entity.removeFromParent()
-                        Self.seatingLogger.error("\(displayName) 안전 스폰 지점 없음; 생성 취소")
-                        continue
-                    }
+                    let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
+                                                 keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                 }
@@ -598,11 +583,14 @@ final class NPCGuestCoordinator {
     }
 
     /// 제외 영역을 피하고, 이미 배치된 손님들과도 최소 거리를 두는 스폰 지점을 고른다.
-    /// 무작위 후보가 실패하면 바닥 전체를 격자로 다시 훑는다. 끝까지 안전한 지점이
-    /// 없으면 nil을 반환해, 금지 구역에 억지로 생성하는 대신 해당 NPC 생성을 취소한다.
+    /// 무작위 후보가 실패하면 바닥 전체를 격자로 다시 훑는다. 그마저(441개 전수) 실패하면
+    /// — 실기에서 실제로 관측됨(가구 콜리전 판정 등 environment 요인 추정) — 손님을 통째로
+    /// 생성 취소하는 대신, 최소 하나의 보장("절대 제외 구역 안은 아님")만 지키는
+    /// guaranteedFallbackSpawn으로 넘긴다. 손님이 아예 안 보이는 것보다는 가구와 약간
+    /// 겹치더라도 나타나는 편이 낫다.
     private func randomSpawnPoint(in area: NPCGuestArea,
                                   excluding exclusions: [NPCGuestArea],
-                                  keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float>? {
+                                  keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float> {
         var bestCandidate: SIMD2<Float>?
         var bestSeparation: Float = -1
         for _ in 0..<60 {
@@ -616,9 +604,11 @@ final class NPCGuestCoordinator {
             }
         }
         if let bestCandidate { return bestCandidate }
-        return safestGridPoint(in: area, excluding: exclusions) { candidate in
+        if let gridPoint = safestGridPoint(in: area, excluding: exclusions, score: { candidate in
             others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
-        }
+        }) { return gridPoint }
+        Self.seatingLogger.error("무작위+격자 탐색 441회 전부 실패 — 최후 폴백으로 배치")
+        return guaranteedFallbackSpawn(near: area.center, in: area, excluding: exclusions)
     }
 
     /// cycler를 좌석 반대쪽(테이블에서 먼 쪽)에 스폰하되, 그 지점이 제외 구역(자기
@@ -629,7 +619,7 @@ final class NPCGuestCoordinator {
     /// 매번 경로 교차로 후보를 버림) 영원히 Idle로 멈춰, 예약된 좌석에 결국 못 앉았다.
     private func cyclerSpawnPoint(behind seat: GuestSeat,
                                   in area: NPCGuestArea,
-                                  excluding exclusions: [NPCGuestArea]) -> SIMD2<Float>? {
+                                  excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
         for attempt in 0..<24 {
             // 처음 몇 번은 원래 반경 안에서, 그래도 못 벗어나면 점점 더 멀리 밀어낸다.
             let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
@@ -639,9 +629,29 @@ final class NPCGuestCoordinator {
             return candidate
         }
         let preferred = seat.position - seat.facing * Tuning.cyclerSpawnRadius
-        return safestGridPoint(in: area, excluding: exclusions) {
+        if let gridPoint = safestGridPoint(in: area, excluding: exclusions, score: {
             -simd_distance($0, preferred)
+        }) { return gridPoint }
+        Self.seatingLogger.error("cycler 스폰 탐색 441회 전부 실패 — 최후 폴백으로 배치")
+        return guaranteedFallbackSpawn(near: preferred, in: area, excluding: exclusions)
+    }
+
+    /// 무작위 탐색과 격자 전수 탐색이 모두 실패했을 때의 최후 폴백. 손님을 아예
+    /// 생성 취소하는 대신, 최소한 제외 구역(AreaK 등) 밖으로는 반드시 밀어낸
+    /// 지점에 배치한다 — 가구 겹침 정도는 감수하되 손님이 통째로 사라지는 것보다는
+    /// 낫다(b87e765의 pushedOutsideExclusions와 같은 방식).
+    private func guaranteedFallbackSpawn(near preferred: SIMD2<Float>,
+                                         in area: NPCGuestArea,
+                                         excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
+        var current = area.contains(preferred) ? preferred : area.center
+        for _ in 0..<4 {
+            guard let intruded = exclusions.first(where: { $0.contains(current) }) else { break }
+            let away = current - intruded.center
+            let pushDirection = simd_length(away) > 0.001 ? simd_normalize(away) : SIMD2<Float>(1, 0)
+            let pushDistance = simd_length(intruded.axisU) + simd_length(intruded.axisV) + 0.1
+            current = intruded.center + pushDirection * pushDistance
         }
+        return current
     }
 
     private func isSafeSpawn(_ point: SIMD2<Float>,
