@@ -78,6 +78,10 @@ final class NPCGuestCoordinator {
         static let furnitureClearanceHeight: Float = 0.05
         /// AreaK/AreaB 경계에서 NPC 중심뿐 아니라 몸통 반경까지 완전히 빠지게 하는 여유.
         static let restrictedAreaClearance: Float = 0.25
+        /// Cube 콜리전 기반 제외 영역의 반축 길이가 이보다 크면 진단 로그를 남긴다.
+        /// 실측한 콜리전 프록시는 전부 5m 반경 이내였다 — 이보다 훨씬 크면 이름이
+        /// 겹치는 다른 엔티티(예: 장식용 몰딩)가 잘못 잡혔을 가능성이 높다.
+        static let obstacleAreaSanityLimit: Float = 5.0
         /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
         /// 좌석(= 정규화된 SittingPoint 높이가 최소인 의자)에 적용되는 오프셋이다.
         /// 다른 의자들은 여기에 각자의 실측 바운즈 차이만큼만 더해서 쓴다
@@ -195,12 +199,21 @@ final class NPCGuestCoordinator {
             resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot,
                         margin: -Tuning.restrictedAreaClearance)
         }
-        // NPC 접근 금지 영역은 AreaK/AreaB에 더해, 휠체어가 실제로 충돌하는 것과
-        // 같은 /Root/collision 밑 Cube~Cube_11 콜리전 프록시를 그대로 쓴다. 테이블
-        // 좌석 바운즈에 임의 여백(예전 seatClusterExclusionMargin)을 더해 추정하는
-        // 대신, authored된 실제 형상을 근거로 삼는다.
+        // NPC 접근 금지 영역은 AreaK/AreaB에 더해, /Root/collision 밑 Cube~Cube_11
+        // 콜리전 프록시를 그대로 쓴다. 테이블 좌석 바운즈에 임의 여백(예전
+        // seatClusterExclusionMargin)을 더해 추정하는 대신, authored된 실제 형상을
+        // 근거로 삼는다.
         let obstacleExclusions = collisionCubeAreas.compactMap { captured in
             finalizeCapturedArea(captured, indoorMap: indoorMap, worldRoot: worldRoot)
+        }
+        // 진단용: 이 씬 파일에 "Cube"/"Cube_1"~"Cube_3" 이름이 유일하지 않아(장식용
+        // 나무 몰딩도 같은 이름을 씀), 잘못된 엔티티가 잡히면 반경이 비정상적으로
+        // 커진다 — 방 크기를 훌쩍 넘는 제외 구역은 손님 스폰/배회를 통째로 막는다.
+        for area in obstacleExclusions {
+            let extent = max(simd_length(area.axisU), simd_length(area.axisV))
+            if extent > Tuning.obstacleAreaSanityLimit {
+                Self.seatingLogger.error("NPC 제외 영역 크기 이상(반경 \(extent)m, center=(\(area.center.x), \(area.center.y))) — 잘못된 엔티티가 잡혔을 수 있음")
+            }
         }
         exclusionAreas = staffAreaExclusions + obstacleExclusions
         // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지

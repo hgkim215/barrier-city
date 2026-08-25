@@ -9,9 +9,13 @@
 import RealityKit
 import RealityKitContent
 import simd
+import OSLog
 
 @MainActor
 enum SceneSwitcher {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "SceneSwitcher")
 
     private struct PreparedIndoorScene {
         let visible: Entity
@@ -244,8 +248,22 @@ enum SceneSwitcher {
         // 더는 잴 수 없다 — 그 전에 캡처한다. visible이 아직 worldRoot에 안 붙어
         // 있어 여기선 visible 자신 기준으로만 담아 두고, 최종 worldRoot 좌표 변환은
         // 나중에(NPCGuestCoordinator.enterIndoor, worldRoot에 붙은 뒤) 한다.
-        let collisionCubeAreas = SceneEntityPreparation.captureAreas(
-            named: indoorCollisionCubeNames, in: visible, relativeTo: visible)
+        //
+        // "Cube"/"Cube_1"~"Cube_3" 같은 이름은 이 파일 안에서 유일하지 않다 —
+        // Indoor/Edge 밑에 있는 장식용 나무 몰딩도 우연히 같은 이름을 쓰는데, 크기가
+        // 전혀 다르다(폭 0.1m, 길이 60m짜리 얇고 아주 긴 띠). visible 전체에서
+        // findEntity(named:)로 찾으면 이 장식용 조각과 잘못 매칭될 수 있어, 먼저
+        // "collision" 그룹 엔티티를 찾고 그 밑에서만 검색해 모호성을 없앤다.
+        let collisionCubeAreas: [SceneEntityPreparation.CapturedArea]
+        if let collisionGroup = visible.findEntity(named: "collision") {
+            collisionCubeAreas = SceneEntityPreparation.captureAreas(
+                named: indoorCollisionCubeNames, in: collisionGroup, relativeTo: visible)
+        } else {
+            collisionCubeAreas = []
+        }
+        if collisionCubeAreas.count != indoorCollisionCubeNames.count {
+            logger.error("NPC 제외 영역 콜리전 프록시 \(indoorCollisionCubeNames.count, privacy: .public)개 중 \(collisionCubeAreas.count, privacy: .public)개만 캡처됨")
+        }
         SceneEntityPreparation.prepareVisible(visible)
         let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)
         try Task.checkCancellation()
