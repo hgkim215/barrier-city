@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 import simd
+import OSLog
 
 /// Indoor.usda의 Guest_* AnimationLibrary에 등록된 애니메이션 키.
 /// Idle은 Barista와 동일하게 *Idle.usdz의 default subtree animation을 그대로 쓴다.
@@ -135,6 +136,10 @@ final class NPCGuestController {
                 sitDesireChance: Float.random(in: 0.55...0.9))
         }
     }
+
+    private static let movementLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
+        category: "NPCGuestMovement")
 
     private(set) var name: String
     let role: NPCGuestRole
@@ -665,15 +670,24 @@ final class NPCGuestController {
                 playerPosition: playerPosition,
                 avoidPlayer: avoidPlayer)
         }
+        let stepAfterObstacles = step
         // 레이캐스트는 메시 충돌만 알고 논리적인 바닥/금지 영역은 모른다. 군중 회피로
         // 직선 경로에서 밀려나거나 큰 deltaTime 한 프레임에 경계를 건너는 경우까지
         // 최종 이동 직전에 잘라, 정상 위치의 NPC가 금지 구역으로 진입하지 못하게 한다.
         let proposed = current + direction * step
-        step *= NPCGuestNavigation.allowedFraction(
+        let areaFraction = NPCGuestNavigation.allowedFraction(
             from: current,
             to: proposed,
             inside: movementArea,
             excluding: exclusions)
+        step *= areaFraction
+        // 진단용: "지지거림"(걷다 멈췄다 반복) 원인이 실제 장애물(레이캐스트)인지
+        // 논리적 경계 클램프(allowedFraction)인지 분리해서 남긴다 — 둘 다 같은
+        // step에 누적되므로 이 로그 없이는 blocked 판정만 보고는 구분이 안 된다.
+        if step < desiredStep * NPCGuestTuning.blockedStepFraction {
+            Self.movementLogger.notice(
+                "\(self.name, privacy: .public) 막힘 진단: desired=\(desiredStep, privacy: .public) rayAfter=\(stepAfterObstacles, privacy: .public) areaFraction=\(areaFraction, privacy: .public) final=\(step, privacy: .public)")
+        }
         root.position.x += direction.x * step
         root.position.z += direction.y * step
         // 장애물에 거의 다 막혀 한 프레임에 1mm 안팎만 겨우 밀리는 경우까지 "이동
