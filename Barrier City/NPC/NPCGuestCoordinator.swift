@@ -501,7 +501,15 @@ final class NPCGuestCoordinator {
 
     /// SittingPoint 마커에서 부모를 거슬러 올라가 자신이 속한 의자 인스턴스의 리프
     /// 메시(tripo_mesh_* — 좌석·테이블과 같은 명명 규칙)를 찾아 그 바운즈를 반환한다.
-    /// 못 찾으면(예: LongChair처럼 계층이 다른 경우) nil — 호출부가 0으로 대체한다.
+    ///
+    /// 대부분의 의자(Chair/WoodChair)는 SittingPoint가 tripo_mesh_* 엔티티의 자식이라
+    /// 첫 조상에서 바로 찾긴다. 하지만 LongChair(WoodTable의 긴 벤치)는 USDA 원본을
+    /// 실측해보니 SittingPoint가 tripo_mesh_* "안"이 아니라 그 부모(tripo_node_*) 밑에
+    /// 조각난 메시 5~6개와 나란히 형제로 놓여 있다(벤치 하나가 여러 리프 메시로
+    /// 쪼개져 있어서다) — 그래서 조상만 훑으면 못 찾고 0으로 대체돼(sittingHeightOffset
+    /// 계산이 정규화 안 된 raw 값으로 새어), WoodTable에서만 앉은 손님의 머리/몸이
+    /// 의자와 안 맞거나 파묻히는 문제로 이어졌다. 각 조상 단계에서 형제 tripo_mesh_*
+    /// 들을 모아 합친 바운즈도 함께 시도해 이 경우까지 잡는다.
     private func nearestAncestorMeshBounds(of marker: Entity, relativeTo worldRoot: Entity) -> BoundingBox? {
         var current: Entity? = marker.parent
         var depth = 0
@@ -509,10 +517,23 @@ final class NPCGuestCoordinator {
             if candidate.name.hasPrefix("tripo_mesh_") {
                 return candidate.visualBounds(relativeTo: worldRoot)
             }
+            if let siblingUnion = unionOfChildMeshBounds(in: candidate, relativeTo: worldRoot) {
+                return siblingUnion
+            }
             current = candidate.parent
             depth += 1
         }
         return nil
+    }
+
+    /// entity의 직계 자식 중 tripo_mesh_* 리프들의 바운즈를 모두 합친다. 하나도 없으면 nil.
+    private func unionOfChildMeshBounds(in entity: Entity, relativeTo worldRoot: Entity) -> BoundingBox? {
+        var union: BoundingBox?
+        for child in entity.children where child.name.hasPrefix("tripo_mesh_") {
+            let bounds = child.visualBounds(relativeTo: worldRoot)
+            union = union.map { $0.union(bounds) } ?? bounds
+        }
+        return union
     }
 
     /// "Table"/"WoodTable" 계열 서브트리 안의 모든 tripo_mesh_* 리프(실제 배치된
