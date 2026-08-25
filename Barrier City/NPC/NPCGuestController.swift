@@ -845,6 +845,36 @@ final class NPCGuestController {
                 playerPosition: playerPosition,
                 avoidPlayer: avoidPlayer,
                 neighborPositions: neighboringPositions)
+            // 예측 회피(NPCGuestLocalAvoidance)가 targetDirection을 실제로 옆으로
+            // 틀었는데 그 방향이 하필 정적 장애물(테이블·카운터 등)로 막혀 있으면,
+            // A*가 원래 뚫려 있다고 골라준 targetDirection 자체는 멀쩡한데도 좌/우
+            // 보정 때문에 가만히 못 나아가는 경우가 있었다(좁은 통로에서 다른 NPC와
+            // 마주쳤을 때 특히 그랬다 — 옆으로 피할 공간 자체가 없는데 계속 옆으로
+            // 틀려고 하니 매 프레임 다시 막힘). 그 방향이 원래 방향과 실제로
+            // 달랐고 사실상 막혔다면, 예측 회피 보정만 뺀 방향(즉시 반발은 유지)으로
+            // 한 번 더 재시도해 실제로 더 나아갈 수 있으면 그쪽을 쓴다. A* 경로/
+            // 웨이포인트는 전혀 건드리지 않는다 — 이번 한 스텝의 방향만 되돌린다.
+            let isPredictiveAvoidanceEngaged = simd_length_squared(preferredDirection - targetDirection) > 0.0001
+            if step < desiredStep * NPCGuestTuning.blockedStepFraction, isPredictiveAvoidanceEngaged {
+                let fallbackDirection = crowdSteeredDirection(
+                    targetDirection: targetDirection,
+                    from: current,
+                    neighbors: neighboringPositions,
+                    scale: separationScale)
+                let fallbackStep = NPCObstacleAvoidance.allowedStep(
+                    scene: scene,
+                    from: SIMD3(current.x, 0, current.y),
+                    direction: SIMD3(fallbackDirection.x, 0, fallbackDirection.y),
+                    desiredStep: desiredStep,
+                    halfWidth: NPCGuestTuning.bodyHalfWidth,
+                    playerPosition: playerPosition,
+                    avoidPlayer: avoidPlayer,
+                    neighborPositions: neighboringPositions)
+                if fallbackStep > step {
+                    direction = fallbackDirection
+                    step = fallbackStep
+                }
+            }
         }
         let stepAfterObstacles = step
         // 레이캐스트는 메시 충돌만 알고 논리적인 바닥/금지 영역은 모른다. 군중 회피로
