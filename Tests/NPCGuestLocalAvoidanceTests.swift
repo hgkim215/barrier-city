@@ -84,32 +84,49 @@ struct NPCGuestLocalAvoidanceTests {
                "the crossing must be predicted to happen within a reasonable horizon")
     }
 
-    // MARK: - 5. 정지 NPC — 0으로 나누거나 NaN이 없어야 한다
+    // MARK: - 5. 정지 NPC — 예측 대상에서 제외되어야 하고(예: 좌석에 이미 앉은
+    // 손님), 그 판정 자체가 0으로 나누거나 NaN을 만들면 안 된다.
+    //
+    // 앉아있는 손님이나 배회 중 잠깐 멈춰 선 손님은 minimumNeighborSpeed 미만이라
+    // 항상 nil을 반환한다 — 좌석으로 걸어가는 손님이 목적지 바로 옆의 이미 앉은
+    // 손님을 "피해야 할 미래 위험"으로 계속 판단해 정작 자기 자리로는 다가가지
+    // 못하는 교착을 막기 위함이다. 실제로 가까워졌을 때의 안전은 여전히 즉시
+    // 반발(crowdSteeredDirection)과 하드 세이프티 넷(NPCObstacleAvoidance)이
+    // 정지한 이웃에도 그대로 적용되므로 담당한다.
 
     private static func stationaryNeighborIsHandledWithoutNaN() {
+        // 바로 앞에 정지한 이웃을 향해 걸어가도(예: 내 좌석 옆에 이미 앉은 손님)
+        // 더 이상 예측 회피 대상이 아니다.
         let neighbor = NPCNeighborKinematics(position: [1.5, 0], velocity: .zero)
-        guard let risk = NPCGuestLocalAvoidance.predictCollision(
-            myPosition: [0, 0], myVelocity: [1, 0], neighbor: neighbor
-        ) else {
-            fail("walking straight into a stationary neighbor must be detected")
-        }
-        expect(!risk.timeToClosestApproach.isNaN && !risk.closestDistance.isNaN && !risk.urgency.isNaN,
-               "stationary-neighbor prediction must never produce NaN")
+        let risk = NPCGuestLocalAvoidance.predictCollision(
+            myPosition: [0, 0], myVelocity: [1, 0], neighbor: neighbor)
+        expect(risk == nil,
+               "a stationary neighbor (e.g. an already-seated guest) must be excluded from prediction")
 
-        // 완전히 같은 위치(상대 위치 0)에서도 나눗셈이 안전해야 한다.
+        // 완전히 같은 위치(상대 위치 0)에서도 나눗셈이 안전해야 한다 — 정지 이웃은
+        // 애초에 첫 가드에서 걸러지므로 여기까지 오지도 않는다.
         let overlapping = NPCNeighborKinematics(position: [0, 0], velocity: .zero)
         let overlapRisk = NPCGuestLocalAvoidance.predictCollision(
             myPosition: [0, 0], myVelocity: [1, 0], neighbor: overlapping)
-        if let overlapRisk {
-            expect(!overlapRisk.urgency.isNaN, "exact overlap must not produce NaN urgency")
-        }
+        expect(overlapRisk == nil, "an exactly-overlapping stationary neighbor must not produce NaN or a risk")
 
-        // 나 자신이 정지해 있어도(상대속도 = neighbor 속도만 남는 경우) 안전해야 한다.
+        // 나 자신도 정지해 있으면(상대속도 0) 당연히 안전하다.
         let bothStationary = NPCNeighborKinematics(position: [0.3, 0], velocity: .zero)
         let stillRisk = NPCGuestLocalAvoidance.predictCollision(
             myPosition: [0, 0], myVelocity: .zero, neighbor: bothStationary)
         expect(stillRisk == nil,
                "two mutually stationary NPCs have zero relative speed and must be skipped, not NaN")
+
+        // 정말로 걷고 있는(minimumNeighborSpeed 이상) 이웃이 정면으로 다가오면
+        // 여전히 정상적으로 감지되어야 한다 — 이번 수정이 "정지 이웃만" 제외하고
+        // "느리지만 걷는" 이웃까지 지나치게 걸러내지 않는지 확인한다.
+        let slowlyWalking = NPCNeighborKinematics(position: [1, 0], velocity: [-0.3, 0])
+        guard let walkingRisk = NPCGuestLocalAvoidance.predictCollision(
+            myPosition: [-1, 0], myVelocity: [0.3, 0], neighbor: slowlyWalking
+        ) else {
+            fail("a genuinely walking (if slow) neighbor approaching head-on must still be detected")
+        }
+        expect(!walkingRisk.urgency.isNaN, "a slow but real approach must not produce NaN")
     }
 
     // MARK: - 6. 가까이 있지만 멀어지는 두 NPC — 거리만 보면 오탐하기 쉬운 케이스

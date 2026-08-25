@@ -55,6 +55,17 @@ enum NPCGuestLocalAvoidance {
         /// 예측 자체를 건너뛴다 — 이미 가깝다면 즉시 반발(crowdSteeredDirection)이
         /// 처리한다.
         static let minimumRelativeSpeed: Float = 0.05
+        /// 이웃 자신의 속도가 이보다 작으면(앉아있거나 배회 중 잠깐 멈춰 선 경우)
+        /// 그 이웃은 예측 회피 대상에서 완전히 제외한다. TTC 기반 예측은 원래
+        /// "서로 다가오는 두 이동체"를 다루기 위한 것인데, 좌석으로 걸어가는
+        /// 손님에게는 목적지 바로 옆에 이미 앉아있는 손님이 항상 있다 — 그 손님을
+        /// 계속 "피해야 할 미래 위험"으로 보면 정작 자기 좌석으로는 못 다가가는
+        /// 교착 상태(막힘 판정을 아슬아슬하게 피하며 제자리 근처에서 서성이는
+        /// 현상)에 빠진다. 이미 가까워진 뒤의 안전은 여전히 즉시 반발
+        /// (crowdSteeredDirection)과 하드 세이프티 넷(NPCObstacleAvoidance)이
+        /// 정지한 이웃에도 그대로 적용되므로 실제로 부딪히지는 않는다 — 여기서
+        /// 빠지는 건 "아직 멀리 있을 때부터 미리 피하기"뿐이다.
+        static let minimumNeighborSpeed: Float = 0.15
         /// NPCGuestController.velocity가 프레임 간 실이동량 기반으로 갱신될 때
         /// 쓰는 지수 평활 속도(초당 수렴 비율). alpha = min(1, velocitySmoothing
         /// * deltaTime) 형태로 프레임 레이트와 무관하게 동작한다.
@@ -85,11 +96,18 @@ enum NPCGuestLocalAvoidance {
     /// 그 상황에서도 상대 속도가 여전히 발산 방향이면(rawTimeToClosest ≤ 0) 자연히
     /// nil이 되어 즉시 반발(crowdSteeredDirection) 쪽으로 책임이 넘어가고, 계속
     /// 다가오는 중이면 이 함수가 정상적으로 강한 urgency를 반환한다.
+    ///
+    /// neighbor.velocity가 minimumNeighborSpeed보다 느리면(앉아있거나 잠깐 멈춰
+    /// 선 경우) 예측 자체를 건너뛴다 — Tuning.minimumNeighborSpeed 주석 참고.
     static func predictCollision(
         myPosition: SIMD2<Float>,
         myVelocity: SIMD2<Float>,
         neighbor: NPCNeighborKinematics
     ) -> CollisionRisk? {
+        guard simd_length_squared(neighbor.velocity)
+            > Tuning.minimumNeighborSpeed * Tuning.minimumNeighborSpeed else {
+            return nil
+        }
         let relativePosition = neighbor.position - myPosition
         let relativeVelocity = neighbor.velocity - myVelocity
         let relativeSpeedSquared = simd_length_squared(relativeVelocity)
