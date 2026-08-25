@@ -214,7 +214,7 @@ struct ImmersiveView: View {
             // 볼륨 윈도우(ControlPanelView가 열었다)도 같은 시점에 닫는다.
             SceneFadeOverlay.shared.snapOpaque()
             BootLoadingOverlay.shared.remove()
-            dismissWindow(id: "splash")
+            dismissWindow(id: AppSceneID.splash)
             InteractionModel.shared.isBootLoading = false
             // 음악을 먼저 재생 시작(자체적으로 1.5초에 걸쳐 페이드인됨)한 뒤 화면을
             // 밝혀, 시야가 밝아지기 전부터 배경음이 들리기 시작하게 한다.
@@ -265,7 +265,7 @@ struct ImmersiveView: View {
             handTracker.stopSession()
             // 로딩 완료 전에(사용자가 바로 나가는 등) 몰입 공간이 닫히는 드문 경우에도
             // 스플래시 윈도우가 화면에 남지 않게 한다. 이미 닫혔으면 아무 효과 없다.
-            dismissWindow(id: "splash")
+            dismissWindow(id: AppSceneID.splash)
             guard let immersiveSessionGeneration,
                   model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
                 return

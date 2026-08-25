@@ -31,7 +31,7 @@ struct Barrier_CityApp: App {
         }
         .windowResizability(.contentSize)
 
-        WindowGroup(id: "splash") {
+        WindowGroup(id: AppSceneID.splash) {
             SplashOverlayView()
         }
         .windowStyle(.volumetric)
