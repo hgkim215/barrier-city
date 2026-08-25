@@ -104,6 +104,11 @@ enum InteractionTuning {
 
     /// 키오스크 트리거 진입 반경(m). 휠체어로 접근할 때 스치듯 지나가지 않게 넉넉히.
     static let kioskTriggerRadius: Float = 3.0
+    /// 손님 대기줄이 형성되는 반경(m). kioskTriggerRadius보다 훨씬 좁게 둔다 — 키오스크
+    /// UI 패널은 멀리서부터 넉넉히 열려도 되지만, 대기줄은 유저가 실제로 키오스크
+    /// 바로 앞에 서 있을 때 기준으로 잡아야 줄과의 거리가 적당하다. 같은 3.0m를 쓰면
+    /// 유저가 트리거 반경 가장자리에 있을 때 대기줄이 유저에게서 너무 멀어진다.
+    static let guestQueueTriggerRadius: Float = 1.3
     /// 키오스크 패널을 키오스크 표면에서 사용자 쪽으로 당기는 거리(m). 박스에 안 묻히게.
     nonisolated static let kioskPanelForwardOffset: Float = 0.8
     /// Kiosk 프림을 못 찾을 때의 키오스크 트리거 폴백 좌표(Indoor 자산 기준).
@@ -180,6 +185,10 @@ final class InteractionModel {
     var dismissedTriggerID: String?
     /// 씬 전환 중(패널 버튼 비활성화 + 판정 일시 정지).
     var isTransitioning: Bool { transitionSession.isTransitioning }
+    /// 몰입 공간 진입 직후, Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지
+    /// 켜져 있는 부팅 로딩 상태(BootLoadingOverlay가 화면을 덮는 동안). 이 동안엔
+    /// isTransitioning과 동일하게 휠체어 입력·트리거 판정을 멈춘다.
+    var isBootLoading: Bool = false
     /// 전환 실패 등 패널에 표시할 안내 문구.
     var transitionError: String?
 
@@ -297,6 +306,7 @@ final class InteractionModel {
         dismissedTriggerID = nil
         transitionError = nil
         scene = .outdoor
+        isBootLoading = false
     }
 
     func processKioskScreenHandSample(

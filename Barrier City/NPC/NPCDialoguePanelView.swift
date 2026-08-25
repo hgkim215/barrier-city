@@ -84,6 +84,10 @@ struct NPCDialoguePanelView: View {
                 if controller.status == .listening {
                     ListeningIndicator()
                 }
+
+                if controller.isEncounterActive {
+                    endConversationButton
+                }
             }
 
             Text(displayedSubtitle)
@@ -107,6 +111,28 @@ struct NPCDialoguePanelView: View {
         .background(CafePalette.foam.opacity(0.96),
                     in: RoundedRectangle(cornerRadius: 30, style: .continuous))
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+    }
+
+    /// 무응답 타임아웃이나 거리 이탈을 기다리지 않고, 사용자가 언제든 직접 대화를
+    /// 끝낼 수 있게 하는 명시적 버튼. 거리로 자동 종료될 때와 같은 정리 경로
+    /// (NPCClerkController.endConversation → endEncounterForDeparture)를 탄다.
+    private var endConversationButton: some View {
+        Button {
+            clerk.endConversation()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "xmark.circle.fill")
+                Text("대화 종료")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(CafePalette.roast)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(CafePalette.roast.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("대화 종료")
+        .accessibilityHint("직원과의 대화를 지금 바로 마칩니다.")
     }
 
     @ViewBuilder
@@ -146,7 +172,7 @@ struct NPCDialoguePanelView: View {
         case .listening:
             return "편하게 말씀해 주세요."
         case .thinking:
-            return "음… 잠시만요."
+            return "잠시만요."
         case .idle:
             return controller.npcSubtitle.isEmpty
                 ? "편하게 말씀해 주세요."

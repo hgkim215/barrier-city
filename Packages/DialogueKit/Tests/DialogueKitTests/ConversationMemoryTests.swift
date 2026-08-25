@@ -8,8 +8,8 @@ final class ConversationMemoryTests: XCTestCase {
         memory.append(.assistant, text: "네, 아침에 다 써 버렸어요.")
 
         XCTAssertEqual(memory.turns.count, 2)
-        XCTAssertTrue(memory.promptContext.contains("Visitor: 오늘 원두가 다 떨어졌어요?"))
-        XCTAssertTrue(memory.promptContext.contains("Clerk: 네, 아침에 다 써 버렸어요."))
+        XCTAssertTrue(memory.promptContext.contains("방문자: 오늘 원두가 다 떨어졌어요?"))
+        XCTAssertTrue(memory.promptContext.contains("점원: 네, 아침에 다 써 버렸어요."))
     }
 
     func test_duplicateFinalTranscript_isStoredOnce() {
@@ -27,7 +27,7 @@ final class ConversationMemoryTests: XCTestCase {
         memory.reset()
 
         XCTAssertTrue(memory.isEmpty)
-        XCTAssertTrue(memory.promptContext.contains("no earlier conversation"))
+        XCTAssertTrue(memory.promptContext.contains("이전 대화가 없다"))
     }
 
     func test_returningOpening_resumesMemoryWithoutRestartingServiceFlow() {
@@ -39,8 +39,8 @@ final class ConversationMemoryTests: XCTestCase {
             isReturningEncounter: true
         )
 
-        XCTAssertTrue(opening.contains("same visitor"))
-        XCTAssertTrue(opening.contains("resume"))
-        XCTAssertTrue(opening.contains("Do not restart a service script"))
+        XCTAssertTrue(opening.contains("같은 방문자"))
+        XCTAssertTrue(opening.contains("다시 이어가라"))
+        XCTAssertTrue(opening.contains("접객 스크립트를 처음부터 다시"))
     }
 }

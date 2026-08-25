@@ -89,7 +89,13 @@ struct WheelchairMovementSystem: System {
         do {
             guard let model = AppModel.current, let worldRoot = model.worldRoot else { return }
             let motion = model.motion
-            if GuideFlowModel.shared.isInteractionLocked {
+            // outdoor→indoor 전환은 새 씬을 비동기로 로드하는 동안 outdoor의 solid 콜리전
+            // (Door 포함 — Outdoor는 includeSceneGeometry로 보이는 지형 전체가 충돌체다)이
+            // 아직 그대로 남아 있다. 이 창에서도 계속 입력을 받아 전진하면 아직 안 치워진
+            // 문에 부딪혀 진입 도중 쿵/덜컹 소리가 반복해서 났다. 잠금과 동일하게 입력을
+            // 버리고 높이만 정착시켜 전환이 끝날 때까지 제자리에서 멈춰 있게 한다.
+            if GuideFlowModel.shared.isInteractionLocked || InteractionModel.shared.isTransitioning
+                || InteractionModel.shared.isBootLoading {
                 model.discardGuideLockedInput()
                 // 잠금 중에도 실제 바닥 높이로 부드럽게 정착시킨다. 그렇지 않으면 씬 전환 때
                 // 잠시 빌려온 높이(outdoor 접지 fallback 등)로 굳어 카페 진입 직후 미션 확인
@@ -134,17 +140,22 @@ struct WheelchairMovementSystem: System {
             func groundY(_ x: Float, _ z: Float) -> Float? {
                 groundHit(x, z)?.height
             }
-            // 진행 방향의 수직 벽까지 가장 가까운 거리. 휠체어 폭을 5점으로 훑어
-            // 좁은 기둥/테이블 다리가 3개 레이 사이로 빠지는 것을 막는다.
+            // 진행 방향의 수직 벽/NPC까지 가장 가까운 충돌. 거리뿐 아니라 종류도
+            // 반환해, 움직이는 NPC 접촉에 벽 충돌음과 시야 반동을 주지 않게 한다.
             // 경사로/완만턱은 법선이 위를 향하므로 여기서 막지 않고 아래 단차 로직에 맡긴다.
             func wallDistance(fromX: Float,
                               fromZ: Float,
                               dxn: Float,
                               dzn: Float,
                               dist: Float,
-                              baseY: Float) -> Float? {
+                              baseY: Float) -> WheelchairObstacleHit? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
-                var nearest: Float?
+                var nearest: WheelchairObstacleHit?
+                func recordHit(distance: Float, kind: WheelchairObstacleKind) {
+                    if nearest == nil || distance < nearest!.distance {
+                        nearest = WheelchairObstacleHit(distance: distance, kind: kind)
+                    }
+                }
                 // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
                 // 빠지지 않도록 폭 방향 샘플을 5개에서 9개로 촘촘히 한다.
                 for fraction: Float in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1] {
@@ -159,7 +170,7 @@ struct WheelchairMovementSystem: System {
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
                     for hit in hits where abs(hit.normal.y) < 0.5 {
                         let hitDistance = simd_distance(hit.position, logicalOrigin)
-                        nearest = min(nearest ?? hitDistance, hitDistance)
+                        recordHit(distance: hitDistance, kind: .environment)
                     }
 
                     // 환경 콜리전은 고정된 논리 맵 좌표에 있지만 NPC는 렌더링용
@@ -176,17 +187,20 @@ struct WheelchairMovementSystem: System {
                                                 query: .all, mask: AppModel.npcGroup)
                     for hit in npcHits {
                         let hitDistance = simd_distance(hit.position, sceneOrigin)
-                        nearest = min(nearest ?? hitDistance, hitDistance)
+                        recordHit(distance: hitDistance, kind: .npc)
                     }
                 }
                 return nearest
             }
 
-            // 벽/넘을 수 없는 단차에 닿았을 때 실제 이동 속도를 끊고, 시야 반동과
-            // 충돌음을 한 번만 준다. 반동 속도는 비현실적으로 큰 테스트 입력에서도 제한한다.
+            // 벽/NPC/넘을 수 없는 단차에 닿으면 실제 이동 속도는 모두 끊는다.
+            // 시야 반동과 충돌음은 정책상 의미 있는 정적 환경 첫 충돌에만 준다.
             @MainActor
-            func stopAtObstacle(impactSpeed: Float) {
-                if !motion.isBlocked, abs(impactSpeed) > 0.01 {
+            func stopAtObstacle(impactSpeed: Float, obstacleKind: WheelchairObstacleKind) {
+                if WheelchairCollisionPolicy.shouldPlayImpactFeedback(
+                    obstacleKind: obstacleKind,
+                    impactSpeed: impactSpeed,
+                    wasAlreadyBlocked: motion.isBlocked) {
                     let cappedImpact = max(-Self.impactReferenceSpeed,
                                            min(Self.impactReferenceSpeed, impactSpeed))
                     motion.surgeVelocity = cappedImpact * Self.surgeGain
@@ -292,20 +306,20 @@ struct WheelchairMovementSystem: System {
             let requestedTravel = abs(forward) * dt
             let sweepDistance = leadExtent + requestedTravel + Self.collisionSkin
             if requestedTravel > 0.0001,
-               let hitDistance = wallDistance(fromX: motion.positionX,
-                                               fromZ: motion.positionZ,
-                                               dxn: leadDirX,
-                                               dzn: leadDirZ,
-                                               dist: sweepDistance,
-                                               baseY: motion.chairHeight) {
+               let obstacleHit = wallDistance(fromX: motion.positionX,
+                                              fromZ: motion.positionZ,
+                                              dxn: leadDirX,
+                                              dzn: leadDirZ,
+                                              dist: sweepDistance,
+                                              baseY: motion.chairHeight) {
                 // 수직 벽: 이번 프레임의 이동을 통째로 버리지 않고, 외곽이 skin만
                 // 남기고 닿는 지점까지만 이동한다. 저프레임에서도 관통하거나 멀찍이
                 // 떠서 멈추지 않고 실제 접촉 위치가 일정해진다.
-                let allowedTravel = max(0, hitDistance - leadExtent - Self.collisionSkin)
+                let allowedTravel = max(0, obstacleHit.distance - leadExtent - Self.collisionSkin)
                 let contactTravel = min(requestedTravel, allowedTravel)
                 motion.positionX += leadDirX * contactTravel
                 motion.positionZ += leadDirZ * contactTravel
-                stopAtObstacle(impactSpeed: forward)
+                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind)
             } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
@@ -315,7 +329,7 @@ struct WheelchairMovementSystem: System {
                 let rise = h1 - h0
                 if rise > Self.climbLimit {
                     // 못 넘는 단차(계단) → 막힘
-                    stopAtObstacle(impactSpeed: forward)
+                    stopAtObstacle(impactSpeed: forward, obstacleKind: .environment)
                 } else if rise > Self.stepMin {
                     // 넘을 수 있는 낮은 턱 → 저항 후 통과
                     let resist = min(1, rise / Self.climbLimit)

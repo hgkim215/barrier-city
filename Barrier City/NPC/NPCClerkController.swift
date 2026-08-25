@@ -10,6 +10,7 @@ enum NPCAnimationCue: String {
     case idle = "Idle"
     case greet = "Greet"
     case walk = "Walk"
+    case angry = "Angry"
 
     var repeats: Bool {
         self == .idle || self == .walk
@@ -359,6 +360,14 @@ final class NPCClerkController {
     @discardableResult
     func startConversationForDevelopment() -> Bool {
         beginGreeting(isRemoteDevelopmentConversation: true)
+    }
+
+    /// 대화 패널의 "대화 종료" 버튼에서 호출한다. 사용자가 멀어져서 자동으로 끝나는
+    /// 경로(endEncounterForDeparture)와 완전히 같은 정리를 타되, 거리와 무관하게
+    /// 언제든 명시적으로 끝낼 수 있게 한다.
+    func endConversation() {
+        guard conversationAnchor != nil || phase == .greeting || phase == .conversing else { return }
+        endEncounterForDeparture()
     }
 
     // MARK: - Placement
@@ -723,7 +732,7 @@ final class NPCClerkController {
     /// Indoor.usda의 Barista AnimationLibrary에 이름으로 등록된 클립. 이 이름과 겹치지
     /// 않는 첫 애니메이션이 Default.usdz 임포트 시 RealityKit이 모델 자체의 스켈레톤
     /// 액션으로부터 자동 생성하는 "default subtree animation"(idle 루프)이다.
-    private static let libraryAnimationNames: Set<String> = ["Greet", "Walk", "Angry"]
+    private static let libraryAnimationNames: Set<String> = ["Greet", "Walk", "Angry", "Work"]
 
     /// availableAnimations는 이미 서브트리 전체를 포함하므로, 라이브러리에 등록된
     /// 이름과 겹치지 않는 첫 항목을 idle 애니메이션으로 사용한다.

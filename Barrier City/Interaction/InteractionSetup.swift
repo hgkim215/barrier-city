@@ -77,34 +77,29 @@ enum InteractionSetup {
 
         // 2) 문 트리거 등록: 최신 Outdoor의 Door 프림 좌표를 찾고, 실패 시 authored 폴백 사용.
         var center = InteractionTuning.doorFallbackCenter
-        var cafeCenter = SIMD2<Float>.zero
         if let worldRoot = appModel.worldRoot,
            let door = im.visibleMap?.findEntity(named: "Door") {
             let p = door.position(relativeTo: worldRoot)
             center = SIMD2(p.x, p.z)
         }
 
-        var road23Pos: SIMD2<Float>? = nil
-        var road24Pos: SIMD2<Float>? = nil
-        if let worldRoot = appModel.worldRoot {
-            if let r23 = im.visibleMap?.findEntity(named: "Road_23") {
-                let p = r23.position(relativeTo: worldRoot)
-                road23Pos = SIMD2(p.x, p.z)
-            }
-            if let r24 = im.visibleMap?.findEntity(named: "Road_24") {
-                let p = r24.position(relativeTo: worldRoot)
-                road24Pos = SIMD2(p.x, p.z)
-            }
-        }
         let fallbackHalfExtent = InteractionTuning.outdoorGroundPlaneSize * 0.5
         let groundLayout = im.outdoorGroundLayout ?? SceneGroundLayout(
             minimum: SIMD2(repeating: -fallbackHalfExtent),
             maximum: SIMD2(repeating: fallbackHalfExtent),
             height: 0)
-        let startPosition = OutdoorSessionStart.roadMidpointPosition(
-            road23Position: road23Pos,
-            road24Position: road24Pos,
-            fallbackPosition: InteractionTuning.roadMidpointFallbackSpawnPosition)
+        // immersive space는 열리는 순간 유저의 실제 위치를 (0,0,0)으로 앵커링한다.
+        // 여기서 0이 아닌 위치로 스폰시키면 worldRoot가 그 위치의 역변환만큼 밀려나
+        // 첫 진입 시 카페 전체가 유저 기준으로 어긋난 채 나타난다. 문 앞 오프셋
+        // 스폰(positionOutsideCafe)은 그래서 첫 진입에는 쓰지 않는다.
+        //
+        // develop 브랜치의 "도로 스폰 위치"(Road_23/Road_24 중간점, 94fdfd8 이후
+        // 294a7d6에서 도입) 기능은 이 (0,0) 고정 버그 수정과 정면으로 충돌해
+        // develop → yslee 병합 시 의도적으로 보류했다. 폴백 좌표(roadMidpointFallbackSpawnPosition)를
+        // 포함한 관련 상수/헬퍼(OutdoorSessionStart.roadMidpointPosition,
+        // InteractionTuning.roadMidpointFallbackSpawnPosition)는 코드에 남겨 뒀으니,
+        // 재검토 시 여기서 startPosition만 다시 연결하면 된다.
+        let startPosition = InteractionTuning.outdoorSpawnPosition
 
         OutdoorSessionStart.reset(
             appModel,
@@ -157,7 +152,7 @@ enum InteractionSetup {
             app.npcGuests.update(deltaTime: deltaTime, appModel: app, isOrdering: false, kioskCenter: nil)
             return
         }
-        guard !im.isTransitioning else { return }
+        guard !im.isTransitioning, !im.isBootLoading else { return }
         app.npcClerk.setGuideInteractionLocked(false)
 
         let verdict = InteractionModel.evaluate(
@@ -200,10 +195,19 @@ enum InteractionSetup {
 
         updatePanel(im)
         app.npcClerk.update(deltaTime: deltaTime, appModel: app)
+        // 대기줄은 키오스크 UI가 열리는 진입 반경(kioskTriggerRadius, 3.0m)이 아니라
+        // 유저가 실제로 키오스크 바로 앞에 서 있을 때(guestQueueTriggerRadius)를
+        // 기준으로 형성한다 — 같은 반경을 쓰면 유저가 트리거 가장자리에 있을 때 줄이
+        // 유저에게서 너무 멀리 떨어져 보인다.
+        let playerPosition = SIMD2(app.motion.positionX, app.motion.positionZ)
+        let isCloseEnoughForQueue = isNearKiosk
+            && im.activeTrigger.map {
+                simd_distance(playerPosition, $0.center) <= InteractionTuning.guestQueueTriggerRadius
+            } == true
         app.npcGuests.update(deltaTime: deltaTime,
                              appModel: app,
-                             isOrdering: isNearKiosk,
-                             kioskCenter: isNearKiosk ? im.activeTrigger?.center : nil)
+                             isOrdering: isCloseEnoughForQueue,
+                             kioskCenter: isCloseEnoughForQueue ? im.activeTrigger?.center : nil)
     }
 
     /// 활성 트리거의 kind에 맞는 패널만 눈높이 빌보드로 표시한다(문·키오스크 둘 다 사용자를 향함).

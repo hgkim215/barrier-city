@@ -6,6 +6,7 @@ struct ControlPanelView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openImmersiveSpace) private var openSpace
     @Environment(\.dismissImmersiveSpace) private var dismissSpace
     @State private var immersiveError: String?
@@ -109,24 +110,7 @@ struct ControlPanelView: View {
 
                     Button {
                         Task { @MainActor in
-                            guard let generation = model.beginImmersiveOpen() else { return }
-                            immersiveError = nil
-                            switch await openSpace(id: AppSceneID.wheelchair) {
-                            case .opened:
-                                model.completeImmersiveOpen(generation: generation, succeeded: true)
-                            case .userCancelled:
-                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                    immersiveError = "몰입 공간 열기가 취소되었습니다."
-                                }
-                            case .error:
-                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                    immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
-                                }
-                            @unknown default:
-                                if model.completeImmersiveOpen(generation: generation, succeeded: false) {
-                                    immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
-                                }
-                            }
+                            _ = await openImmersiveSpaceIfNeeded()
                         }
                     } label: {
                         Label("몰입 공간 직접 열기 (디버그 창 기준)", systemImage: "figure.roll")
@@ -413,20 +397,28 @@ struct ControlPanelView: View {
         guard let generation = model.beginImmersiveOpen() else {
             return model.isImmersive
         }
+        immersiveError = nil
 
+        // 몰입 공간(검은 구체)이 뜨기 전부터 스플래시 볼륨 윈도우를 먼저 띄워
+        // 로딩 내내 앞에 떠 있게 한다. 성공 시의 닫기는 ImmersiveView가 로딩
+        // 완료 시점에 한다.
+        openWindow(id: AppSceneID.splash)
         switch await openSpace(id: AppSceneID.wheelchair) {
         case .opened:
             model.completeImmersiveOpen(generation: generation, succeeded: true)
             return true
         case .userCancelled:
+            dismissWindow(id: AppSceneID.splash)
             if model.completeImmersiveOpen(generation: generation, succeeded: false) {
                 immersiveError = "몰입 공간 열기가 취소되었습니다."
             }
         case .error:
+            dismissWindow(id: AppSceneID.splash)
             if model.completeImmersiveOpen(generation: generation, succeeded: false) {
                 immersiveError = "몰입 공간을 열 수 없습니다. 잠시 후 다시 시도해 주세요."
             }
         @unknown default:
+            dismissWindow(id: AppSceneID.splash)
             if model.completeImmersiveOpen(generation: generation, succeeded: false) {
                 immersiveError = "알 수 없는 이유로 몰입 공간을 열 수 없습니다."
             }

@@ -41,7 +41,7 @@ public struct ConversationMemory: Equatable, Sendable {
     /// 한 immersive 방문의 대화는 모두 보존하되, 프롬프트에는 최근 8,000자만 넣는다.
     public var promptContext: String {
         guard !turns.isEmpty else {
-            return "There is no earlier conversation in this immersive visit."
+            return "이번 몰입 세션에는 이전 대화가 없다."
         }
 
         let characterBudget = 8_000
@@ -49,7 +49,7 @@ public struct ConversationMemory: Equatable, Sendable {
         var usedCharacters = 0
 
         for turn in turns.reversed() {
-            let label = turn.speaker == .user ? "Visitor" : "Clerk"
+            let label = turn.speaker == .user ? "방문자" : "점원"
             let line = "\(label): \(turn.text)"
             guard selected.isEmpty || usedCharacters + line.count <= characterBudget else { break }
             selected.append(line)
@@ -57,8 +57,9 @@ public struct ConversationMemory: Equatable, Sendable {
         }
 
         return """
-        The following are finalized turns from this same immersive visit, oldest to newest.
-        Continue consistently from them. Do not recite or summarize them unless the visitor asks.
+        아래는 같은 몰입 세션에서 있었던 확정된 대화 턴이며, 오래된 순서부터 최신 순서로
+        나열했다. 이 내용과 일관되게 대화를 이어가라. 방문자가 요청하지 않는 한 그대로 읽거나
+        요약하지 마라.
         \(selected.reversed().joined(separator: "\n"))
         """
     }

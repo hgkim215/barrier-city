@@ -13,13 +13,13 @@ public enum RainbowSmoothieFulfillmentContext: String, Equatable, Sendable {
     public var promptGuide: String {
         switch self {
         case .orderingAllowed:
-            return "FULFILLMENT=orderingAllowed. No Rainbow Smoothie order has been placed yet. Follow the normal order-collection flow."
+            return "FULFILLMENT=orderingAllowed. 아직 레인보우 스무디 주문이 접수되지 않았다. 평소대로 주문을 받는 흐름을 따르라."
         case .preparing:
-            return "FULFILLMENT=preparing. Exactly one Rainbow Smoothie is already ordered and still being prepared. Acknowledge that fact, ask the visitor to wait briefly, and never place or claim another order."
+            return "FULFILLMENT=preparing. 레인보우 스무디 한 잔이 이미 주문 접수되어 아직 준비 중이다. 그 사실을 인지하고 방문자에게 잠깐 기다려 달라고 말하되, 다른 주문을 접수하거나 접수했다고 말하지 마라."
         case .readyAtCounter:
-            return "FULFILLMENT=readyAtCounter. The visitor's one Rainbow Smoothie is ready at the counter. Direct them to collect that existing drink and never place another order."
+            return "FULFILLMENT=readyAtCounter. 방문자의 레인보우 스무디 한 잔이 카운터에 준비되어 있다. 이미 있는 그 음료를 가져가라고 안내하고, 다른 주문은 절대 접수하지 마라."
         case .failed:
-            return "FULFILLMENT=failed. The existing Rainbow Smoothie service cannot be completed right now. State that it is currently unavailable; never claim an order was placed or that a drink is ready."
+            return "FULFILLMENT=failed. 기존 레인보우 스무디 서비스를 지금은 완료할 수 없다. 현재 제공이 어렵다고 말하되, 주문이 접수됐다거나 음료가 준비됐다고 절대 말하지 마라."
         }
     }
 }

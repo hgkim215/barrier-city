@@ -67,6 +67,11 @@ public actor RealtimeWebRTCClient {
         continuation.finish()
     }
 
+    /// 이미 연결(peerConnection 존재)돼 있는지. 몰입 공간 진입 시 미리 연결해둔
+    /// 클라이언트를 실제 대화 시작 시 재사용할 때, connect()를 다시 호출해
+    /// alreadyConnected로 실패하지 않도록 호출부가 먼저 확인하는 용도.
+    public var isConnected: Bool { peerConnection != nil }
+
     public func connect() async throws {
         guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }
 

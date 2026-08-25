@@ -30,16 +30,18 @@ public enum ClerkPersonality: String, CaseIterable, Sendable {
 public struct NPCPersona: Sendable {
     public let id: String
     public let role: String
-    public let englishSystemBase: String   // 영어 시스템 프롬프트(토큰 절감)
+    /// 한국어 실시간 음성 발화 프롬프트. 지시문 자체를 한국어로 줘야 발음·억양이
+    /// 자연스럽다(영어 지시문 위에서 한국어를 말하게 하면 어색해진다).
+    public let systemBase: String
     public let accessibilityAttitude: AccessibilityAttitude
     public let clerkPersonality: ClerkPersonality
 
-    public init(id: String, role: String, englishSystemBase: String,
+    public init(id: String, role: String, systemBase: String,
                 accessibilityAttitude: AccessibilityAttitude = .inclusive,
                 clerkPersonality: ClerkPersonality = .hurried) {
         self.id = id
         self.role = role
-        self.englishSystemBase = englishSystemBase
+        self.systemBase = systemBase
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = clerkPersonality
     }

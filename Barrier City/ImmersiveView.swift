@@ -22,6 +22,7 @@ private final class ImmersiveRuntimeState {
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
+    @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
 
     private static let logger = Logger(
@@ -62,7 +63,20 @@ struct ImmersiveView: View {
             worldRoot.components.set(WheelchairComponent())
             content.add(worldRoot)
             model.worldRoot = worldRoot
-            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
+            // 배경음악은 로딩(스플래시) 화면이 끝나고 도시가 페이드인되는 순간에
+            // 맞춰 재생한다 — 아래 로딩 완료 지점(BootLoadingOverlay 제거부) 참고.
+
+            // 로딩 화면: Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지 화면을
+            // 가린다. 휠체어 입력·문/키오스크 트리거 판정도 같이 멈춘다(isBootLoading).
+            BootLoadingOverlay.shared.install(content: content)
+            InteractionModel.shared.isBootLoading = true
+            let loadingStartedAt = ContinuousClock.now
+
+            // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
+            // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
+            // 맨 끝에서 두 프리로드를 기다린 뒤에야 로딩 화면을 걷어낸다.
+            async let indoorPreload: Void = SceneSwitcher.preloadIndoorScene()
+            async let realtimePreconnect: Void = RealtimePreconnect.shared.preconnect()
 
             do {
                 let outdoorVisible = try await Entity(
@@ -181,6 +195,32 @@ struct ImmersiveView: View {
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
             InteractionSetup.install(content: content, attachments: attachments, appModel: model)
 
+            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor/Realtime
+            // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
+            _ = await indoorPreload
+            _ = await realtimePreconnect
+            // 캐시된 애셋이 있으면 로딩이 순식간에 끝나 스플래시 이미지가 한두 프레임
+            // 만에 지나가 버릴 수 있다. 최소 이만큼은 스플래시가 보이도록 부족한
+            // 시간만큼 더 기다린다.
+            let minimumLoadingDuration = Duration.seconds(5)
+            let elapsed = loadingStartedAt.duration(to: .now)
+            if elapsed < minimumLoadingDuration {
+                try? await Task.sleep(for: minimumLoadingDuration - elapsed)
+            }
+            // SceneFadeOverlay를 먼저 즉시 불투명하게 만들어(애니메이션 없이) 로딩
+            // 화면(BootLoadingOverlay 검은 구체)을 걷어내도 화면이 계속 검게
+            // 유지되게 한 뒤, fadeIn으로 매끄럽게 밝아지며 도시로 들어가는 느낌을
+            // 준다. 배경음악도 이 순간(도시 진입 시점)에 맞춰 재생한다. 스플래시
+            // 볼륨 윈도우(ControlPanelView가 열었다)도 같은 시점에 닫는다.
+            SceneFadeOverlay.shared.snapOpaque()
+            BootLoadingOverlay.shared.remove()
+            dismissWindow(id: AppSceneID.splash)
+            InteractionModel.shared.isBootLoading = false
+            // 음악을 먼저 재생 시작(자체적으로 1.5초에 걸쳐 페이드인됨)한 뒤 화면을
+            // 밝혀, 시야가 밝아지기 전부터 배경음이 들리기 시작하게 한다.
+            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
+            SceneFadeOverlay.shared.fadeIn()
+
         } update: { _, _ in
             // 미는 정도(속도)에 따라 뒷바퀴 굴림 회전 적용.
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
@@ -223,6 +263,9 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             handTracker.stopSession()
+            // 로딩 완료 전에(사용자가 바로 나가는 등) 몰입 공간이 닫히는 드문 경우에도
+            // 스플래시 윈도우가 화면에 남지 않게 한다. 이미 닫혔으면 아무 효과 없다.
+            dismissWindow(id: AppSceneID.splash)
             guard let immersiveSessionGeneration,
                   model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
                 return

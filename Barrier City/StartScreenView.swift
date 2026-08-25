@@ -110,15 +110,26 @@ struct StartScreenView: View {
         guard let generation = model.beginImmersiveOpen() else { return }
         immersiveError = nil
 
+        // 몰입 공간(검은 구체)이 뜨기 전부터 스플래시 볼륨 윈도우를 먼저 띄워 로딩
+        // 내내 앞에 떠 있게 한다(ControlPanelView.openImmersiveSpaceIfNeeded와 같은
+        // 패턴 — develop 병합 과정에서 시작 화면 자체 진입 경로에는 이 연결이
+        // 빠져 있었다). 성공 시의 닫기는 ImmersiveView가 실제 로딩 완료 시점에
+        // 한다. 취소/실패로 몰입 공간이 아예 안 열리면 ImmersiveView가 뜨지도
+        // 않아 그쪽의 onDisappear 정리를 못 타므로, 여기서 직접 닫아야 한다.
+        openWindow(id: AppSceneID.splash)
+
         let event: StartExperienceEvent
         switch await openImmersiveSpace(id: AppSceneID.wheelchair) {
         case .opened:
             event = .immersiveOpened
         case .userCancelled:
+            dismissWindow(id: AppSceneID.splash)
             event = .immersiveOpenCancelled
         case .error:
+            dismissWindow(id: AppSceneID.splash)
             event = .immersiveOpenFailed
         @unknown default:
+            dismissWindow(id: AppSceneID.splash)
             event = .immersiveOpenFailed
         }
 

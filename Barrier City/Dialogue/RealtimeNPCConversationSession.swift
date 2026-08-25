@@ -52,7 +52,12 @@ final class RealtimeNPCConversationSession {
 
         do {
             try await audioSession.start()
-            try await client.connect()
+            // 몰입 공간 진입 시 미리 연결해둔 클라이언트가 주어졌다면(RealtimePreconnect)
+            // 다시 connect()를 호출하지 않는다 — 이미 연결된 클라이언트에 또 호출하면
+            // alreadyConnected로 실패한다.
+            if await !client.isConnected {
+                try await client.connect()
+            }
             await suspendMicrophoneForResponse()
 
             receiveTask = Task { @MainActor [weak self, client] in
@@ -74,7 +79,7 @@ final class RealtimeNPCConversationSession {
                 instructions: """
                 \(instructions)
 
-                # App-owned conversation stage for this response
+                # 앱이 관리하는 이번 응답의 대화 단계
                 \(openingInstructions)
                 """,
                 toolChoice: .none
@@ -85,16 +90,20 @@ final class RealtimeNPCConversationSession {
         }
     }
 
-    func completeFunctionCall(
-        callID: String,
-        output: String,
+    /// 한 응답 안에서 모델이 여러 함수를 불렀을 때(지침 위반)도 각 callID에 대한 output을
+    /// 빠짐없이 보낸다 — 하나라도 응답 없는 tool call로 남으면 대화 상태가 꼬인다. 모든
+    /// output을 보낸 뒤 후속 응답은 한 번만 요청한다.
+    func completeFunctionCalls(
+        _ calls: [(callID: String, output: String)],
         responseInstructions: String
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
         await suspendMicrophoneForResponse()
-        try await client.send(
-            RealtimeClientEvent.functionOutput(callID: callID, output: output)
-        )
+        for call in calls {
+            try await client.send(
+                RealtimeClientEvent.functionOutput(callID: call.callID, output: call.output)
+            )
+        }
         // 도구 결과를 설명하는 후속 응답에서는 도구를 다시 호출하지 못하게 해
         // 실패한 주문 검증이 자동 재시도 루프로 이어지는 것을 차단한다.
         try await requestResponse(

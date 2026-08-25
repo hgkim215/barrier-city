@@ -5,6 +5,10 @@ enum AppSceneID {
     static let debugControl = "debug-control"
     static let npcDialogueTest = "npc-dialogue-test"
     static let wheelchair = "wheelchair"
+    /// 몰입 공간이 뜨기 전부터 로딩 내내 떠 있는 볼륨 윈도우(SplashOverlayView).
+    /// 몰입 공간을 여는 진입점(StartScreenView, ControlPanelView 디버그 패널)이
+    /// 열고, 실제로 씬 로딩이 끝나는 시점은 ImmersiveView가 닫는다.
+    static let splash = "splash"
 }
 
 enum DebugWindowRoute: String, Codable, Hashable {
