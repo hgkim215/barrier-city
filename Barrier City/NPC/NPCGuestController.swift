@@ -438,7 +438,11 @@ final class NPCGuestController {
             standUpAndResumeWandering()
             return
         case .standingUp:
-            guard var remaining = standingUpRemaining else { seatState = .none; return }
+            guard var remaining = standingUpRemaining else {
+                seatState = .none
+                vacateClaimedSeat()
+                return
+            }
             remaining -= deltaTime
             if remaining > 0 {
                 standingUpRemaining = remaining
@@ -446,6 +450,19 @@ final class NPCGuestController {
             }
             standingUpRemaining = nil
             seatState = .none
+            // 좌석을 실제로 "비웠다"고 코디네이터에 통지하는 시점은 여기(기립
+            // 애니메이션이 끝나 실제로 그 자리를 벗어난 순간)여야 한다.
+            // standUpAndResumeWandering()에서 곧장 통지하면, 코디네이터가 그
+            // 프레임에 바로 좌석을 "빈 자리"로 표시해 다른 손님에게 재배정할 수
+            // 있는데, 정작 이 손님의 몸은 standingUpAnimationDuration(1초) 동안
+            // 그 좌석 위치에 그대로 서 있다(기립 중에는 이동하지 않는다). 그
+            // 사이 새로 배정된 손님이 걸어오면 NPCObstacleAvoidance의 이웃
+            // 하드블록이 아직 그 자리에 서 있는 이 손님의 몸에 막혀, 막힘
+            // 판정이 아슬아슬하게 오락가락하며(3연속 실패 임계값에는 못
+            // 미치면서 순 이동도 없는) 좌석 근처에서 영원히 서성이기만 하고
+            // 앉지 못하는 교착에 빠졌다 — 실기에서 "의자에 앉지 않고 서 있는
+            // NPC"로 관찰된 원인.
+            vacateClaimedSeat()
             return
         case .none:
             break
@@ -603,14 +620,27 @@ final class NPCGuestController {
     private func standUpAndResumeWandering() {
         playAnimation(.sitToStand)
         locomotionRoot?.position.y = 0
-        pendingVacatedSeatIndex = claimedSeatIndex
-        claimedSeatIndex = nil
-        claimedSeat = nil
+        // claimedSeatIndex/claimedSeat는 여기서 비우지 않는다 — 기립 애니메이션이
+        // 끝나 실제로 자리를 벗어날 때(.standingUp 완료 시점, update() 참고)까지는
+        // 이 손님의 몸이 여전히 그 좌석 위치에 있다. 그 전에 코디네이터에 "비었다"고
+        // 통지하면 다른 손님이 아직 사람이 서 있는 자리로 걸어오게 된다.
         seatState = .standingUp
         sittingRemaining = nil
         standingUpRemaining = NPCGuestTuning.standUpAnimationDuration
         wanderTarget = nil
         pauseRemaining = 0
+    }
+
+    /// 지금 붙잡고 있는 좌석(있다면)을 실제로 놓아준다 — pendingVacatedSeatIndex로
+    /// 코디네이터에 통지해 seatOccupants를 비우게 한다. 반드시 이 손님의 몸이 그
+    /// 좌석 위치를 실제로 벗어난(또는 애초에 도착한 적 없는) 시점에만 불러야 한다
+    /// — 기립 애니메이션 도중처럼 아직 그 자리에 있는 동안 부르면 다른 손님이
+    /// 사람이 서 있는 자리로 걸어오는 원인이 된다(standUpAndResumeWandering 주석
+    /// 참고).
+    private func vacateClaimedSeat() {
+        pendingVacatedSeatIndex = claimedSeatIndex
+        claimedSeatIndex = nil
+        claimedSeat = nil
     }
 
     /// exclusions는 호출부(update)가 staffExclusions(직원 구역만)를 넘긴다 — 테이블
@@ -688,9 +718,10 @@ final class NPCGuestController {
     /// 않고(코디네이터가 seatOccupants를 즉시 비워 다른 손님에게 다시 배정할 수 있게
     /// 한다), 배회 상태로 되돌린다.
     private func vacateSeatDueToBlockage() {
-        pendingVacatedSeatIndex = claimedSeatIndex
-        claimedSeatIndex = nil
-        claimedSeat = nil
+        // 아직 좌석에 도착하지 못한 채(걸어가는 도중) 포기하는 경우라 이 손님의
+        // 몸은 좌석 위치에 없다 — standUpAndResumeWandering과 달리 즉시 비워도
+        // 안전하다.
+        vacateClaimedSeat()
         seatState = .none
         activePath = []
         seatApproachBlockedCount = 0
