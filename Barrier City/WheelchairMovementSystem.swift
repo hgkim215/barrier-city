@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 import simd
+import OSLog
 
 /// 물리 기반 차동 구동(우리 엔진) + USDA 메시를 광선으로 읽는 충돌.
 ///
@@ -10,6 +11,10 @@ import simd
 /// 위치/자세는 모두 우리가 적분하고, worldRoot를 그 역(inverse)으로 배치(world-inverse 시야).
 @MainActor
 struct WheelchairMovementSystem: System {
+
+    private static let collisionLogger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "WheelchairCollision")
 
     // 구동
     private static let pushGain: Float = 0.37  // 바퀴에 들어가는 힘(작을수록 살짝 밀어선 덜 나감)
@@ -151,9 +156,9 @@ struct WheelchairMovementSystem: System {
                               baseY: Float) -> WheelchairObstacleHit? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
                 var nearest: WheelchairObstacleHit?
-                func recordHit(distance: Float, kind: WheelchairObstacleKind) {
+                func recordHit(distance: Float, kind: WheelchairObstacleKind, position: SIMD3<Float>) {
                     if nearest == nil || distance < nearest!.distance {
-                        nearest = WheelchairObstacleHit(distance: distance, kind: kind)
+                        nearest = WheelchairObstacleHit(distance: distance, kind: kind, position: position)
                     }
                 }
                 // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
@@ -170,7 +175,7 @@ struct WheelchairMovementSystem: System {
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
                     for hit in hits where abs(hit.normal.y) < 0.5 {
                         let hitDistance = simd_distance(hit.position, logicalOrigin)
-                        recordHit(distance: hitDistance, kind: .environment)
+                        recordHit(distance: hitDistance, kind: .environment, position: hit.position)
                     }
 
                     // 환경 콜리전은 고정된 논리 맵 좌표에 있지만 NPC는 렌더링용
@@ -187,7 +192,7 @@ struct WheelchairMovementSystem: System {
                                                 query: .all, mask: AppModel.npcGroup)
                     for hit in npcHits {
                         let hitDistance = simd_distance(hit.position, sceneOrigin)
-                        recordHit(distance: hitDistance, kind: .npc)
+                        recordHit(distance: hitDistance, kind: .npc, position: hit.position)
                     }
                 }
                 return nearest
@@ -196,7 +201,8 @@ struct WheelchairMovementSystem: System {
             // 벽/NPC/넘을 수 없는 단차에 닿으면 실제 이동 속도는 모두 끊는다.
             // 시야 반동과 충돌음은 정책상 의미 있는 정적 환경 첫 충돌에만 준다.
             @MainActor
-            func stopAtObstacle(impactSpeed: Float, obstacleKind: WheelchairObstacleKind) {
+            func stopAtObstacle(impactSpeed: Float, obstacleKind: WheelchairObstacleKind,
+                                hitPosition: SIMD3<Float>? = nil) {
                 if WheelchairCollisionPolicy.shouldPlayImpactFeedback(
                     obstacleKind: obstacleKind,
                     impactSpeed: impactSpeed,
@@ -206,6 +212,13 @@ struct WheelchairMovementSystem: System {
                     motion.surgeVelocity = cappedImpact * Self.surgeGain
                     let intensity = min(1, abs(impactSpeed) / Self.impactReferenceSpeed)
                     ImpactAudio.shared.playThunk(intensity: max(0.2, intensity))
+                    // 눈에 보이는 것 없이 충돌음이 났다는 제보를 재현할 좌표를 남긴다 —
+                    // 콜리전(Cube_N)이 authoring 위치와 별개로 손으로 배치돼 있어, 가구를
+                    // 옮기면서 프록시를 안 옮기면 빈 공간에서 부딪힌 것처럼 보일 수 있다.
+                    if let hitPosition {
+                        Self.collisionLogger.notice(
+                            "환경 충돌음 재생 지점: (\(hitPosition.x), \(hitPosition.y), \(hitPosition.z)) 속도=\(impactSpeed)")
+                    }
                 }
                 motion.leftVelocity = 0
                 motion.rightVelocity = 0
@@ -319,7 +332,7 @@ struct WheelchairMovementSystem: System {
                 let contactTravel = min(requestedTravel, allowedTravel)
                 motion.positionX += leadDirX * contactTravel
                 motion.positionZ += leadDirZ * contactTravel
-                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind)
+                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind, hitPosition: obstacleHit.position)
             } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
