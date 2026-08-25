@@ -692,7 +692,13 @@ final class NPCGuestController {
                                     neighborVelocities: neighboringVelocities,
                                     separationScale: 0.5,
                                     exclusions: exclusions,
-                                    avoidObstacles: !bypassSeatCollision)
+                                    avoidObstacles: !bypassSeatCollision,
+                                    // 좌석으로 걸어가는 짧고 목적이 분명한 구간에서는
+                                    // 예측 회피를 아예 끈다 — move()의 usePredictiveAvoidance
+                                    // 주석 참고. crowdSteeredDirection(즉시 반발)과
+                                    // NPCObstacleAvoidance(하드 세이프티 넷)는 그대로
+                                    // 적용되므로 다른 손님/유저와 실제로 겹치지는 않는다.
+                                    usePredictiveAvoidance: false)
         if outcome.blocked {
             // 정적 장애물(테이블 등)은 activePath가 이미 피해서 잡은 경로라 여기서는
             // 잘 안 걸린다 — 막히는 건 대개 다른 손님이나 유저가 일시적으로 그
@@ -804,7 +810,8 @@ final class NPCGuestController {
                                separationScale: Float,
                                exclusions: [NPCGuestArea] = [],
                                avoidPlayer: Bool = true,
-                               avoidObstacles: Bool = true) -> MoveOutcome {
+                               avoidObstacles: Bool = true,
+                               usePredictiveAvoidance: Bool = true) -> MoveOutcome {
         guard let waypoint = activePath.first else {
             return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false)
         }
@@ -818,7 +825,8 @@ final class NPCGuestController {
                            separationScale: separationScale,
                            exclusions: exclusions,
                            avoidPlayer: avoidPlayer,
-                           avoidObstacles: avoidObstacles)
+                           avoidObstacles: avoidObstacles,
+                           usePredictiveAvoidance: usePredictiveAvoidance)
         guard outcome.arrived else { return outcome }
         activePath.removeFirst()
         return isFinalWaypoint
@@ -834,7 +842,8 @@ final class NPCGuestController {
                       separationScale: Float,
                       exclusions: [NPCGuestArea] = [],
                       avoidPlayer: Bool = true,
-                      avoidObstacles: Bool = true) -> MoveOutcome {
+                      avoidObstacles: Bool = true,
+                      usePredictiveAvoidance: Bool = true) -> MoveOutcome {
         guard let root = locomotionRoot else {
             return MoveOutcome(arrived: false, moved: false, blocked: false, stalled: false)
         }
@@ -871,8 +880,18 @@ final class NPCGuestController {
         // NPCObstacleAvoidance의 이웃 하드 블록도 같이 꺼지므로, 이 레이어도 같은
         // 구간에서는 끈다 — "좌석 콜리전 프록시를 관통해 마지막 한 걸음을 확실히
         // 딛는다"는 그 구간의 의도를 옆으로 미는 보정이 방해하지 않게 한다.
+        //
+        // usePredictiveAvoidance가 false면(좌석 접근 전체 — updateMovingToSeat 호출부
+        // 참고) avoidObstacles 상태와 무관하게 이 레이어를 통째로 끈다. 정지 이웃
+        // 제외/막힘 시 원래 방향 재시도/stall 즉시 탈출 등 여러 차례 개별 완화를
+        // 거쳤는데도 "좌석 근처에서 계속 서 있다"는 재현이 실기에서 반복돼, 좌석으로
+        // 걸어가는 짧고 목적이 분명한 구간에서는 예측(먼 거리에서 미리 피하기)
+        // 대신 반응형(crowdSteeredDirection의 즉시 반발)과 하드 세이프티 넷
+        // (NPCObstacleAvoidance)만으로 충분하다고 판단해 아예 끈다 — 목적지 도달을
+        // 예측 회피보다 우선한다(원 작업 지시의 "자연스러움을 위해 목적지 도달을
+        // 희생하지 않는다" 원칙).
         let preferredDirection: SIMD2<Float>
-        if avoidObstacles, !neighborVelocities.isEmpty {
+        if avoidObstacles, usePredictiveAvoidance, !neighborVelocities.isEmpty {
             let neighborKinematics = zip(neighboringPositions, neighborVelocities).map {
                 NPCNeighborKinematics(position: $0, velocity: $1)
             }
