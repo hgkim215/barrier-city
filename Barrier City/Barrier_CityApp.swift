@@ -24,6 +24,12 @@ struct Barrier_CityApp: App {
         }
         .windowResizability(.contentSize)
 
+        WindowGroup(id: "splash") {
+            SplashOverlayView()
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.4, height: 0.4, depth: 0.01, in: .meters)
+
         ImmersiveSpace(id: "wheelchair") {
             ImmersiveView()
                 .environment(appModel)

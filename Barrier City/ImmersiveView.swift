@@ -22,6 +22,7 @@ private final class ImmersiveRuntimeState {
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
+    @Environment(\.dismissWindow) private var dismissWindow
 
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "BarrierCity",
@@ -206,11 +207,13 @@ struct ImmersiveView: View {
                 try? await Task.sleep(for: minimumLoadingDuration - elapsed)
             }
             // SceneFadeOverlay를 먼저 즉시 불투명하게 만들어(애니메이션 없이) 로딩
-            // 화면(BootLoadingOverlay, 스플래시 이미지)을 걷어내도 화면이 계속 검게
+            // 화면(BootLoadingOverlay 검은 구체)을 걷어내도 화면이 계속 검게
             // 유지되게 한 뒤, fadeIn으로 매끄럽게 밝아지며 도시로 들어가는 느낌을
-            // 준다. 배경음악도 이 순간(도시 진입 시점)에 맞춰 재생한다.
+            // 준다. 배경음악도 이 순간(도시 진입 시점)에 맞춰 재생한다. 스플래시
+            // 볼륨 윈도우(ControlPanelView가 열었다)도 같은 시점에 닫는다.
             SceneFadeOverlay.shared.snapOpaque()
             BootLoadingOverlay.shared.remove()
+            dismissWindow(id: "splash")
             InteractionModel.shared.isBootLoading = false
             // 음악을 먼저 재생 시작(자체적으로 1.5초에 걸쳐 페이드인됨)한 뒤 화면을
             // 밝혀, 시야가 밝아지기 전부터 배경음이 들리기 시작하게 한다.
@@ -256,6 +259,9 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             handTracker.stopSession()
+            // 로딩 완료 전에(사용자가 바로 나가는 등) 몰입 공간이 닫히는 드문 경우에도
+            // 스플래시 윈도우가 화면에 남지 않게 한다. 이미 닫혔으면 아무 효과 없다.
+            dismissWindow(id: "splash")
             guard let immersiveSessionGeneration,
                   model.immersiveSessionDisappeared(generation: immersiveSessionGeneration) else {
                 return
