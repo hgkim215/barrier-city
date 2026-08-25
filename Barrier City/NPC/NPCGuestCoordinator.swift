@@ -103,6 +103,11 @@ final class NPCGuestCoordinator {
         /// 조정하면 전체가 같이 움직인다 — 더 올리면(+) 전원이 더 높게, 내리면(-)
         /// 전원이 더 낮게 앉는다.
         static let baselineSittingHeightOffset: Float = 0.08
+        /// 카페 테이블 상판이 실제로 있을 법한 절대 높이 범위(worldRoot 기준, m).
+        /// 이 범위를 벗어나는 테이블 그룹은 authoring 오류(WoodTable 3.8배 균일
+        /// 스케일 버그 등)로 보고 좌석 높이 기반으로 보정한다. 실측된 정상 테이블
+        /// (~0.76~0.77m)은 넉넉히 포함하고, 버그 값(~1.20m)은 확실히 배제한다.
+        static let plausibleTableSurfaceHeight: ClosedRange<Float> = 0.5...0.95
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
@@ -354,39 +359,43 @@ final class NPCGuestCoordinator {
             guard !indices.isEmpty else { return nil }
             return indices.reduce(Float(0)) { $0 + seats[$1].sittingHeightOffset } / Float(indices.count)
         }
-        let measuredHeights = tableSurfaceBoundsByGroupIndex.compactMap { $0?.max.y }.sorted()
-        if let medianHeight = measuredHeights.isEmpty ? nil : measuredHeights[measuredHeights.count / 2] {
-            let outlierTolerance: Float = 0.25
-            var clearanceSum: Float = 0
-            var clearanceCount = 0
-            for index in tableSurfaceBoundsByGroupIndex.indices {
-                guard let bounds = tableSurfaceBoundsByGroupIndex[index],
-                      abs(bounds.max.y - medianHeight) <= outlierTolerance,
-                      let seatHeight = averageSeatHeight(index) else { continue }
-                clearanceSum += bounds.max.y - seatHeight
-                clearanceCount += 1
-            }
-            let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
+        // 예전에는 "median에서 outlierTolerance 이상 벗어난 그룹"을 이상치로 봤는데,
+        // 테이블 그룹이 몇 개 안 되는 씬(예: 4개 중 2개가 WoodTable)에서는 median 자체가
+        // 정상 쪽이 아니라 부풀려진 쪽에 걸릴 수 있다 — 실측 로그로 확인된 실제 사례:
+        // WoodTable 2개(1.20m, 완전히 동일값)가 median으로 뽑히고, 정작 정상인 일반
+        // 테이블 2개(0.76m)가 "이상치"로 오판정돼 1.15m로 잘못 끌어올려졌다. 상대적
+        // 통계 대신, 카페 테이블 상판이 있을 법한 절대 높이 범위로 직접 판별한다 —
+        // WoodTable의 3.8배 스케일 버그가 만드는 값(~1.2m)은 이 범위를 확실히 벗어난다.
+        let plausibleSurfaceHeightRange: ClosedRange<Float> = Tuning.plausibleTableSurfaceHeight
+        var clearanceSum: Float = 0
+        var clearanceCount = 0
+        for index in tableSurfaceBoundsByGroupIndex.indices {
+            guard let bounds = tableSurfaceBoundsByGroupIndex[index],
+                  plausibleSurfaceHeightRange.contains(bounds.max.y),
+                  let seatHeight = averageSeatHeight(index) else { continue }
+            clearanceSum += bounds.max.y - seatHeight
+            clearanceCount += 1
+        }
+        let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
 
-            for index in tableSurfaceBoundsByGroupIndex.indices {
-                guard var bounds = tableSurfaceBoundsByGroupIndex[index] else { continue }
-                guard abs(bounds.max.y - medianHeight) > outlierTolerance else {
-                    // 디저트가 뜬 채 보고되면 이 로그로 어느 테이블 그룹이 실제로
-                    // 얼마나 표면 높이를 잘못 재고 있는지(이상치 보정이 적용 안 된
-                    // 애매한 케이스 포함) 바로 확인할 수 있다.
-                    Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이(보정 없음): \(bounds.max.y)m")
-                    continue
-                }
-                let corrected: Float
-                if let typicalClearance, let seatHeight = averageSeatHeight(index) {
-                    corrected = seatHeight + typicalClearance
-                } else {
-                    corrected = medianHeight
-                }
-                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(corrected)m")
-                bounds.max.y = corrected
-                tableSurfaceBoundsByGroupIndex[index] = bounds
+        for index in tableSurfaceBoundsByGroupIndex.indices {
+            guard var bounds = tableSurfaceBoundsByGroupIndex[index] else { continue }
+            guard !plausibleSurfaceHeightRange.contains(bounds.max.y) else {
+                // 디저트가 뜬 채 보고되면 이 로그로 어느 테이블 그룹이 실제로
+                // 얼마나 표면 높이를 잘못 재고 있는지 바로 확인할 수 있다.
+                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이(보정 없음): \(bounds.max.y)m")
+                continue
             }
+            guard let typicalClearance, let seatHeight = averageSeatHeight(index) else {
+                // 보정 기준으로 삼을 "정상" 테이블이 씬에 하나도 없으면(예: 전부
+                // WoodTable) 잘못된 상수로 덮어쓰는 대신 실측값을 그대로 둔다.
+                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 비정상(\(bounds.max.y)m)이지만 보정 기준 없음 — 원본 유지")
+                continue
+            }
+            let corrected = seatHeight + typicalClearance
+            Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(corrected)m")
+            bounds.max.y = corrected
+            tableSurfaceBoundsByGroupIndex[index] = bounds
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
