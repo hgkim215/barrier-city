@@ -13,13 +13,20 @@ struct Barrier_CityApp: App {
     @State private var appModel = AppModel()
 
     var body: some Scene {
-        WindowGroup(id: "control") {
+        WindowGroup(id: AppSceneID.start) {
             ContentView()
                 .environment(appModel)
         }
         .windowResizability(.contentSize)
+        .defaultSize(width: 1200, height: 680)
 
-        WindowGroup(id: "npc-dialogue-test") {
+        WindowGroup(id: AppSceneID.debugControl, for: DebugWindowRoute.self) { _ in
+            ControlPanelView()
+                .environment(appModel)
+        }
+        .windowResizability(.contentSize)
+
+        WindowGroup(id: AppSceneID.npcDialogueTest) {
             DialogueTurnView(controller: appModel.npcDialogue)
         }
         .windowResizability(.contentSize)
@@ -30,7 +37,7 @@ struct Barrier_CityApp: App {
         .windowStyle(.volumetric)
         .defaultSize(width: 0.4, height: 0.4, depth: 0.01, in: .meters)
 
-        ImmersiveSpace(id: "wheelchair") {
+        ImmersiveSpace(id: AppSceneID.wheelchair) {
             ImmersiveView()
                 .environment(appModel)
         }

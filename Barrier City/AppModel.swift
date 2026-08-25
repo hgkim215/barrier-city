@@ -27,6 +27,7 @@ final class AppModel {
     let rainbowSmoothiePresenter: RainbowSmoothiePresenter
     let rainbowSmoothieServing: RainbowSmoothieServingController
     let waypointPresenter = WayPointPresenter()
+    let endingCelebration = EndingCelebrationController()
     let npcDialogue: NPCDialogueController
     let npcClerk: NPCClerkController
     /// 배경으로 돌아다니는 손님 NPC들. 대화가 없는 순수 동선 담당이라 npcClerk와 분리했다.
@@ -90,18 +91,32 @@ final class AppModel {
 
     /// 몰입 공간 열기/닫기와 뷰 생명주기가 공유하는 단일 상태.
     private(set) var immersiveSessionState = ImmersiveSessionState()
+    private(set) var experienceRunTimer = ExperienceRunTimer()
     @ObservationIgnored private var npcDialogueResetGate = ImmersiveGenerationResetGate()
 
     /// 기존 손 추적·진단 코드가 읽는 호환 속성.
     var isImmersive: Bool { immersiveSessionState.isImmersive }
 
     func beginImmersiveOpen() -> Int? {
-        immersiveSessionState.beginOpen()
+        guard let generation = immersiveSessionState.beginOpen() else { return nil }
+        experienceRunTimer.start()
+        return generation
     }
 
     @discardableResult
     func completeImmersiveOpen(generation: Int, succeeded: Bool) -> Bool {
-        immersiveSessionState.completeOpen(generation: generation, succeeded: succeeded)
+        let didComplete = immersiveSessionState.completeOpen(
+            generation: generation,
+            succeeded: succeeded)
+        if didComplete, !succeeded {
+            experienceRunTimer.reset()
+        }
+        return didComplete
+    }
+
+    func completeExperience() {
+        guard experienceRunTimer.finish() else { return }
+        endingCelebration.playUntilStopped()
     }
 
     func beginImmersiveClose() -> Int? {
@@ -130,6 +145,8 @@ final class AppModel {
         let didDisappear = immersiveSessionState.disappeared(generation: generation)
         if didDisappear {
             npcDialogue.endImmersiveSession()
+            endingCelebration.reset()
+            experienceRunTimer.reset()
         }
         return didDisappear
     }

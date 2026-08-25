@@ -69,7 +69,7 @@ struct ProximityTrigger: Identifiable, Equatable {
 /// 인터랙션 튜닝 상수 단일 진실원(시뮬레이터에서 보고 조정).
 enum InteractionTuning {
     /// 문 트리거 진입 반경(m)
-    static let doorTriggerRadius: Float = 1.1
+    static let doorTriggerRadius: Float = 2.0
     /// Outdoor 공통 바닥 충돌체의 한 변 길이(m).
     static let outdoorGroundPlaneSize: Float = 16
     /// 문에서 체험 시작 지점까지의 거리. 문 트리거 바깥에서 시작하도록 한다.
@@ -79,15 +79,18 @@ enum InteractionTuning {
     /// Outdoor 스폰 위치(맵 좌표 x, z). 맵 작업 중이라 원점 고정으로 둔다.
     /// 문 앞에서 시작하게 하려면 nil로 두고 OutdoorSessionStart.positionOutsideCafe를 쓴다.
     static let outdoorSpawnPosition = SIMD2<Float>(0, 0)
+    /// Road_23과 Road_24의 작성 기준 중간 스폰 좌표(맵 좌표 x, z).
+    nonisolated static let roadMidpointFallbackSpawnPosition = SIMD2<Float>(-0.7076335, 2.2008963)
     /// 이탈 히스테리시스(m). 경계에서 패널이 깜빡이지 않도록 진입 반경 + 이 값 밖으로
-    /// 나가야 닫힌다.
-    nonisolated static let exitHysteresis: Float = 0.4
+    /// 나가야 닫힌다. (이탈 거리 = 2.0 + 0.5 = 2.5m)
+    nonisolated static let exitHysteresis: Float = 0.5
     /// 패널 표시 높이(m, 맵 좌표 y). 키오스크 빌보드 폴백에서 사용.
     static let panelHeight: Float = 1.7
     /// 문 선택 패널을 사용자 눈앞 정면에 두는 content-root 월드 좌표(m).
-    /// doorTriggerRadius(1.1)보다 가까워야 한다. 이전에 -1.2였을 때는 트리거가 뜨자마자
-    /// 문(도어) 메시가 패널보다 카메라에 더 가까워져 패널이 문 안쪽에 가려 보이지 않았다.
-    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.45, -0.6)
+    /// 시뮬레이터 정면 시야각과 실기 직접 터치 높이를 모두 만족하는 높이(1.35m)와 거리(0.60m).
+    nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.35, -0.60)
+    /// 문 선택 패널을 사용자의 시선 쪽으로 비스듬히 기울이는 상향 틸트 각도(라디안, 약 10도).
+    nonisolated static let doorPromptTiltAngleRadians: Float = 0.175
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.

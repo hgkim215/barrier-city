@@ -14,43 +14,45 @@ struct EntryPromptView: View {
         // @Observable 싱글턴: body에서 읽는 프로퍼티가 관찰 의존성이 된다.
         let im = InteractionModel.shared
 
-        VStack(spacing: 30) {
+        VStack(spacing: 24) {
             Text(im.activeTrigger?.prompt ?? "")
-                .font(.largeTitle).bold()
+                .font(.system(size: 26, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
 
             if let error = im.transitionError {
                 Text(error)
-                    .font(.title3)
+                    .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             }
 
-            HStack(spacing: 22) {
+            HStack(spacing: 16) {
                 Button {
                     im.dismissActive()
                 } label: {
                     Text(im.activeTrigger?.cancelLabel ?? "아니요")
-                        .font(.title2)
-                        .frame(minWidth: 170)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
                 }
                 .buttonStyle(.bordered)
+                .hoverEffect(.highlight)
 
                 Button {
                     SceneSwitcher.requestIndoorTransition()
                 } label: {
                     Text(im.activeTrigger?.confirmLabel ?? "예")
-                        .font(.title2)
-                        .frame(minWidth: 170)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
                 }
                 .buttonStyle(.borderedProminent)
+                .hoverEffect(.highlight)
             }
             .disabled(im.isTransitioning)
         }
-        .padding(56)
-        .frame(width: 760)
-        .glassBackgroundEffect()
+        .padding(36)
+        .frame(width: 520)
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 }

@@ -99,15 +99,25 @@ struct ControlPanelView: View {
                           systemImage: "xmark.circle.fill")
                 }
             case .closed, .opening:
-                Button {
-                    Task { @MainActor in
-                        _ = await openImmersiveSpaceIfNeeded()
+                VStack(spacing: 8) {
+                    Button {
+                        openWindow(id: AppSceneID.start)
+                    } label: {
+                        Label("시작 화면 열기 (정면 정렬)", systemImage: "play.circle.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label(model.immersiveSessionState.controlTitle,
-                          systemImage: "figure.roll")
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        Task { @MainActor in
+                            _ = await openImmersiveSpaceIfNeeded()
+                        }
+                    } label: {
+                        Label("몰입 공간 직접 열기 (디버그 창 기준)", systemImage: "figure.roll")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
             }
 
             if let immersiveError {
@@ -118,7 +128,7 @@ struct ControlPanelView: View {
             }
 
             Button {
-                openWindow(id: "npc-dialogue-test")
+                openWindow(id: AppSceneID.npcDialogueTest)
                 Task { @MainActor in
                     await startNPCConversationForDevelopment()
                 }
@@ -393,7 +403,7 @@ struct ControlPanelView: View {
         // 로딩 내내 앞에 떠 있게 한다. 성공 시의 닫기는 ImmersiveView가 로딩
         // 완료 시점에 한다.
         openWindow(id: "splash")
-        switch await openSpace(id: "wheelchair") {
+        switch await openSpace(id: AppSceneID.wheelchair) {
         case .opened:
             model.completeImmersiveOpen(generation: generation, succeeded: true)
             return true

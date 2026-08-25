@@ -401,8 +401,14 @@ struct WheelchairMovementSystem: System {
             let navgRaw = simd_length(nSum) > 0.001 ? simd_normalize(nSum) : SIMD3<Float>(0, 1, 0)
             // 5점 공간 평균은 한 프레임 안의 격자 노이즈만 지운다. 겹치는 콜라이더나 메시
             // 이음매 근처에서 매 프레임 다른 표면이 걸리는 시간축 떨림은 저역통과로 흡수한다.
-            let normalBlend = min(1, 18 * dt)
-            motion.groundNormal = simd_normalize(simd_mix(motion.groundNormal, navgRaw, SIMD3(repeating: normalBlend)))
+            let normalBlend = min(1, max(0, 18 * dt))
+            let mixedNormal = simd_mix(motion.groundNormal, navgRaw, SIMD3(repeating: normalBlend))
+            let mixedLen = simd_length(mixedNormal)
+            if mixedLen > 0.001 && !mixedNormal.x.isNaN {
+                motion.groundNormal = mixedNormal / mixedLen
+            } else {
+                motion.groundNormal = SIMD3<Float>(0, 1, 0)
+            }
             let navg = motion.groundNormal
             let ny = max(navg.y, 0.15)
             let slopePitch = atan(-(navg.x * dirX + navg.z * dirZ) / ny) * Self.tiltGain
@@ -465,6 +471,8 @@ struct WheelchairMovementSystem: System {
     @MainActor
     private static func applyWorld(_ worldRoot: Entity, model: AppModel) {
         let motion = model.motion
+        guard !motion.heading.isNaN, !motion.pitch.isNaN, !motion.roll.isNaN,
+              !motion.positionX.isNaN, !motion.positionZ.isNaN else { return }
         let invYaw = simd_quatf(angle: -motion.heading, axis: [0, 1, 0])
         let invPitch = simd_quatf(angle: -motion.pitch, axis: [1, 0, 0])
         let invRoll = simd_quatf(angle: motion.roll, axis: [0, 0, 1])
@@ -473,6 +481,7 @@ struct WheelchairMovementSystem: System {
         var pe = SIMD3<Float>(motion.positionX, motion.chairHeight + motion.bumpOffset - AppModel.viewHeightOffset, motion.positionZ)
         pe.x -= dirX * motion.surgeOffset
         pe.z -= dirZ * motion.surgeOffset
+        guard !pe.x.isNaN, !pe.y.isNaN, !pe.z.isNaN else { return }
         worldRoot.transform = Transform(scale: .one, rotation: rot, translation: rot.act(-pe))
     }
 

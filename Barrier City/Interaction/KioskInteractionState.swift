@@ -49,13 +49,8 @@ struct KioskInteractionState: Equatable {
         source: KioskAttemptSource
     ) -> KioskCategorySelectionResult {
         guard inputEnabled else { return .ignored }
-        if category == .other {
-            barrierVisible = true
-            return .blocked
-        }
-        selectedCategory = category
-        selectedMenuID = nil
-        return .selected
+        barrierVisible = true
+        return .blocked
     }
 
     @discardableResult
@@ -67,7 +62,7 @@ struct KioskInteractionState: Equatable {
 
     @discardableResult
     mutating func selectMenu(id: String) -> Bool {
-        guard inputEnabled, selectedCategory != .other else { return false }
+        guard inputEnabled else { return false }
         selectedMenuID = id
         return true
     }

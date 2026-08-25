@@ -92,6 +92,13 @@ enum InteractionSetup {
         // 여기서 0이 아닌 위치로 스폰시키면 worldRoot가 그 위치의 역변환만큼 밀려나
         // 첫 진입 시 카페 전체가 유저 기준으로 어긋난 채 나타난다. 문 앞 오프셋
         // 스폰(positionOutsideCafe)은 그래서 첫 진입에는 쓰지 않는다.
+        //
+        // develop 브랜치의 "도로 스폰 위치"(Road_23/Road_24 중간점, 94fdfd8 이후
+        // 294a7d6에서 도입) 기능은 이 (0,0) 고정 버그 수정과 정면으로 충돌해
+        // develop → yslee 병합 시 의도적으로 보류했다. 폴백 좌표(roadMidpointFallbackSpawnPosition)를
+        // 포함한 관련 상수/헬퍼(OutdoorSessionStart.roadMidpointPosition,
+        // InteractionTuning.roadMidpointFallbackSpawnPosition)는 코드에 남겨 뒀으니,
+        // 재검토 시 여기서 startPosition만 다시 연결하면 된다.
         let startPosition = InteractionTuning.outdoorSpawnPosition
 
         OutdoorSessionStart.reset(
@@ -239,8 +246,11 @@ enum InteractionSetup {
             toward: .zero,
             kind: t.kind)
         panel.setPosition(worldPos, relativeTo: nil)
-        // 3) 사용자를 향하도록 yaw 빌보드.
+        // 3) 사용자를 향하도록 yaw 빌보드 및 상향 틸트 적용.
         let yaw = atan2(-worldPos.x, -worldPos.z)
-        panel.setOrientation(simd_quatf(angle: yaw, axis: [0, 1, 0]), relativeTo: nil)
+        let yawQuat = simd_quatf(angle: yaw, axis: [0, 1, 0])
+        let pitchAngle = (t.kind == .yesNoPrompt) ? InteractionTuning.doorPromptTiltAngleRadians : 0
+        let pitchQuat = simd_quatf(angle: pitchAngle, axis: [1, 0, 0])
+        panel.setOrientation(yawQuat * pitchQuat, relativeTo: nil)
     }
 }

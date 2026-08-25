@@ -99,5 +99,40 @@ struct OutdoorSessionStartTests {
         expectNear(state.posZ, 0, "reset applies outdoor Z")
         expectNear(state.heading, .pi, "reset applies cafe-facing heading")
 
+        let fallbackSpawn = SIMD2<Float>(-0.7076335, 2.2008963)
+        let midpointBoth = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: SIMD2<Float>(-2.7076335, 2.2008963),
+            road24Position: SIMD2<Float>(1.2923665, 2.2008963),
+            fallbackPosition: fallbackSpawn)
+        expectNear(midpointBoth.x, -0.7076335, "midpoint X is centered between Road_23 and Road_24")
+        expectNear(midpointBoth.y, 2.2008963, "midpoint Z is preserved")
+
+        let midpointOnly23 = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: SIMD2<Float>(-2.7076335, 2.2008963),
+            road24Position: nil,
+            fallbackPosition: fallbackSpawn)
+        expectNear(midpointOnly23.x, -2.7076335, "single Road_23 is used when Road_24 missing")
+
+        let midpointOnly24 = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: nil,
+            road24Position: SIMD2<Float>(1.2923665, 2.2008963),
+            fallbackPosition: fallbackSpawn)
+        expectNear(midpointOnly24.x, 1.2923665, "single Road_24 is used when Road_23 missing")
+
+        let midpointFallback = OutdoorSessionStart.roadMidpointPosition(
+            road23Position: nil,
+            road24Position: nil,
+            fallbackPosition: fallbackSpawn)
+        expectNear(midpointFallback.x, -0.7076335, "fallback X applied when both missing")
+        expectNear(midpointFallback.y, 2.2008963, "fallback Z applied when both missing")
+
+        let roadPose = OutdoorSessionStart.pose(
+            startPosition: fallbackSpawn,
+            doorCenter: SIMD2<Float>(-0.16957682, -5.889111),
+            fallbackDoorCenter: SIMD2<Float>(-0.16957682, -5.889111))
+        // direction is towards negative Z, so heading is nearly 0 / 2pi (facing -Z)
+        expectNear(-cos(roadPose.heading), -0.997793, "road spawn heading faces negative Z (cafe door)")
+
+        print("OutdoorSessionStartTests: PASS")
     }
 }

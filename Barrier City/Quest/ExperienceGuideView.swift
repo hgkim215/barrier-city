@@ -3,11 +3,16 @@ import SwiftUI
 struct ExperienceGuideView: View {
     let model: GuideFlowModel
     let serving: RainbowSmoothieServingController?
+    let elapsedTime: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
-    init(model: GuideFlowModel = .shared, serving: RainbowSmoothieServingController? = nil) {
+    init(model: GuideFlowModel = .shared,
+         serving: RainbowSmoothieServingController? = nil,
+         elapsedTime: String = "00:00") {
         self.model = model
         self.serving = serving
+        self.elapsedTime = elapsedTime
     }
 
     var body: some View {
@@ -49,7 +54,9 @@ struct ExperienceGuideView: View {
                     remainingPreparationSeconds: remainingSeconds
                 )
             case .completionAnnouncement:
-                ExperienceCompletionView(onConfirm: model.confirmCompletion)
+                ExperienceCompletionView(
+                    elapsedTime: elapsedTime,
+                    onConfirm: finishExperience)
             case .completed:
                 MissionListView(
                     steps: QuestModel.shared.steps,
@@ -61,6 +68,14 @@ struct ExperienceGuideView: View {
         .id(String(describing: model.phase))
         .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .animation(.easeOut(duration: 0.22), value: model.phase)
+    }
+
+    private func finishExperience() {
+        AppModel.current?.endingCelebration.stop()
+        model.confirmCompletion()
+        Task { @MainActor in
+            await dismissImmersiveSpace()
+        }
     }
 }
 
