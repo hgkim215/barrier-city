@@ -91,8 +91,13 @@ final class NPCGuestController {
         /// nearbyEscapeTarget으로 전환한다 — 막다른 구석에 몰려 무작위 후보가
         /// 계속 같은 방향으로만 뽑히는 경우까지 확실히 벗어나게 하는 마지막 안전망.
         static let stuckEscapeThreshold = 3
-        /// 좌석 도착 판정 거리.
-        static let seatArrivalDistance: Float = 0.08
+        /// 좌석 도착 판정 거리. 8cm처럼 너무 좁으면 다른 손님이나 좌석 주변
+        /// 콜리전에 조금만 걸려도 이 문턱 안으로 못 들어와 계속 재시도만 하다
+        /// vacate/stall 경로를 타게 된다 — 여유를 넉넉히 둬 "거의 다 왔으면
+        /// 앉는다"로 완화한다. seatCollisionBypassDistance(0.6m)보다는 항상
+        /// 작아야 한다(그래야 도착 판정 전에 레이캐스트 회피가 이미 꺼진 구간에
+        /// 들어와 있다).
+        static let seatArrivalDistance: Float = 0.3
         /// 좌석 콜리전 프록시를 넘는 마지막 구간에서만 장애물 레이를 끈다. 좌석까지
         /// 먼 구간은 계속 벽/가구 충돌을 검사해 방을 가로질러 관통하지 못하게 한다.
         static let seatCollisionBypassDistance: Float = 0.6
@@ -715,7 +720,11 @@ final class NPCGuestController {
             seatState = .sitting
             face(direction: seat.facing, deltaTime: 999)
             playAnimation(.sitting)
-            locomotionRoot?.position.y = seat.sittingHeightOffset
+            // seatArrivalDistance(0.3m)가 넉넉해진 만큼, 도착 판정 시점의 실제 위치는
+            // 좌석 중심에서 최대 그 거리만큼 떨어져 있을 수 있다. 그 위치 그대로
+            // 앉으면 의자 옆 허공에 앉은 것처럼 보이므로, 착석 순간 좌석 위치로
+            // 스냅한다(placeSeated가 입장 시 이미 하는 것과 동일).
+            locomotionRoot?.position = SIMD3(seat.position.x, seat.sittingHeightOffset, seat.position.y)
             pendingSeatedArrivalIndex = claimedSeatIndex
             // cycler만 자동으로 다시 일어난다 — seatedPool은 영구 착석이라 타이머를
             // 두지 않는다(sittingRemaining이 nil로 남아 update()의 .sitting 분기가
