@@ -211,6 +211,13 @@ final class NPCGuestController {
     /// 다른 손님이나 유저가 일시적으로 그 자리에 서 있는 경우다 — 몇 번은 그대로
     /// 재시도하고, 계속 막히면 그제서야 자리를 반납한다.
     private var seatApproachBlockedCount = 0
+    /// 이번 프레임까지의 "실제" 이동 속도(m/s, 바닥 평면). commanded 속도
+    /// (movementProfile.moveSpeed)가 아니라 update() 전후 위치 변화량 기반으로
+    /// 매 프레임 갱신된다(updateVelocity 참고) — 장애물에 막혀 실제로는 거의 못
+    /// 움직이는 NPC가 다른 NPC의 예측 회피(NPCGuestLocalAvoidance)에는 "빠르게
+    /// 다가오는 대상"으로 잘못 보이지 않게 하기 위함이다. NPCGuestCoordinator.update가
+    /// 프레임 시작 시점에 전원의 값을 한 번에 스냅샷해 이웃 배열로 넘긴다.
+    private(set) var velocity: SIMD2<Float> = .zero
     private static var cachedSighResources: [NPCGuestGender: AudioFileResource] = [:]
 
     init(name: String, role: NPCGuestRole = .cycler, gender: NPCGuestGender = .female) {
@@ -361,6 +368,7 @@ final class NPCGuestController {
         reservedSeat = nil
         consecutiveBlockedCount = 0
         seatApproachBlockedCount = 0
+        velocity = .zero
     }
 
     var currentPosition: SIMD2<Float> {
@@ -398,9 +406,16 @@ final class NPCGuestController {
                facing facingTarget: SIMD2<Float>?,
                playerPosition: SIMD2<Float>,
                neighboringPositions: [SIMD2<Float>],
+               neighboringVelocities: [SIMD2<Float>],
                occupiedAnchors: [SIMD2<Float>],
                allowNewWander: Bool) {
         guard locomotionRoot != nil else { return }
+
+        // update()의 어느 분기로 빠지든(착석/기립/대기줄/배회/좌석 이동) 공통으로
+        // "이번 호출에서 실제로 얼마나 움직였는지"를 재서 velocity를 갱신한다.
+        // 각 분기마다 따로 호출하는 대신 defer 하나로 모든 반환 경로를 커버한다.
+        let positionBeforeUpdate = currentPosition
+        defer { updateVelocity(from: positionBeforeUpdate, deltaTime: deltaTime) }
 
         switch seatState {
         case .movingToSeat:
@@ -408,6 +423,7 @@ final class NPCGuestController {
                                movementArea: wanderArea,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
+                               neighboringVelocities: neighboringVelocities,
                                exclusions: staffExclusions,
                                pathGrid: pathGrid)
             return
@@ -460,6 +476,7 @@ final class NPCGuestController {
                                arrivalDistance: NPCGuestTuning.queueArrivalDistance,
                                playerPosition: playerPosition,
                                neighboringPositions: neighboringPositions,
+                               neighborVelocities: neighboringVelocities,
                                separationScale: 0.35,
                                exclusions: staffExclusions,
                                avoidPlayer: false)
@@ -507,6 +524,7 @@ final class NPCGuestController {
                                     arrivalDistance: NPCGuestTuning.arrivalDistance,
                                     playerPosition: playerPosition,
                                     neighboringPositions: neighboringPositions,
+                                    neighborVelocities: neighboringVelocities,
                                     separationScale: 1,
                                     exclusions: exclusions)
         if outcome.blocked {
@@ -615,6 +633,7 @@ final class NPCGuestController {
                                     movementArea: NPCGuestArea,
                                     playerPosition: SIMD2<Float>,
                                     neighboringPositions: [SIMD2<Float>],
+                                    neighboringVelocities: [SIMD2<Float>],
                                     exclusions: [NPCGuestArea],
                                     pathGrid: NPCGuestPathfinder.WalkableGrid?) {
         guard let seat = claimedSeat else { seatState = .none; return }
@@ -629,6 +648,7 @@ final class NPCGuestController {
                                     arrivalDistance: NPCGuestTuning.seatArrivalDistance,
                                     playerPosition: playerPosition,
                                     neighboringPositions: neighboringPositions,
+                                    neighborVelocities: neighboringVelocities,
                                     separationScale: 0.5,
                                     exclusions: exclusions,
                                     avoidObstacles: !bypassSeatCollision)
@@ -713,6 +733,7 @@ final class NPCGuestController {
                                arrivalDistance: Float,
                                playerPosition: SIMD2<Float>,
                                neighboringPositions: [SIMD2<Float>],
+                               neighborVelocities: [SIMD2<Float>] = [],
                                separationScale: Float,
                                exclusions: [NPCGuestArea] = [],
                                avoidPlayer: Bool = true,
@@ -726,6 +747,7 @@ final class NPCGuestController {
                            arrivalDistance: isFinalWaypoint ? arrivalDistance : NPCGuestTuning.arrivalDistance,
                            playerPosition: playerPosition,
                            neighboringPositions: neighboringPositions,
+                           neighborVelocities: neighborVelocities,
                            separationScale: separationScale,
                            exclusions: exclusions,
                            avoidPlayer: avoidPlayer,
@@ -741,6 +763,7 @@ final class NPCGuestController {
                       movementArea: NPCGuestArea,
                       arrivalDistance: Float, playerPosition: SIMD2<Float>,
                       neighboringPositions: [SIMD2<Float>],
+                      neighborVelocities: [SIMD2<Float>] = [],
                       separationScale: Float,
                       exclusions: [NPCGuestArea] = [],
                       avoidPlayer: Bool = true,
@@ -842,6 +865,19 @@ final class NPCGuestController {
         // 목적지를 다시 지워버리거나, 다음 프레임에 남은 pauseRemaining 때문에
         // "즉시 방향 전환"이 지연될 수 있다.
         return MoveOutcome(arrived: step >= distance, moved: moved, blocked: isBlocked || isStalled)
+    }
+
+    /// update() 호출 전후의 실제 위치 변화량을 deltaTime으로 나눠 velocity를 갱신한다.
+    /// commanded 속도(movementProfile.moveSpeed)를 그대로 쓰지 않는 이유는 velocity
+    /// 프로퍼티 주석 참고. 가벼운 지수 평활(NPCGuestLocalAvoidance.Tuning.
+    /// velocitySmoothing)만 적용해 한 프레임짜리 순간 튐은 줄이되, 실제로 방향을 튼
+    /// 반응까지 느려 보이게 하지는 않는다.
+    private func updateVelocity(from previousPosition: SIMD2<Float>, deltaTime: Float) {
+        guard deltaTime > 0.0001 else { return }
+        let instantVelocity = (currentPosition - previousPosition) / deltaTime
+        guard instantVelocity.x.isFinite, instantVelocity.y.isFinite else { return }
+        let alpha = min(1, NPCGuestLocalAvoidance.Tuning.velocitySmoothing * deltaTime)
+        velocity += (instantVelocity - velocity) * alpha
     }
 
     /// 목표 방향에 개인 공간 반발력을 섞는다. 완전 정면 충돌 시에는 손님별 좌/우

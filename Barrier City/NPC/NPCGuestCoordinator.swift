@@ -836,8 +836,13 @@ final class NPCGuestCoordinator {
 
         let orderedQueuers = queuerIndices.sorted()
         // 프레임 시작 시 스냅샷을 만들어 업데이트 순서에 따라 뒤쪽 NPC만 더 강하게
-        // 반응하는 편향을 없앤다.
+        // 반응하는 편향을 없앤다. velocities도 같은 이유로 같이 스냅샷한다 —
+        // guest 1의 update()가 이미 velocity를 갱신한 뒤에 guest 2가 그 새 값을
+        // 보게 되면, 프레임 안에서 먼저 갱신된 손님만 더 "최신"으로 반영되는
+        // 순서 의존적 결과가 나온다(NPCGuestLocalAvoidance의 예측 회피가 이
+        // 값을 쓴다 — Task 1/§NPCGuestLocalAvoidance 참고).
         let positions = guests.map(\.currentPosition)
+        let velocities = guests.map(\.velocity)
         let anchors = guests.map(\.crowdAnchor)
         // 카페가 한꺼번에 다 같이 돌아다니는 것처럼 보이지 않도록, 동시에 Walk 중인
         // 인원을 이 프레임 시작 시점 기준으로 세어 최대치를 넘지 않게 한다. 이미
@@ -855,6 +860,9 @@ final class NPCGuestCoordinator {
             let neighboringPositions = positions.enumerated().compactMap {
                 $0.offset == index ? nil : $0.element
             }
+            let neighboringVelocities = velocities.enumerated().compactMap {
+                $0.offset == index ? nil : $0.element
+            }
             let occupiedAnchors = anchors.enumerated().compactMap {
                 $0.offset == index ? nil : $0.element
             }
@@ -868,6 +876,7 @@ final class NPCGuestCoordinator {
                         facing: facing,
                         playerPosition: playerPosition,
                         neighboringPositions: neighboringPositions,
+                        neighboringVelocities: neighboringVelocities,
                         occupiedAnchors: occupiedAnchors,
                         allowNewWander: activeWalkerCount < Tuning.maxConcurrentWalkers)
             if guest.isWalking != wasWalking {
