@@ -64,20 +64,11 @@ final class NPCGuestCoordinator {
         /// 빈자리 없이 인접하게 채우려 한다. 일반 2~4인 테이블은 그보다 훨씬
         /// 작아서 이 문턱을 넘지 않는다.
         static let communalTableSeatThreshold = 6
-        /// cycler가 입장 즉시 확정 배정받은 좌석 근처(반경 이내)에 스폰돼, 배회 없이
-        /// 곧장 좌석으로 걸어가게 한다. 착석 + 디저트 생성이 입장 후 10초 안에 보이도록
-        /// 보장하기 위한 값으로, moveSpeed 최저치(0.68m/s)로도 최악의 경우(4.0m) 약
-        /// 5.9초면 도착해 회전·군중 회피 여유를 남긴다. 이전엔 5초 기준으로 1.2m였는데,
-        /// 기준이 늘어난 만큼 반경도 넓혀 방을 가로질러 걸어오는 좀 더 자연스러운
-        /// 그림이 나오게 했다.
-        static let cyclerSpawnRadius: Float = 4.0
         /// cycler 중 이 비율만 입장 즉시 좌석으로 직행하고, 나머지는 배회를 한 바퀴
         /// 마친 뒤 좌석으로 향한다(reserveSeat) — 전원이 일제히 좌석으로 직행하면
         /// 너무 빨리 앉는 것처럼 보인다는 피드백으로, 일부는 방을 둘러보다 앉는
         /// 자연스러운 그림을 섞는다.
         static let cyclerImmediateSeatChance: Float = 0.4
-        /// 테이블·의자 군집 주변을 배회 목적지에서 제외할 때 두는 여백(m).
-        static let seatClusterExclusionMargin: Float = 0.9
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
@@ -191,7 +182,8 @@ final class NPCGuestCoordinator {
     /// "AreaK"/"AreaB"에서 제외 영역을 계산한다. 좌석은 씬을 스캔해 동적으로 찾고,
     /// 손님마다 역할(항상 배회/배회-착석 순환/입장부터 착석 시도)을 무작위로 나눈다.
     func enterIndoor(worldRoot: Entity, indoorMap: Entity,
-                     cakeTemplate: Entity? = nil, latteTemplate: Entity? = nil) {
+                     cakeTemplate: Entity? = nil, latteTemplate: Entity? = nil,
+                     collisionCubeAreas: [SceneEntityPreparation.CapturedArea] = []) {
         tearDownForOutdoor()
 
         self.worldRoot = worldRoot
@@ -203,7 +195,14 @@ final class NPCGuestCoordinator {
             resolveArea(named: $0, in: indoorMap, relativeTo: worldRoot,
                         margin: -Tuning.restrictedAreaClearance)
         }
-        exclusionAreas = staffAreaExclusions
+        // NPC 접근 금지 영역은 AreaK/AreaB에 더해, 휠체어가 실제로 충돌하는 것과
+        // 같은 /Root/collision 밑 Cube~Cube_11 콜리전 프록시를 그대로 쓴다. 테이블
+        // 좌석 바운즈에 임의 여백(예전 seatClusterExclusionMargin)을 더해 추정하는
+        // 대신, authored된 실제 형상을 근거로 삼는다.
+        let obstacleExclusions = collisionCubeAreas.compactMap { captured in
+            finalizeCapturedArea(captured, indoorMap: indoorMap, worldRoot: worldRoot)
+        }
+        exclusionAreas = staffAreaExclusions + obstacleExclusions
         // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지
         // 않도록 작은 반경을 배회 제외 구역에 더한다.
         if let kiosk = indoorMap.findEntity(named: "Kiosk") {
@@ -313,14 +312,6 @@ final class NPCGuestCoordinator {
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
-        // 테이블마다 각자 좌석 주변에만 작은 배회 제외 구역을 둔다. 모든 좌석을 하나의
-        // 큰 바운딩 박스로 묶으면(예전 방식) 방 전체를 뒤덮을 만큼 넓어져 배회 가능한
-        // 공간이 거의 안 남아 NPC가 목적지를 못 찾고 그 자리에 멈춰있는 문제가 있었다.
-        for group in seatTableGroups {
-            if let exclusion = makeSeatClusterExclusion(from: group.map { seats[$0] }) {
-                exclusionAreas.append(exclusion)
-            }
-        }
 
         var roles: [NPCGuestRole] = []
         roles += Array(repeating: .alwaysWandering, count: Tuning.wandererCount)
@@ -360,24 +351,21 @@ final class NPCGuestCoordinator {
                     guest.placeSeated(entity: entity, worldRoot: worldRoot, seatIndex: seatIndex, seat: seats[seatIndex])
                     spawnDessert(forSeatIndex: seatIndex)
                 } else if role == .cycler, let seatIndex = pickSeatIndex() {
-                    // 배회하다 우연히 좌석을 원할 확률(sitDesireChance)에 기대면 유저가
-                    // 카페에 들어온 뒤 몇 초 안에 착석·디저트가 보인다는 보장이 안 된다.
-                    // 그래서 cycler는 입장 즉시 이 좌석을 확정 배정받고, 좌석 바로 뒤
-                    // (테이블 반대쪽, cyclerSpawnRadius 이내)에서만 스폰해 이동 거리를
-                    // 짧게 둔다. 도중에 실제 장애물에 막혀 updateMovingToSeat가 자리를
-                    // 반납하면(seatState = .none), 기존 배회→확률적 재시도 경로가
-                    // 자연스럽게 이어받는다. 디저트는 여기서 바로 놓지 않는다 —
+                    // cycler는 다른 배회 손님과 똑같이 좌석과 무관하게 무작위 지점에
+                    // 먼저 스폰한 뒤(randomSpawnPoint), 그 다음 좌석을 배정한다 —
+                    // 좌석 근처에서 스폰해 이동 거리를 짧게 두던 예전 방식(cyclerSpawnPoint)은
+                    // 스폰 위치를 특정 좌석에 묶어, 여러 cycler가 같은 좌석 주변에
+                    // 몰리는 문제와도 얽혀 있었다. 디저트는 여기서 바로 놓지 않는다 —
                     // update()가 takeSeatedArrivalSeatIndex()로 실제 도착을 확인한
                     // 뒤에 놓아야, 걸어가다 막혀 자리를 반납해도 아무도 없는 테이블에
                     // 디저트만 남는 일이 없다.
                     //
                     // 전원이 곧장 좌석으로 직행하면 너무 빨리 앉는 것처럼 보여,
                     // cyclerImmediateSeatChance 비율만 즉시 걸어가고 나머지는 배회를
-                    // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat) — moveSpeed
-                    // 최저치(0.68m/s)로도 최악의 경우(4.0m) 약 5.9초면 도착해 10초
-                    // 기준 안에서 여유가 있다.
+                    // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat).
                     let seat = seats[seatIndex]
-                    let spawn = cyclerSpawnPoint(behind: seat, in: floorArea, excluding: exclusionAreas)
+                    let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
+                                                 keepingAwayFrom: spawnedPositions)
                     seatOccupants[seatIndex] = guests.count
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
@@ -590,21 +578,27 @@ final class NPCGuestCoordinator {
         return queue
     }
 
-    /// 모든 좌석을 감싸는 AABB에 여백을 더해 배회 목적지에서 제외한다. 배회 중인
-    /// 손님이 앉아있는 손님이나 테이블을 관통해 걷지 않도록 하기 위함이다. 좌석에
-    /// 실제로 다가가는 착석 이동(move toward seat.position)은 exclusionAreas를
-    /// 확인하지 않으므로 이 제외 구역의 영향을 받지 않는다.
-    private func makeSeatClusterExclusion(from seats: [GuestSeat]) -> NPCGuestArea? {
-        guard !seats.isEmpty else { return nil }
-        let xs = seats.map(\.position.x)
-        let zs = seats.map(\.position.y)
-        guard let minX = xs.min(), let maxX = xs.max(),
-              let minZ = zs.min(), let maxZ = zs.max() else { return nil }
-        let margin = Tuning.seatClusterExclusionMargin
-        let center = SIMD2<Float>((minX + maxX) * 0.5, (minZ + maxZ) * 0.5)
-        let halfWidth = (maxX - minX) * 0.5 + margin
-        let halfDepth = (maxZ - minZ) * 0.5 + margin
-        return NPCGuestArea(center: center, axisU: SIMD2(halfWidth, 0), axisV: SIMD2(0, halfDepth))
+    /// SceneEntityPreparation.captureAreas가 indoorMap 자신을 기준으로 캡처해 둔
+    /// 값을(prepareVisible이 콜리전 메시를 지우기 전에 잰 것) worldRoot 기준
+    /// NPCGuestArea로 마무리한다. AreaK/AreaB를 만드는 resolveArea와 같은 투영
+    /// 방식이지만, 이미 반축 끝점(axisEndpoints)까지 캡처돼 있어 그 지점들만
+    /// worldRoot로 다시 변환하면 된다 — indoorMap이 이 시점엔 이미 worldRoot에
+    /// 붙어 있어야 한다(NPCGuestCoordinator.enterIndoor 호출 시점 기준 항상 그렇다).
+    private func finalizeCapturedArea(
+        _ captured: SceneEntityPreparation.CapturedArea,
+        indoorMap: Entity,
+        worldRoot: Entity
+    ) -> NPCGuestArea? {
+        let worldCenter3 = indoorMap.convert(position: captured.center, to: worldRoot)
+        let worldCenter = SIMD2<Float>(worldCenter3.x, worldCenter3.z)
+        let projected = captured.axisEndpoints.map { point -> SIMD2<Float> in
+            let worldPoint = indoorMap.convert(position: point, to: worldRoot)
+            return SIMD2(worldPoint.x - worldCenter.x, worldPoint.z - worldCenter.y)
+        }.sorted { simd_length_squared($0) > simd_length_squared($1) }
+        guard projected.count >= 2,
+              simd_length(projected[0]) > 0.001,
+              simd_length(projected[1]) > 0.001 else { return nil }
+        return NPCGuestArea(center: worldCenter, axisU: projected[0], axisV: projected[1])
     }
 
     /// 제외 영역을 피하고, 이미 배치된 손님들과도 최소 거리를 두는 스폰 지점을 고른다.
@@ -636,30 +630,6 @@ final class NPCGuestCoordinator {
         return guaranteedFallbackSpawn(near: area.center, in: area, excluding: exclusions)
     }
 
-    /// cycler를 좌석 반대쪽(테이블에서 먼 쪽)에 스폰하되, 그 지점이 제외 구역(자기
-    /// 테이블의 좌석 클러스터 포함) 안에 떨어지지 않게 한다. seatClusterExclusionMargin이
-    /// 좌석 위치를 중심으로 한 축 정렬 박스라, facing이 대각선이거나 테이블이 넓으면
-    /// cyclerSpawnRadius 안의 거리로는 못 벗어나는 경우가 있었다 — 그러면 스폰 시점부터
-    /// 자기 테이블의 제외 구역 안에 갇혀 배회 목적지를 하나도 못 찾고(randomWanderTarget이
-    /// 매번 경로 교차로 후보를 버림) 영원히 Idle로 멈춰, 예약된 좌석에 결국 못 앉았다.
-    private func cyclerSpawnPoint(behind seat: GuestSeat,
-                                  in area: NPCGuestArea,
-                                  excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
-        for attempt in 0..<24 {
-            // 처음 몇 번은 원래 반경 안에서, 그래도 못 벗어나면 점점 더 멀리 밀어낸다.
-            let radius = attempt < 8 ? Tuning.cyclerSpawnRadius : Tuning.cyclerSpawnRadius * 3
-            let distance = Float.random(in: 1.0...radius)
-            let candidate = seat.position - seat.facing * distance
-            guard isSafeSpawn(candidate, in: area, excluding: exclusions) else { continue }
-            return candidate
-        }
-        let preferred = seat.position - seat.facing * Tuning.cyclerSpawnRadius
-        if let gridPoint = safestGridPoint(in: area, excluding: exclusions, score: {
-            -simd_distance($0, preferred)
-        }) { return gridPoint }
-        Self.seatingLogger.error("cycler 스폰 탐색 441회 전부 실패 — 최후 폴백으로 배치")
-        return guaranteedFallbackSpawn(near: preferred, in: area, excluding: exclusions)
-    }
 
     /// 무작위 탐색과 격자 전수 탐색이 모두 실패했을 때의 최후 폴백. 손님을 아예
     /// 생성 취소하는 대신, 최소한 제외 구역(AreaK 등) 밖으로는 반드시 밀어낸

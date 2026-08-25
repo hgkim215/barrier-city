@@ -21,7 +21,17 @@ enum SceneSwitcher {
         let waypoint: Entity?
         let cake: Entity?
         let latte: Entity?
+        /// NPC 접근 금지 영역(NPCGuestCoordinator.enterIndoor로 전달)의 실제 근거인
+        /// /Root/collision 밑 Cube~Cube_11 콜리전 프록시. prepareVisible이 그
+        /// ModelComponent를 지우기 전에 미리 재 둔다(아래 prepareIndoorScene 참고).
+        let collisionCubeAreas: [SceneEntityPreparation.CapturedArea]
     }
+
+    /// /Root/collision 밑에 있는 벽·가구 콜리전 프록시 이름들("Cube", "Cube_1"...
+    /// "Cube_11"). NPC 접근 금지 영역의 실제 소스로 쓴다 — 테이블 좌석 바운즈에
+    /// 임의 여백을 더하는 예전 계산(seatClusterExclusionMargin) 대신, 휠체어가 이미
+    /// 물리적으로 충돌하는 것과 같은 authored 콜리전 형상을 그대로 쓴다.
+    private static let indoorCollisionCubeNames = ["Cube"] + (1...11).map { "Cube_\($0)" }
 
     private struct IndoorLayout {
         let kioskCenter: SIMD2<Float>
@@ -160,7 +170,8 @@ enum SceneSwitcher {
         app.npcGuests.enterIndoor(worldRoot: worldRoot,
                                   indoorMap: prepared.visible,
                                   cakeTemplate: prepared.cake,
-                                  latteTemplate: prepared.latte)
+                                  latteTemplate: prepared.latte,
+                                  collisionCubeAreas: prepared.collisionCubeAreas)
         app.restart()
         app.motion.positionX = layout.spawn.x
         app.motion.positionZ = layout.spawn.y
@@ -229,6 +240,12 @@ enum SceneSwitcher {
         let visible = try await Entity(named: "Indoor", in: realityKitContentBundle)
         try Task.checkCancellation()
         let collision = visible.clone(recursive: true)
+        // prepareVisible이 콜리전 이름 메시의 ModelComponent를 지우면 visualBounds를
+        // 더는 잴 수 없다 — 그 전에 캡처한다. visible이 아직 worldRoot에 안 붙어
+        // 있어 여기선 visible 자신 기준으로만 담아 두고, 최종 worldRoot 좌표 변환은
+        // 나중에(NPCGuestCoordinator.enterIndoor, worldRoot에 붙은 뒤) 한다.
+        let collisionCubeAreas = SceneEntityPreparation.captureAreas(
+            named: indoorCollisionCubeNames, in: visible, relativeTo: visible)
         SceneEntityPreparation.prepareVisible(visible)
         let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)
         try Task.checkCancellation()
@@ -256,7 +273,8 @@ enum SceneSwitcher {
                                    smoothie: smoothie,
                                    waypoint: waypoint,
                                    cake: cake,
-                                   latte: latte)
+                                   latte: latte,
+                                   collisionCubeAreas: collisionCubeAreas)
     }
 
     /// 비활성 상태로 worldRoot에 연결된 Indoor 엔티티에서 트리거와 스폰 포즈를 계산한다.
