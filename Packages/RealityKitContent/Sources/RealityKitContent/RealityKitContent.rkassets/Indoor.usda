@@ -5515,5 +5515,73 @@ def Xform "Root"
             }
         }
     }
+
+    def "Lady" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (-1.5707964, 0, 0)
+        }
+        references = @NPC/Female/Lady.usdz@
+    )
+    {
+        quatf xformOp:orient = (0.70710677, -0.70710677, 0, 0)
+        float3 xformOp:scale = (1.5, 1.5, 1.5)
+        float3 xformOp:translate = (-2.286127, 0, 0.8592422)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.38008, 0.3, 0.9980468)
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                    float3 position = (0, 1.5646219e-7, 0.49902335)
+                }
+            }
+        }
+
+        def RealityKitComponent "AnimationLibrary"
+        {
+            token info:id = "RealityKit.AnimationLibrary"
+
+            def RealityKitAnimationFile "FemaleWalk"
+            {
+                uniform asset file = @NPC/Female/FemaleWalk.usdz@
+                uniform string name = "FemaleWalk"
+            }
+
+            def RealityKitAnimationFile "FemaleIdle"
+            {
+                uniform asset file = @NPC/Female/FemaleIdle.usdz@
+                uniform string name = "FemaleIdle"
+            }
+
+            def RealityKitAnimationFile "Angry"
+            {
+                uniform asset file = @NPC/Male/Angry.usdz@
+                uniform string name = "Angry"
+            }
+
+            def RealityKitAnimationFile "Sit_to_Stand"
+            {
+                uniform asset file = @NPC/Male/Sit to Stand.usdz@
+                uniform string name = "Sit to Stand"
+            }
+
+            def RealityKitAnimationFile "Sitting"
+            {
+                uniform asset file = @NPC/Male/Sitting.usdz@
+                uniform string name = "Sitting"
+            }
+        }
+    }
 }
 
