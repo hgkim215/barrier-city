@@ -42,8 +42,20 @@ final class NPCGuestCoordinator {
         /// 대기줄 안에서 사람과 사람 사이 간격(m). 맨 앞사람과 유저 사이에는 안 쓰고
         /// (queueFrontGap 참고) 그 뒤부터 이 간격으로 늘어선다.
         static let queueSpacing: Float = 0.85
-        /// 스폰 시 손님끼리 서로 떨어뜨리려는 최소 거리(m).
-        static let minimumSpawnSeparation: Float = 2.0
+        /// 스폰 시 손님끼리 서로 떨어뜨리려는 최소 거리(m). AreaK/AreaB + Cube
+        /// 콜리전(카운터·긴 바 테이블 등) 제외 구역을 실측해 보니 방(_floor, 약
+        /// 192㎡)의 약 71%를 차지해, 남는 배회 가능 바닥이 좁고 조각난 여러 구획으로
+        /// 나뉜다. 예전 값(2.0m)은 그런 구획 하나보다 클 때가 많아 손님들이 사실상
+        /// 하나의 목표 지점으로만 계속 몰렸다 — 실시간 이동 중에는 이미
+        /// NPCObstacleAvoidance가 손님끼리 실제로 겹치지 않게 하드하게 막고 있어
+        /// (allowedStep의 neighborPositions), 스폰 시점의 이 값은 "겹쳐 보이지 않을
+        /// 정도"면 충분하다. 몸통 지름(NPCGuestTuning.bodyHalfWidth*2 = 0.4m)보다
+        /// 뚜렷이 크게 잡아 몸이 붙어 보이지 않을 여유만 남겼다.
+        static let minimumSpawnSeparation: Float = 0.9
+        /// computeWalkableCells가 바닥을 훑을 때 쓰는 격자 간격(m). 손님 몸통 폭
+        /// (NPCGuestTuning.bodyHalfWidth*2 = 0.4m)보다 촘촘해야 긴 바 테이블과
+        /// 카운터 사이처럼 좁은 통로도 최소 한두 칸은 유효 칸으로 잡힌다.
+        static let walkableCellSpacing: Float = 0.3
         /// 항상 배회만 하는 손님 수(대기줄 후보).
         static let wandererCount = 1
         /// 배회↔착석↔기립을 반복하는 손님 수(대기줄 후보).
@@ -78,10 +90,6 @@ final class NPCGuestCoordinator {
         static let furnitureClearanceHeight: Float = 0.05
         /// AreaK/AreaB 경계에서 NPC 중심뿐 아니라 몸통 반경까지 완전히 빠지게 하는 여유.
         static let restrictedAreaClearance: Float = 0.25
-        /// Cube 콜리전 기반 제외 영역의 반축 길이가 이보다 크면 진단 로그를 남긴다.
-        /// 실측한 콜리전 프록시는 전부 5m 반경 이내였다 — 이보다 훨씬 크면 이름이
-        /// 겹치는 다른 엔티티(예: 장식용 몰딩)가 잘못 잡혔을 가능성이 높다.
-        static let obstacleAreaSanityLimit: Float = 5.0
         /// 착석 시 로코모션 루트에 적용할 Y 오프셋의 기준값(m) — 이 씬에서 가장 낮은
         /// 좌석(= 정규화된 SittingPoint 높이가 최소인 의자)에 적용되는 오프셋이다.
         /// 다른 의자들은 여기에 각자의 실측 바운즈 차이만큼만 더해서 쓴다
@@ -111,6 +119,14 @@ final class NPCGuestCoordinator {
     private var guests: [NPCGuestController] = []
     private var floorArea: NPCGuestArea?
     private var exclusionAreas: [NPCGuestArea] = []
+    /// enterIndoor 시점에 바닥을 격자로 훑어 미리 계산해 둔 walkableGrid에서 뽑은,
+    /// 실제로 설 수 있는 칸 목록. randomSpawnPoint가 이 목록에서만 뽑는다.
+    private var walkableCells: [SIMD2<Float>] = []
+    /// NPCGuestPathfinder가 손님 이동(배회 목적지, 좌석 이동)의 웨이포인트 경로를
+    /// 찾을 때 쓰는 격자. exclusionAreas가 확정된 뒤 enterIndoor에서 한 번만 만들어
+    /// 매 프레임 guest.update(...)에 그대로 넘긴다(배열이라 값 복사가 아니라
+    /// copy-on-write라 넘기는 비용이 크지 않다).
+    private var walkableGrid: NPCGuestPathfinder.WalkableGrid?
     /// Furnitures 하위 "SittingPoint" 마커에서 찾은 좌석. 개수는 씬 authoring에 따라
     /// 달라지며 하드코딩하지 않는다.
     private var seats: [GuestSeat] = []
@@ -200,20 +216,11 @@ final class NPCGuestCoordinator {
                         margin: -Tuning.restrictedAreaClearance)
         }
         // NPC 접근 금지 영역은 AreaK/AreaB에 더해, /Root/collision 밑 Cube~Cube_11
-        // 콜리전 프록시를 그대로 쓴다. 테이블 좌석 바운즈에 임의 여백(예전
-        // seatClusterExclusionMargin)을 더해 추정하는 대신, authored된 실제 형상을
-        // 근거로 삼는다.
+        // 콜리전 프록시(긴 바 테이블, 카운터 등 실제 가구 풋프린트)를 그대로 쓴다.
+        // 테이블 좌석 바운즈에 임의 여백을 더하던 예전 계산 대신, authored된 실제
+        // 형상을 근거로 삼는다.
         let obstacleExclusions = collisionCubeAreas.compactMap { captured in
             finalizeCapturedArea(captured, indoorMap: indoorMap, worldRoot: worldRoot)
-        }
-        // 진단용: 이 씬 파일에 "Cube"/"Cube_1"~"Cube_3" 이름이 유일하지 않아(장식용
-        // 나무 몰딩도 같은 이름을 씀), 잘못된 엔티티가 잡히면 반경이 비정상적으로
-        // 커진다 — 방 크기를 훌쩍 넘는 제외 구역은 손님 스폰/배회를 통째로 막는다.
-        for area in obstacleExclusions {
-            let extent = max(simd_length(area.axisU), simd_length(area.axisV))
-            if extent > Tuning.obstacleAreaSanityLimit {
-                Self.seatingLogger.error("NPC 제외 영역 크기 이상(반경 \(extent)m, center=(\(area.center.x), \(area.center.y))) — 잘못된 엔티티가 잡혔을 수 있음")
-            }
         }
         exclusionAreas = staffAreaExclusions + obstacleExclusions
         // 대기줄이 아닌 손님이 키오스크 앞에 우연히 배회 목적지를 잡아 막고 서 있지
@@ -227,15 +234,39 @@ final class NPCGuestCoordinator {
         }
         guard let floorArea else { return }
 
+        // 스폰 후보를 그때그때 무작위로 찍어보고 막히면 버리는 대신, 바닥을 촘촘한
+        // 격자로 미리 훑어 "실제로 설 수 있는 칸"을 한 번에 다 계산해 둔다 — 긴 바
+        // 테이블과 카운터 사이처럼 좁고 꺾인 여백도 놓치지 않고, 유효한 칸만 가지고
+        // 뽑으므로 스폰 실패 자체가 구조적으로 없다. 같은 격자를 손님 이동 시
+        // 웨이포인트 경로 탐색(NPCGuestPathfinder)에도 그대로 쓴다 — move()의 직선
+        // 스티어링만으로는 큰 장애물을 사이에 두고 계속 막혀 왔다갔다만 반복하는
+        // 문제가 있었다.
+        let grid = NPCGuestPathfinder.buildGrid(area: floorArea, cellSize: Tuning.walkableCellSpacing) {
+            [self] candidate in isSafeSpawn(candidate, in: floorArea, excluding: exclusionAreas)
+        }
+        walkableGrid = grid
+        walkableCells = grid.walkable.indices.compactMap { flatIndex in
+            guard grid.walkable[flatIndex] else { return nil }
+            let row = flatIndex / grid.columns
+            let column = flatIndex % grid.columns
+            return grid.worldPosition(row: row, column: column)
+        }
+        Self.seatingLogger.notice("배회 가능 칸 \(self.walkableCells.count)개 계산됨(바닥 \(self.exclusionAreas.count)개 구역 제외)")
+
         // authoring 상 실수로 좌석이 직원 구역(AreaK/AreaB) 안에 놓였다면 손님이
         // 그쪽으로 걸어 들어가지 않도록 애초에 좌석 후보에서 뺀다. seatTableEntities는
         // seats와 인덱스가 대응해야 하므로 같은 필터를 동시에 적용한다.
+        //
+        // 여기서는 staffAreaExclusions(AreaK/AreaB)만 검사한다 — exclusionAreas 전체를
+        // 쓰면 좌석 자신이 붙어 있는 테이블의 Cube 콜리전에 좌석 위치가 당연히 걸려서
+        // (의자는 원래 테이블 바로 옆이니까) 거의 모든 좌석이 "제외 구역 안"으로
+        // 오판정돼 통째로 사라지는 회귀가 있었다.
         let sittingPoints = collectSittingPoints(in: indoorMap, relativeTo: worldRoot)
         var filteredSeats: [GuestSeat] = []
         var filteredSeatTableEntities: [Entity?] = []
         for (seat, tableEntity) in zip(sittingPoints.seats, sittingPoints.seatTableEntities) {
             guard floorArea.contains(seat.position),
-                  !exclusionAreas.contains(where: { $0.contains(seat.position) }) else { continue }
+                  !staffAreaExclusions.contains(where: { $0.contains(seat.position) }) else { continue }
             filteredSeats.append(seat)
             filteredSeatTableEntities.append(tableEntity)
         }
@@ -377,8 +408,7 @@ final class NPCGuestCoordinator {
                     // cyclerImmediateSeatChance 비율만 즉시 걸어가고 나머지는 배회를
                     // 한 바퀴 마친 뒤 좌석으로 향한다(reserveSeat).
                     let seat = seats[seatIndex]
-                    let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
-                                                 keepingAwayFrom: spawnedPositions)
+                    let spawn = randomSpawnPoint(keepingAwayFrom: spawnedPositions)
                     seatOccupants[seatIndex] = guests.count
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
@@ -390,8 +420,7 @@ final class NPCGuestCoordinator {
                         Self.seatingLogger.notice("\(displayName) 좌석 \(seatIndex) 예약(배회 후 착석): spawn=(\(spawn.x), \(spawn.y)) seat=(\(seat.position.x), \(seat.position.y))")
                     }
                 } else {
-                    let spawn = randomSpawnPoint(in: floorArea, excluding: exclusionAreas,
-                                                 keepingAwayFrom: spawnedPositions)
+                    let spawn = randomSpawnPoint(keepingAwayFrom: spawnedPositions)
                     spawnedPositions.append(spawn)
                     guest.place(entity: entity, worldRoot: worldRoot, at: spawn)
                 }
@@ -591,6 +620,28 @@ final class NPCGuestCoordinator {
         return queue
     }
 
+    /// walkableCells 중 이미 배치된 손님들과 최소 거리(minimumSpawnSeparation)를 둘
+    /// 수 있는 칸을 무작위로 고른다. 그런 칸이 없으면(방이 거의 다 찼을 때) 가장
+    /// 여유 있는 칸으로 물러선다 — walkableCells 자체가 이미 유효성이 보장된
+    /// 목록이라, 이 함수는 항상 실제로 설 수 있는 지점만 반환한다.
+    private func randomSpawnPoint(keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float> {
+        guard !walkableCells.isEmpty else {
+            Self.seatingLogger.error("배회 가능 칸이 하나도 없음 — 바닥 중심으로 폴백")
+            return floorArea?.center ?? .zero
+        }
+        var bestCandidate = walkableCells[0]
+        var bestSeparation: Float = -1
+        for candidate in walkableCells.shuffled() {
+            let separation = others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
+            if separation >= Tuning.minimumSpawnSeparation { return candidate }
+            if separation > bestSeparation {
+                bestSeparation = separation
+                bestCandidate = candidate
+            }
+        }
+        return bestCandidate
+    }
+
     /// SceneEntityPreparation.captureAreas가 indoorMap 자신을 기준으로 캡처해 둔
     /// 값을(prepareVisible이 콜리전 메시를 지우기 전에 잰 것) worldRoot 기준
     /// NPCGuestArea로 마무리한다. AreaK/AreaB를 만드는 resolveArea와 같은 투영
@@ -612,54 +663,6 @@ final class NPCGuestCoordinator {
               simd_length(projected[0]) > 0.001,
               simd_length(projected[1]) > 0.001 else { return nil }
         return NPCGuestArea(center: worldCenter, axisU: projected[0], axisV: projected[1])
-    }
-
-    /// 제외 영역을 피하고, 이미 배치된 손님들과도 최소 거리를 두는 스폰 지점을 고른다.
-    /// 무작위 후보가 실패하면 바닥 전체를 격자로 다시 훑는다. 그마저(441개 전수) 실패하면
-    /// — 실기에서 실제로 관측됨(가구 콜리전 판정 등 environment 요인 추정) — 손님을 통째로
-    /// 생성 취소하는 대신, 최소 하나의 보장("절대 제외 구역 안은 아님")만 지키는
-    /// guaranteedFallbackSpawn으로 넘긴다. 손님이 아예 안 보이는 것보다는 가구와 약간
-    /// 겹치더라도 나타나는 편이 낫다.
-    private func randomSpawnPoint(in area: NPCGuestArea,
-                                  excluding exclusions: [NPCGuestArea],
-                                  keepingAwayFrom others: [SIMD2<Float>]) -> SIMD2<Float> {
-        var bestCandidate: SIMD2<Float>?
-        var bestSeparation: Float = -1
-        for _ in 0..<60 {
-            let candidate = area.point(u: Float.random(in: -1...1), v: Float.random(in: -1...1))
-            guard isSafeSpawn(candidate, in: area, excluding: exclusions) else { continue }
-            let separation = others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
-            if separation >= Tuning.minimumSpawnSeparation { return candidate }
-            if separation > bestSeparation {
-                bestSeparation = separation
-                bestCandidate = candidate
-            }
-        }
-        if let bestCandidate { return bestCandidate }
-        if let gridPoint = safestGridPoint(in: area, excluding: exclusions, score: { candidate in
-            others.map { simd_distance($0, candidate) }.min() ?? .greatestFiniteMagnitude
-        }) { return gridPoint }
-        Self.seatingLogger.error("무작위+격자 탐색 441회 전부 실패 — 최후 폴백으로 배치")
-        return guaranteedFallbackSpawn(near: area.center, in: area, excluding: exclusions)
-    }
-
-
-    /// 무작위 탐색과 격자 전수 탐색이 모두 실패했을 때의 최후 폴백. 손님을 아예
-    /// 생성 취소하는 대신, 최소한 제외 구역(AreaK 등) 밖으로는 반드시 밀어낸
-    /// 지점에 배치한다 — 가구 겹침 정도는 감수하되 손님이 통째로 사라지는 것보다는
-    /// 낫다.
-    private func guaranteedFallbackSpawn(near preferred: SIMD2<Float>,
-                                         in area: NPCGuestArea,
-                                         excluding exclusions: [NPCGuestArea]) -> SIMD2<Float> {
-        var current = area.contains(preferred) ? preferred : area.center
-        for _ in 0..<4 {
-            guard let intruded = exclusions.first(where: { $0.contains(current) }) else { break }
-            let away = current - intruded.center
-            let pushDirection = simd_length(away) > 0.001 ? simd_normalize(away) : SIMD2<Float>(1, 0)
-            let pushDistance = simd_length(intruded.axisU) + simd_length(intruded.axisV) + 0.1
-            current = intruded.center + pushDirection * pushDistance
-        }
-        return current
     }
 
     private func isSafeSpawn(_ point: SIMD2<Float>,
@@ -712,6 +715,8 @@ final class NPCGuestCoordinator {
         guests.removeAll()
         floorArea = nil
         exclusionAreas.removeAll()
+        walkableCells.removeAll()
+        walkableGrid = nil
         staffAreaExclusions.removeAll()
         seats.removeAll()
         seatOccupants.removeAll()
@@ -858,6 +863,7 @@ final class NPCGuestCoordinator {
                         wanderArea: floorArea,
                         exclusions: exclusionAreas,
                         staffExclusions: staffAreaExclusions,
+                        pathGrid: walkableGrid,
                         queueSlot: slot,
                         facing: facing,
                         playerPosition: playerPosition,

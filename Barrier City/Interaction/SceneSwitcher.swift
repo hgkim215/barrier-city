@@ -25,16 +25,17 @@ enum SceneSwitcher {
         let waypoint: Entity?
         let cake: Entity?
         let latte: Entity?
-        /// NPC 접근 금지 영역(NPCGuestCoordinator.enterIndoor로 전달)의 실제 근거인
-        /// /Root/collision 밑 Cube~Cube_11 콜리전 프록시. prepareVisible이 그
-        /// ModelComponent를 지우기 전에 미리 재 둔다(아래 prepareIndoorScene 참고).
+        /// NPC 배회 가능 격자(NPCGuestCoordinator.enterIndoor로 전달)를 계산할 때
+        /// 뺄 실제 가구 풋프린트 — /Root/collision 밑 Cube~Cube_11 콜리전 프록시.
+        /// prepareVisible이 그 ModelComponent를 지우기 전에 미리 재 둔다(아래
+        /// prepareIndoorScene 참고).
         let collisionCubeAreas: [SceneEntityPreparation.CapturedArea]
     }
 
-    /// /Root/collision 밑에 있는 벽·가구 콜리전 프록시 이름들("Cube", "Cube_1"...
-    /// "Cube_11"). NPC 접근 금지 영역의 실제 소스로 쓴다 — 테이블 좌석 바운즈에
-    /// 임의 여백을 더하는 예전 계산(seatClusterExclusionMargin) 대신, 휠체어가 이미
-    /// 물리적으로 충돌하는 것과 같은 authored 콜리전 형상을 그대로 쓴다.
+    /// /Root/collision 밑에 있는 가구 콜리전 프록시 이름들("Cube", "Cube_1"...
+    /// "Cube_11"). NPC가 들어가면 안 되는 가구 풋프린트의 실제 소스로 쓴다 — 테이블
+    /// 좌석 바운즈에 임의 여백을 더하는 예전 계산(seatClusterExclusionMargin) 대신,
+    /// 휠체어가 이미 물리적으로 충돌하는 것과 같은 authored 콜리전 형상을 그대로 쓴다.
     private static let indoorCollisionCubeNames = ["Cube"] + (1...11).map { "Cube_\($0)" }
 
     private struct IndoorLayout {
@@ -149,12 +150,22 @@ enum SceneSwitcher {
             return
         }
 
-        // 좌표 계산을 위해 새 엔티티를 비활성 상태로 같은 계층에 잠시 붙인다.
-        // 엔티티 자체가 비활성이므로 렌더링·충돌 판정에는 아직 참여하지 않는다.
+        // 좌표 계산을 위해 새 시각 엔티티는 비활성 상태로 같은 계층에 잠시 붙인다.
+        // 엔티티 자체가 비활성이므로 렌더링에는 아직 참여하지 않는다.
         prepared.visible.isEnabled = false
-        prepared.collision.isEnabled = false
         worldRoot.addChild(prepared.visible)
         collisionParent.addChild(prepared.collision)
+        // 콜리전은 시각과 달리 여기서 바로 실내 것으로 바꿔 둔다(기존 Outdoor
+        // 콜리전은 끈다) — 아래 npcGuests.enterIndoor가 스폰 지점을 raycast로
+        // 검증할 때(isClearOfFurniture) 실제 실내 Cube 콜리전을 봐야 하기 때문이다.
+        // 이전에는 이 스왑을 화면 커밋 직전으로 미뤄 뒀는데, 그러면 스폰 검증
+        // raycast가 아직 활성 상태인 Outdoor 콜리전(전혀 다른 지형)을 대신 맞혀
+        // 실내 바닥 대부분이 "막힘"으로 잘못 판정되고, 손님들이 우연히 통과되는
+        // 극소수 지점 하나로만 몰리는 원인이 됐다. 화면은 아직 SceneFadeOverlay로
+        // 가려져 있고 여기부터는 await 없는 한 MainActor 구간이라 중간 프레임이
+        // 렌더되지 않으므로, 콜리전만 먼저 바꿔도 유저가 인지할 방법이 없다.
+        oldCollision.isEnabled = false
+        prepared.collision.isEnabled = true
         let layout = resolveIndoorLayout(in: prepared.visible, relativeTo: worldRoot)
 
         // 2) 이 아래에는 await/throw가 없다. 화면, 콜리전, 포즈, 인터랙션과 가이드를
@@ -222,10 +233,10 @@ enum SceneSwitcher {
             print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
         }
 
+        // 콜리전은 위에서 이미 실내 것으로 바꿔 뒀다 — 여기서는 시각과 부모-자식
+        // 관계만 마저 정리한다.
         oldVisible.isEnabled = false
-        oldCollision.isEnabled = false
         prepared.visible.isEnabled = true
-        prepared.collision.isEnabled = true
         oldVisible.removeFromParent()
         oldCollision.removeFromParent()
 
@@ -263,7 +274,7 @@ enum SceneSwitcher {
             collisionCubeAreas = []
         }
         if collisionCubeAreas.count != indoorCollisionCubeNames.count {
-            logger.error("NPC 제외 영역 콜리전 프록시 \(indoorCollisionCubeNames.count, privacy: .public)개 중 \(collisionCubeAreas.count, privacy: .public)개만 캡처됨")
+            logger.error("NPC 배회 격자용 콜리전 프록시 \(indoorCollisionCubeNames.count, privacy: .public)개 중 \(collisionCubeAreas.count, privacy: .public)개만 캡처됨")
         }
         SceneEntityPreparation.prepareVisible(visible)
         let collisionShapeCount = await SceneEntityPreparation.prepareCollision(collision)

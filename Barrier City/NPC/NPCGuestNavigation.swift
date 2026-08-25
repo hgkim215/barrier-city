@@ -44,7 +44,9 @@ struct NPCGuestArea {
         return upper >= 0 && lower <= 1
     }
 
-    private func localCoordinates(of point: SIMD2<Float>) -> SIMD2<Float>? {
+    /// 월드 좌표를 이 영역의 u/v(-1...1이면 내부) 좌표로 바꾼다. NPCGuestPathfinder가
+    /// 격자 셀 인덱스를 계산할 때도 같은 투영을 재사용한다.
+    func localCoordinates(of point: SIMD2<Float>) -> SIMD2<Float>? {
         guard point.x.isFinite, point.y.isFinite else { return nil }
         let offset = point - center
         let determinant = axisU.x * axisV.y - axisU.y * axisV.x
