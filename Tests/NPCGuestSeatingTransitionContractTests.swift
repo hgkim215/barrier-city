@@ -71,8 +71,9 @@ struct NPCGuestSeatingTransitionContractTests {
         }
 
         let femaleCount = coordinator.components(separatedBy: "\"Guest_Female_").count - 1
+        let ladyCount = coordinator.components(separatedBy: "\"Guest_Lady_").count - 1
         let maleCount = coordinator.components(separatedBy: "\"Guest_Male_").count - 1
-        guard femaleCount + maleCount == 9 else {
+        guard femaleCount + ladyCount + maleCount == 9 else {
             fail("guest display entity count must remain exactly 9")
         }
 

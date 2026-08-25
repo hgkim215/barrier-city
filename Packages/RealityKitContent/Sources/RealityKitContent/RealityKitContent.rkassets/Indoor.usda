@@ -5612,10 +5612,10 @@ def Xform "Root"
         {
             token info:id = "RealityKit.AnimationLibrary"
 
-            def RealityKitAnimationFile "FemaleWalk"
+            def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "FemaleWalk"
+                uniform string name = "Walk"
             }
 
             def RealityKitAnimationFile "FemaleIdle"

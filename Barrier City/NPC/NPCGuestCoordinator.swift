@@ -122,8 +122,12 @@ final class NPCGuestCoordinator {
     }
 
     /// wandererCount + cyclerCount + seatedPoolCount(1+2+6=9)에 맞춘 인원 구성.
+    /// 여자 손님 외형을 다양화하려고 기존 Female 5명 중 2명을 같은 성별(sigh 등
+    /// 성별 기반 로직은 동일하게 female)의 다른 템플릿인 Lady로 바꿨다 — 총 인원과
+    /// 역할 배분(Tuning)은 그대로 유지된다.
     private static let genderGroups: [GenderGroup] = [
-        GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3", "Guest_Female_4", "Guest_Female_5"]),
+        GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3"]),
+        GenderGroup(templateName: "Lady", gender: .female, displayNames: ["Guest_Lady_1", "Guest_Lady_2"]),
         GenderGroup(templateName: "MaleIdle", gender: .male, displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4"]),
     ]
 
