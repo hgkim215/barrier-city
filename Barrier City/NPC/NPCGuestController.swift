@@ -789,8 +789,38 @@ final class NPCGuestController {
         }
 
         let targetDirection = delta / distance
+        // Predictive Dynamic Avoidance: 아직 떨어져 있어도 미래에 부딪힐 것으로
+        // 예측되는 이웃이 있으면 targetDirection을 먼저 좌/우로 살짝 보정한다.
+        // 그 다음에야 crowdSteeredDirection(즉시 반발, 이미 가까운 이웃 전용)을
+        // 거친다 — Path Direction → Predictive Avoidance → Immediate Separation
+        // → Final Steering 순서(NPCGuestLocalAvoidance 타입 주석 참고). 새 경로를
+        // 계산하거나 activePath/wanderTarget을 건드리지 않는다 — A* 목적지는 그대로
+        // 두고 그리로 가는 이번 스텝의 방향만 살짝 튼다.
+        //
+        // 이미 존재하는 separationScale을 avoidance 세기에도 그대로 재사용한다 —
+        // 대기줄(0.35)·좌석 접근(0.5)·자유 배회(1.0)마다 반발을 다르게 눌러 둔 값이
+        // 그대로 예측 회피에도 맞는 감쇠 지표라 컨텍스트별 새 파라미터가 필요 없다.
+        // avoidObstacles가 꺼진 좌석 바로 앞 구간(seatCollisionBypassDistance)에서는
+        // NPCObstacleAvoidance의 이웃 하드 블록도 같이 꺼지므로, 이 레이어도 같은
+        // 구간에서는 끈다 — "좌석 콜리전 프록시를 관통해 마지막 한 걸음을 확실히
+        // 딛는다"는 그 구간의 의도를 옆으로 미는 보정이 방해하지 않게 한다.
+        let preferredDirection: SIMD2<Float>
+        if avoidObstacles, !neighborVelocities.isEmpty {
+            let neighborKinematics = zip(neighboringPositions, neighborVelocities).map {
+                NPCNeighborKinematics(position: $0, velocity: $1)
+            }
+            preferredDirection = NPCGuestLocalAvoidance.adjustedPreferredDirection(
+                preferredDirection: targetDirection,
+                myPosition: current,
+                myVelocity: velocity,
+                sidePreference: movementProfile.separationSide,
+                neighbors: neighborKinematics,
+                strengthScale: separationScale)
+        } else {
+            preferredDirection = targetDirection
+        }
         var direction = crowdSteeredDirection(
-            targetDirection: targetDirection,
+            targetDirection: preferredDirection,
             from: current,
             neighbors: neighboringPositions,
             scale: separationScale)
