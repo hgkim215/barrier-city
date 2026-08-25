@@ -161,6 +161,9 @@ struct WheelchairMovementSystem: System {
                         nearest = WheelchairObstacleHit(distance: distance, kind: kind, position: position)
                     }
                 }
+                // worldRoot의 트랜스폼은 이 스윕 도중 바뀌지 않으므로 샘플마다(9회)
+                // 다시 계산하지 않고 한 번만 구해 재사용한다.
+                let mapToScene = worldRoot.transformMatrix(relativeTo: nil)
                 // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
                 // 빠지지 않도록 폭 방향 샘플을 5개에서 9개로 촘촘히 한다.
                 for fraction: Float in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1] {
@@ -181,7 +184,6 @@ struct WheelchairMovementSystem: System {
                     // 환경 콜리전은 고정된 논리 맵 좌표에 있지만 NPC는 렌더링용
                     // worldRoot 아래에서 사용자 위치의 역변환을 함께 받는다. 같은 origin으로
                     // 두 그룹을 쏘면 NPC가 이동할수록 좌표가 어긋나므로 별도로 변환한다.
-                    let mapToScene = worldRoot.transformMatrix(relativeTo: nil)
                     let sceneOrigin4 = mapToScene * SIMD4(logicalOrigin, 1)
                     let sceneDirection4 = mapToScene * SIMD4(logicalDirection, 0)
                     let sceneOrigin = SIMD3(sceneOrigin4.x, sceneOrigin4.y, sceneOrigin4.z)
@@ -361,8 +363,13 @@ struct WheelchairMovementSystem: System {
             let g0 = g0Hit?.height
             let gAh = groundY(motion.positionX + dirX * 0.18, motion.positionZ + dirZ * 0.18)
             let gBk = groundY(motion.positionX - dirX * 0.18, motion.positionZ - dirZ * 0.18)
-            let solids = [g0, gAh, gBk].compactMap { $0 }
-            let centerGround: Float? = solids.isEmpty ? nil : solids.reduce(0, +) / Float(solids.count)
+            // 매 프레임 도는 경로라, 배열 리터럴/compactMap 대신 직접 누적해 할당을 없앤다.
+            var groundSum: Float = 0
+            var groundCount = 0
+            if let g0 { groundSum += g0; groundCount += 1 }
+            if let gAh { groundSum += gAh; groundCount += 1 }
+            if let gBk { groundSum += gBk; groundCount += 1 }
+            let centerGround: Float? = groundCount == 0 ? nil : groundSum / Float(groundCount)
 
             if let g = centerGround, motion.chairHeight <= g + 0.02 {
                 // 지면 위/근처: 즉시 스냅 대신 부드럽게 따라가 미세 요철을 흡수.
@@ -417,8 +424,13 @@ struct WheelchairMovementSystem: System {
             let hC = g0Hit
 
             // 법선 평균 → 경사(가끔 격자 구멍을 때려도 평균이라 매끈).
+            // 매 프레임 도는 경로라, 배열 리터럴 없이 직접 누적한다.
             var nSum = SIMD3<Float>(0, 0, 0)
-            for h in [hRL, hRR, hFL, hFR, hC] { if let h { nSum += h.1 } }
+            if let hRL { nSum += hRL.1 }
+            if let hRR { nSum += hRR.1 }
+            if let hFL { nSum += hFL.1 }
+            if let hFR { nSum += hFR.1 }
+            if let hC { nSum += hC.1 }
             let navgRaw = simd_length(nSum) > 0.001 ? simd_normalize(nSum) : SIMD3<Float>(0, 1, 0)
             // 5점 공간 평균은 한 프레임 안의 격자 노이즈만 지운다. 겹치는 콜라이더나 메시
             // 이음매 근처에서 매 프레임 다른 표면이 걸리는 시간축 떨림은 저역통과로 흡수한다.

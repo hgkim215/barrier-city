@@ -925,6 +925,19 @@ final class NPCGuestCoordinator {
         // 시작하는" 손님만 이 예산을 넘지 않을 때만 허용한다.
         var activeWalkerCount = guests.filter(\.isWalking).count
 
+        // 손님마다(9명) 매 프레임 자신을 뺀 이웃 배열을 3개씩 새로 만든다.
+        // enumerated().compactMap은 그때마다 성장하는 버퍼를 다시 할당하므로,
+        // 최종 크기(count - 1)를 미리 예약해 재할당 없이 한 번만 채운다.
+        func allExcept<T>(_ values: [T], index: Int) -> [T] {
+            guard values.count > 1 else { return [] }
+            var result: [T] = []
+            result.reserveCapacity(values.count - 1)
+            for i in values.indices where i != index {
+                result.append(values[i])
+            }
+            return result
+        }
+
         for (index, guest) in guests.enumerated() {
             var slot: SIMD2<Float>?
             var facing: SIMD2<Float>?
@@ -932,15 +945,9 @@ final class NPCGuestCoordinator {
                 slot = queueSlot(rank: rank + 1)
                 facing = kioskCenter
             }
-            let neighboringPositions = positions.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
-            let neighboringVelocities = velocities.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
-            let occupiedAnchors = anchors.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
+            let neighboringPositions = allExcept(positions, index: index)
+            let neighboringVelocities = allExcept(velocities, index: index)
+            let occupiedAnchors = allExcept(anchors, index: index)
             let wasWalking = guest.isWalking
             guest.update(deltaTime: deltaTime,
                         movementContext: movementContext,
