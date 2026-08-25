@@ -65,6 +65,17 @@ enum NPCGuestNavigation {
     /// 실제 원인 — areaFraction이 0으로 고정된 채 반복됨).
     private static let escapeTolerance: Float = 0.0005
 
+    /// 관통(tunneling) 방지 검사(intersectsSegment)는 큰 deltaTime 한 프레임에
+    /// 제외 구역 전체를 가로질러 반대편에 안착하는 극단적 경우를 막기 위한
+    /// 것이다. 이동 속도가 최대 ~1m/s인 이 프로젝트에서 정상 프레임의 한 스텝은
+    /// 이 문턱보다 훨씬 짧다. 스텝 길이와 무관하게 이 검사를 항상 적용하면,
+    /// 테이블 경계 바로 옆을 지나가는 정상적인 배회에서도 시작점이 경계에 가깝기만
+    /// 하면 매 프레임 선분이 경계에 스쳐 걸리고, 이분 탐색으로 스텝을 아무리
+    /// 잘게 쪼개도 시작점 자체는 그대로라 계속 같은 이유로 걸려 areaFraction이
+    /// 0으로 고정되는 문제가 실기에서 확인됐다(escapeTolerance로 해결한 "이미
+    /// 구역 안" 케이스와는 다른, "구역 밖에서 경계를 스치는" 케이스).
+    private static let tunnelingCheckMinimumStepLength: Float = 0.5
+
     static func isValid(_ point: SIMD2<Float>,
                         inside floor: NPCGuestArea,
                         excluding exclusions: [NPCGuestArea]) -> Bool {
@@ -94,8 +105,10 @@ enum NPCGuestNavigation {
             if startDepth >= 0 {
                 guard endDepth <= startDepth + escapeTolerance else { return false }
             } else {
-                guard endDepth < 0,
-                      !exclusion.intersectsSegment(from: start, to: end) else { return false }
+                guard endDepth < 0 else { return false }
+                if simd_distance(start, end) > tunnelingCheckMinimumStepLength {
+                    guard !exclusion.intersectsSegment(from: start, to: end) else { return false }
+                }
             }
         }
         return true

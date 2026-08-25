@@ -54,6 +54,14 @@ struct NPCGuestNavigationTests {
         expect(tinyEscapeFraction == 1,
                "a tiny escaping step out of a restricted area must not be clipped to zero")
 
+        // 실기 재현: 두 끝점 모두 구역 밖이지만 짧은 세그먼트가 모서리를 살짝
+        // 스치는 경우(테이블 경계 옆을 걷는 정상적인 한 프레임 이동). 위의 큰
+        // 스텝 관통 테스트는 여전히 막혀야 하지만, 이렇게 짧은 스텝까지 관통
+        // 검사에 걸려 areaFraction이 0으로 고정되던 문제가 있었다.
+        expect(NPCGuestNavigation.isAllowedStep(from: [0.9596, 1.0304], to: [1.0304, 0.9596],
+                                                inside: floor, excluding: [staff]),
+               "a short step that only grazes a corner must not be treated as tunneling")
+
         let diagonal = Float(1 / sqrt(2.0))
         let rotated = NPCGuestArea(center: [10, 10],
                                    axisU: [diagonal * 2, diagonal * 2],
