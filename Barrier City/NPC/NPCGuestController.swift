@@ -556,8 +556,14 @@ final class NPCGuestController {
             // stuckEscapeThreshold번 이상 막히면, 먼 무작위 후보 대신 지금 위치
             // 주변에서 실제로(레이캐스트로 확인된) 뚫린 방향을 찾는 nearbyEscapeTarget로
             // 전환해 확실히 벗어나게 한다.
+            // outcome.stalled(1.2초간 순 이동 거의 없음)는 연속 횟수와 무관하게 그
+            // 자체로 즉시 escape 전환 사유다 — 프레임 단위 blocked만 세면, 여러
+            // NPC가 몰려 미묘하게 밀고 밀리는 상황에서 어느 한 프레임이
+            // blockedStepFraction을 살짝 넘겨 카운터가 0으로 리셋되는 게 반복되며
+            // 실제로는 오래 정체돼 있는데도 "3연속"에 영원히 못 미칠 수 있다
+            // (MoveOutcome.stalled 주석 참고).
             let newTarget: SIMD2<Float>?
-            if consecutiveBlockedCount >= NPCGuestTuning.stuckEscapeThreshold {
+            if outcome.stalled || consecutiveBlockedCount >= NPCGuestTuning.stuckEscapeThreshold {
                 newTarget = nearbyEscapeTarget(from: currentPosition, in: wanderArea, excluding: exclusions)
                     ?? randomWanderTarget(in: wanderArea, excluding: exclusions,
                                           awayFrom: currentPosition, avoiding: occupiedAnchors)
@@ -688,8 +694,16 @@ final class NPCGuestController {
             // 웨이포인트를 막고 서 있는 경우다. 몇 번은 그대로 재시도하고, 계속
             // 막히면 그제서야 포기한다(코디네이터가 seatOccupants를 비워 다른
             // 손님에게 다시 배정할 수 있게 한다).
+            //
+            // outcome.stalled는 프레임 단위 연속 횟수와 무관하게 그 자체로 즉시
+            // 포기 사유다 — 여러 손님이 좁은 공간(테이블·카운터 주변)에 몰려
+            // 미묘하게 밀고 밀리면, 어느 한 프레임이 blockedStepFraction을 살짝
+            // 넘겨 seatApproachBlockedCount가 0으로 리셋되는 게 반복될 수 있다.
+            // 그러면 실제로는 1.2초 넘게 좌석 근처에서 정체돼 있는데도(=실기에서
+            // "충돌 판정만 나며 계속 서 있는" 증상) "3연속 막힘"에 영원히 못
+            // 미쳐 포기 로직이 발동하지 않는다(MoveOutcome.stalled 주석 참고).
             seatApproachBlockedCount += 1
-            if seatApproachBlockedCount < NPCGuestTuning.seatApproachEscapeThreshold {
+            if !outcome.stalled, seatApproachBlockedCount < NPCGuestTuning.seatApproachEscapeThreshold {
                 playAnimation(.idle)
                 return
             }
@@ -733,12 +747,25 @@ final class NPCGuestController {
 
     /// arrived: 목적지에 도착(또는 이미 도착해 있었음). moved: 이번 프레임에 실제로
     /// 위치가 바뀌었는지. blocked: 장애물에 사실상 막혀 더 못 감(= 원하는 이동
-    /// 폭의 일정 비율도 못 갔음) — 호출부는 이걸 보고 그 자리에서 바로 다른
-    /// 목적지를 고르거나 좌석을 포기해야, 시간을 두지 않고 즉시 방향을 바꾼다.
+    /// 폭의 일정 비율도 못 갔음, stalled도 포함) — 호출부는 이걸 보고 Walk/Idle
+    /// 애니메이션을 정한다.
+    ///
+    /// stalled: stallCheckInterval(1.2초) 동안 순 이동이 stallMinimumDistance보다
+    /// 작았는지 — blocked와 별개 필드로 둔 이유는 호출부(update/updateMovingToSeat)의
+    /// "연속 N회 막히면 포기" 카운터(consecutiveBlockedCount/seatApproachBlockedCount)가
+    /// 프레임 단위 blocked만 보면 취약하기 때문이다. 여러 NPC가 좁은 공간에 몰려
+    /// 서로 미묘하게 밀고 밀리면, 어느 한 프레임은 blockedStepFraction을 살짝 넘겨
+    /// "막힘 아님"으로 판정되고 카운터가 0으로 리셋되는 일이 반복될 수 있다 —
+    /// 그러면 실제로는 1.2초 넘게 제자리인데도 "3연속 막힘"에는 영원히 도달하지
+    /// 못해 포기/탈출 로직이 아예 발동하지 않는다(실기에서 관찰된 "충돌 판정만
+    /// 나며 계속 서 있는" 현상의 근본 원인). stalled는 프레임 단위 흔들림과 무관하게
+    /// "1.2초간 순 이동이 거의 없었다"는 사실 자체를 보므로, 호출부는 이 신호
+    /// 하나만으로도(연속 횟수를 더 쌓지 않고) 즉시 탈출/포기로 넘어간다.
     private struct MoveOutcome {
         let arrived: Bool
         let moved: Bool
         let blocked: Bool
+        let stalled: Bool
     }
 
     /// grid가 있으면 NPCGuestPathfinder로 destination까지의 웨이포인트 경로를 찾는다.
@@ -770,7 +797,7 @@ final class NPCGuestController {
                                avoidPlayer: Bool = true,
                                avoidObstacles: Bool = true) -> MoveOutcome {
         guard let waypoint = activePath.first else {
-            return MoveOutcome(arrived: true, moved: false, blocked: false)
+            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false)
         }
         let isFinalWaypoint = activePath.count == 1
         let outcome = move(toward: waypoint, deltaTime: deltaTime,
@@ -787,7 +814,7 @@ final class NPCGuestController {
         activePath.removeFirst()
         return isFinalWaypoint
             ? outcome
-            : MoveOutcome(arrived: false, moved: true, blocked: false)
+            : MoveOutcome(arrived: false, moved: true, blocked: false, stalled: false)
     }
 
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
@@ -800,7 +827,7 @@ final class NPCGuestController {
                       avoidPlayer: Bool = true,
                       avoidObstacles: Bool = true) -> MoveOutcome {
         guard let root = locomotionRoot else {
-            return MoveOutcome(arrived: false, moved: false, blocked: false)
+            return MoveOutcome(arrived: false, moved: false, blocked: false, stalled: false)
         }
         let current = SIMD2<Float>(root.position.x, root.position.z)
         // 목적지가 바뀌었으면(새 배회 목적지, 좌석 이동 시작 등) 제자리걸음 감지 창을
@@ -816,7 +843,7 @@ final class NPCGuestController {
         let delta = target - current
         let distance = simd_length(delta)
         guard distance > arrivalDistance else {
-            return MoveOutcome(arrived: true, moved: false, blocked: false)
+            return MoveOutcome(arrived: true, moved: false, blocked: false, stalled: false)
         }
 
         let targetDirection = delta / distance
@@ -955,7 +982,8 @@ final class NPCGuestController {
         // blocked를 보고 즉시 처리한다 — 여기서 같이 건드리면 호출부가 막 고른 새
         // 목적지를 다시 지워버리거나, 다음 프레임에 남은 pauseRemaining 때문에
         // "즉시 방향 전환"이 지연될 수 있다.
-        return MoveOutcome(arrived: step >= distance, moved: moved, blocked: isBlocked || isStalled)
+        return MoveOutcome(arrived: step >= distance, moved: moved,
+                          blocked: isBlocked || isStalled, stalled: isStalled)
     }
 
     /// update() 호출 전후의 실제 위치 변화량을 deltaTime으로 나눠 velocity를 갱신한다.
