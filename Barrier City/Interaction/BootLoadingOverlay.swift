@@ -149,8 +149,13 @@ final class BootLoadingOverlay {
         return result
     }
 
-    /// 원본 CGImage가 어떤 색공간·알파 배치로 디코딩됐든 표준 8bit sRGB RGBA
-    /// (premultiplied-last)로 다시 그려 반환한다.
+    /// 원본 PNG는 배경이 완전 투명(alpha=0)인데, 그 투명 픽셀의 RGB 자체가 (0,0,0)로
+    /// 저장돼 있다 — 실측 확인됨(코너 픽셀 RGBA=(0,0,0,0)). UnlitMaterial 기본
+    /// 블렌딩(.opaque)이 텍스처 알파를 어떻게 다루느냐에 따라 이 투명 배경이 그대로
+    /// 검은 사각형으로 그려져 뒤의 검은 구체와 구분이 안 갈 수 있다. 알파 채널
+    /// 자체를 없애 이 불확실성을 원천 차단한다 — 불투명 흰 배경 위에 원본을
+    /// 합성해, 최종 텍스처에는 알파가 아예 없으므로(noneSkipLast) 블렌딩 모드와
+    /// 무관하게 항상 그대로 그려진다.
     private static func normalizeToRGBA8(_ image: CGImage) -> CGImage? {
         let width = image.width
         let height = image.height
@@ -163,8 +168,10 @@ final class BootLoadingOverlay {
                 bitsPerComponent: 8,
                 bytesPerRow: width * 4,
                 space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
         else { return nil }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage()
     }
