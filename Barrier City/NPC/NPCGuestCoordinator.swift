@@ -193,9 +193,12 @@ final class NPCGuestCoordinator {
         /// 배치 위치는 spawnDessert가 스케일 적용 후 바운즈를 다시 재서 표면에
         /// 맞추므로 이 값만 바꿔도 자동으로 정확히 안착한다.
         static let targetLatteHeight: Float = 0.08
-        /// 모델의 실측 바운즈 바닥을 테이블 상단면에 정확히 붙인다. 별도의 시각적
-        /// 여백을 더하면 작은 케이크/라떼에서는 몇 mm도 공중에 뜬 것으로 보인다.
-        static let surfaceClearance: Float = 0
+        /// 모델의 실측 바운즈 바닥을 테이블 상단면에 붙인다. 0으로 정확히 맞춰도
+        /// 테이블 표면 높이 추정치가 실측과 몇 mm만 어긋나면(이상치 보정이 못 잡는
+        /// 애매한 케이스) 그 오차가 그대로 "뜬 것처럼" 보인다. 양수 여백은 그 오차
+        /// 위에 더 얹어 뜬 티가 더 커지지만, 음수로 살짝 파묻으면(불투명한 케이크/컵
+        /// 바닥 몇 mm는 테이블 메시에 가려 안 보임) 뜨는 쪽보다 훨씬 눈에 덜 띈다.
+        static let surfaceClearance: Float = -0.004
         /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨 그 손님
         /// 바로 앞자리에 디저트를 놓는다. 시각 확인 후 필요하면 이 값만 조정한다.
         static let perSeatForwardOffset: Float = 0.18
@@ -366,8 +369,14 @@ final class NPCGuestCoordinator {
             let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
 
             for index in tableSurfaceBoundsByGroupIndex.indices {
-                guard var bounds = tableSurfaceBoundsByGroupIndex[index],
-                      abs(bounds.max.y - medianHeight) > outlierTolerance else { continue }
+                guard var bounds = tableSurfaceBoundsByGroupIndex[index] else { continue }
+                guard abs(bounds.max.y - medianHeight) > outlierTolerance else {
+                    // 디저트가 뜬 채 보고되면 이 로그로 어느 테이블 그룹이 실제로
+                    // 얼마나 표면 높이를 잘못 재고 있는지(이상치 보정이 적용 안 된
+                    // 애매한 케이스 포함) 바로 확인할 수 있다.
+                    Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이(보정 없음): \(bounds.max.y)m")
+                    continue
+                }
                 let corrected: Float
                 if let typicalClearance, let seatHeight = averageSeatHeight(index) {
                     corrected = seatHeight + typicalClearance
