@@ -561,22 +561,26 @@ final class NPCClerkController {
     }
 
     /// 대화 시작 직후 인사하기 전, 유저 쪽으로 걸어가며 최대한 다가간다. 목표를
-    /// 유저의 현재 위치 자체로 두고(매 프레임 다시 계산) move()가 이미 쓰는
-    /// NPCObstacleAvoidance의 유저 회피 반경(halfWidth+wheelchairRadius+skin)이
-    /// 자연스럽게 적당한 대화 거리에서 멈추게 한다 — 그 회피 때문에 실제 이동량이
-    /// 기대치보다 계속 작아지는 상태가 approachStallGracePeriod 이상 이어지면
-    /// "더는 못 다가간다"로 보고 그 자리에서 인사로 넘어간다.
+    /// 유저의 현재 위치 자체가 아니라 workArea(AreaK)로 투영한 지점으로 둔다(매
+    /// 프레임 다시 계산) — 유저는 대부분 AreaK 밖(고객 구역)에 있으므로, 투영하지
+    /// 않으면 물리적 장애물이 없는 한 점원이 카운터 밖 고객 구역까지 걸어 나가
+    /// 버린다. move()가 이미 쓰는 NPCObstacleAvoidance의 유저 회피 반경도 여전히
+    /// 함께 작동해, 투영된 목표가 유저와 가까운 경우에도 실제로 부딪히지 않는다.
+    /// 목표 근처에 도착했거나, 장애물에 막혀 실제 이동량이 기대치보다 계속
+    /// 작아지는 상태가 approachStallGracePeriod 이상 이어지면 "더는 못 다가간다"로
+    /// 보고 그 자리에서 인사로 넘어간다.
     private func updateApproachLoop(deltaTime: Float, playerPosition: SIMD2<Float>) {
         approachElapsed += deltaTime
         let before = currentClerkPosition
-        guard simd_distance(before, playerPosition) > NPCClerkTuning.arrivalDistance,
+        let target = workArea.clamped(playerPosition)
+        guard simd_distance(before, target) > NPCClerkTuning.arrivalDistance,
               approachElapsed < NPCClerkTuning.maxApproachDuration else {
             finishApproaching()
             return
         }
 
         playAnimation(.walk)
-        move(toward: playerPosition, deltaTime: deltaTime, playerPosition: playerPosition)
+        move(toward: target, deltaTime: deltaTime, playerPosition: playerPosition)
 
         let stepTaken = simd_distance(currentClerkPosition, before)
         let expectedStep = NPCClerkTuning.moveSpeed * deltaTime
