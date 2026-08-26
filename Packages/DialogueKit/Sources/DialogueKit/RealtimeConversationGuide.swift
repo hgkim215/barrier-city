@@ -41,7 +41,6 @@ public struct RealtimeConversationGuide: Sendable {
 
     public func instructions(
         persona: NPCPersona,
-        climate: SocialClimate,
         memory: ConversationMemory? = nil,
         fulfillmentContext: RainbowSmoothieFulfillmentContext = .orderingAllowed
     ) -> String {
@@ -57,8 +56,6 @@ public struct RealtimeConversationGuide: Sendable {
         점원 성격: \(persona.clerkPersonality.rawValue).
         성격 스타일: \(personalityStyle(persona.clerkPersonality))
         접근성 태도: \(realtimeAccessibilityRule(persona.accessibilityAttitude))
-        현재 관계 점수: \(String(format: "%.2f", climate.rapport)).
-        현재 태도: \(realtimeToneRule(climate.tone))
 
         # 언어와 대화 방식
         대화 전체에서 사용하는 언어는 한국어뿐이다. 자연스러운 일상 구어체 한국어로 말하라.
@@ -183,18 +180,4 @@ public struct RealtimeConversationGuide: Sendable {
         }
     }
 
-    private func realtimeToneRule(_ tone: Tone) -> String {
-        switch tone {
-        case .supportive:
-            "이전보다 협조적이지만 여전히 절제되어 있고 감정에 치우치지 않는다; 밝아지거나 지나치게 친절해지지 마라."
-        case .warm:
-            "점원 특유의 무미건조하고 피곤한 기본 태도는 유지하면서 다소 누그러지고 협조적이다."
-        case .neutral:
-            "무뚝뚝하고 사무적이며 감정을 잘 드러내지 않는다; 추가 요청을 받으면 살짝 귀찮은 티를 낸다."
-        case .dismissive:
-            "의심스러워하고 내키지 않아 하며 눈에 띄게 짜증을 낸다; 모욕하거나 뻔한 거절을 반복하지는 않되 약간 무례하게 굴어도 된다."
-        case .hostile:
-            "확연히 성급하고 배타적이지만, 비속어·협박·모욕·폭력은 쓰지 않는다."
-        }
-    }
 }

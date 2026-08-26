@@ -99,27 +99,28 @@ final class ImpactAudio {
         if !player.isPlaying { player.play() }
     }
 
-    /// 재생 중인 노드만 멈추고 엔진(하드웨어 I/O)은 계속 돌린다. 대화 시작마다
-    /// 세션이 .playback → .realtimeConversation으로 전환되며 여길 부르는데, 이전에는
-    /// engine.stop()으로 오디오 유닛 자체를 껐다 켰다 해서 그 하드웨어 전환 자체가
-    /// 매번 "쿵" 소리와 비슷한 클릭음을 냈다(정작 대화 상대와는 무관). 노드만 멈추면
-    /// 무음이라 이 클릭이 생기지 않는다.
+    /// 대화 시작마다 세션이 .playback → .realtimeConversation(.playAndRecord)으로
+    /// 전환되며 여길 부른다. 한때 이 클릭음을 없애려고 engine.stop()을 빼고 노드만
+    /// 멈췄는데, 그러면 AVAudioSession이 녹음 가능한 카테고리로 바뀌는 동안 이 앱의
+    /// AVAudioEngine이 이전 라우트로 계속 돌고 있어 실시간 대화의 마이크 입력·음성
+    /// 출력이 아예 안 되는 훨씬 심각한 회귀가 났다. AVAudioEngine을 세션 카테고리
+    /// 전환 전에 반드시 멈춰야 하는 건 Apple 문서에 명시된 요구사항이라, 클릭음보다
+    /// 이 정합성을 우선해 엔진 정지/재시작으로 되돌린다.
     private func suspendForAudioTransition() {
         guard isPrepared else { return }
         bumpPlayer.stop()
         thunkPlayer.stop()
+        if engine.isRunning { engine.stop() }
     }
 
     private func resumeAfterAudioTransition() {
-        guard isPrepared else { return }
-        if !engine.isRunning {
-            do {
-                engine.prepare()
-                try engine.start()
-            } catch { return }
-        }
-        if !bumpPlayer.isPlaying { bumpPlayer.play() }
-        if !thunkPlayer.isPlaying { thunkPlayer.play() }
+        guard isPrepared, !engine.isRunning else { return }
+        do {
+            engine.prepare()
+            try engine.start()
+            bumpPlayer.play()
+            thunkPlayer.play()
+        } catch {}
     }
 
     /// 짧은 충격음 한 발을 합성한다.
