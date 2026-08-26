@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 import simd
+import OSLog
 
 /// 물리 기반 차동 구동(우리 엔진) + USDA 메시를 광선으로 읽는 충돌.
 ///
@@ -10,6 +11,10 @@ import simd
 /// 위치/자세는 모두 우리가 적분하고, worldRoot를 그 역(inverse)으로 배치(world-inverse 시야).
 @MainActor
 struct WheelchairMovementSystem: System {
+
+    private static let collisionLogger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "WheelchairCollision")
 
     // 구동
     private static let pushGain: Float = 0.37  // 바퀴에 들어가는 힘(작을수록 살짝 밀어선 덜 나감)
@@ -151,11 +156,14 @@ struct WheelchairMovementSystem: System {
                               baseY: Float) -> WheelchairObstacleHit? {
                 let px = dzn, pz = -dxn   // 진행 방향에 수직
                 var nearest: WheelchairObstacleHit?
-                func recordHit(distance: Float, kind: WheelchairObstacleKind) {
+                func recordHit(distance: Float, kind: WheelchairObstacleKind, position: SIMD3<Float>) {
                     if nearest == nil || distance < nearest!.distance {
-                        nearest = WheelchairObstacleHit(distance: distance, kind: kind)
+                        nearest = WheelchairObstacleHit(distance: distance, kind: kind, position: position)
                     }
                 }
+                // worldRoot의 트랜스폼은 이 스윕 도중 바뀌지 않으므로 샘플마다(9회)
+                // 다시 계산하지 않고 한 번만 구해 재사용한다.
+                let mapToScene = worldRoot.transformMatrix(relativeTo: nil)
                 // 커브를 그리며 진입할 때 얇은 가구 모서리(다리·모서리)가 샘플 사이로
                 // 빠지지 않도록 폭 방향 샘플을 5개에서 9개로 촘촘히 한다.
                 for fraction: Float in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1] {
@@ -170,13 +178,12 @@ struct WheelchairMovementSystem: System {
                     // 완만한 경사면이 먼저 맞더라도 그 뒤의 수직 벽까지 검사한다.
                     for hit in hits where abs(hit.normal.y) < 0.5 {
                         let hitDistance = simd_distance(hit.position, logicalOrigin)
-                        recordHit(distance: hitDistance, kind: .environment)
+                        recordHit(distance: hitDistance, kind: .environment, position: hit.position)
                     }
 
                     // 환경 콜리전은 고정된 논리 맵 좌표에 있지만 NPC는 렌더링용
                     // worldRoot 아래에서 사용자 위치의 역변환을 함께 받는다. 같은 origin으로
                     // 두 그룹을 쏘면 NPC가 이동할수록 좌표가 어긋나므로 별도로 변환한다.
-                    let mapToScene = worldRoot.transformMatrix(relativeTo: nil)
                     let sceneOrigin4 = mapToScene * SIMD4(logicalOrigin, 1)
                     let sceneDirection4 = mapToScene * SIMD4(logicalDirection, 0)
                     let sceneOrigin = SIMD3(sceneOrigin4.x, sceneOrigin4.y, sceneOrigin4.z)
@@ -187,7 +194,7 @@ struct WheelchairMovementSystem: System {
                                                 query: .all, mask: AppModel.npcGroup)
                     for hit in npcHits {
                         let hitDistance = simd_distance(hit.position, sceneOrigin)
-                        recordHit(distance: hitDistance, kind: .npc)
+                        recordHit(distance: hitDistance, kind: .npc, position: hit.position)
                     }
                 }
                 return nearest
@@ -196,7 +203,8 @@ struct WheelchairMovementSystem: System {
             // 벽/NPC/넘을 수 없는 단차에 닿으면 실제 이동 속도는 모두 끊는다.
             // 시야 반동과 충돌음은 정책상 의미 있는 정적 환경 첫 충돌에만 준다.
             @MainActor
-            func stopAtObstacle(impactSpeed: Float, obstacleKind: WheelchairObstacleKind) {
+            func stopAtObstacle(impactSpeed: Float, obstacleKind: WheelchairObstacleKind,
+                                hitPosition: SIMD3<Float>? = nil) {
                 if WheelchairCollisionPolicy.shouldPlayImpactFeedback(
                     obstacleKind: obstacleKind,
                     impactSpeed: impactSpeed,
@@ -206,6 +214,13 @@ struct WheelchairMovementSystem: System {
                     motion.surgeVelocity = cappedImpact * Self.surgeGain
                     let intensity = min(1, abs(impactSpeed) / Self.impactReferenceSpeed)
                     ImpactAudio.shared.playThunk(intensity: max(0.2, intensity))
+                    // 눈에 보이는 것 없이 충돌음이 났다는 제보를 재현할 좌표를 남긴다 —
+                    // 콜리전(Cube_N)이 authoring 위치와 별개로 손으로 배치돼 있어, 가구를
+                    // 옮기면서 프록시를 안 옮기면 빈 공간에서 부딪힌 것처럼 보일 수 있다.
+                    if let hitPosition {
+                        Self.collisionLogger.notice(
+                            "환경 충돌음 재생 지점: (\(hitPosition.x), \(hitPosition.y), \(hitPosition.z)) 속도=\(impactSpeed)")
+                    }
                 }
                 motion.leftVelocity = 0
                 motion.rightVelocity = 0
@@ -319,7 +334,7 @@ struct WheelchairMovementSystem: System {
                 let contactTravel = min(requestedTravel, allowedTravel)
                 motion.positionX += leadDirX * contactTravel
                 motion.positionZ += leadDirZ * contactTravel
-                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind)
+                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind, hitPosition: obstacleHit.position)
             } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
@@ -348,8 +363,13 @@ struct WheelchairMovementSystem: System {
             let g0 = g0Hit?.height
             let gAh = groundY(motion.positionX + dirX * 0.18, motion.positionZ + dirZ * 0.18)
             let gBk = groundY(motion.positionX - dirX * 0.18, motion.positionZ - dirZ * 0.18)
-            let solids = [g0, gAh, gBk].compactMap { $0 }
-            let centerGround: Float? = solids.isEmpty ? nil : solids.reduce(0, +) / Float(solids.count)
+            // 매 프레임 도는 경로라, 배열 리터럴/compactMap 대신 직접 누적해 할당을 없앤다.
+            var groundSum: Float = 0
+            var groundCount = 0
+            if let g0 { groundSum += g0; groundCount += 1 }
+            if let gAh { groundSum += gAh; groundCount += 1 }
+            if let gBk { groundSum += gBk; groundCount += 1 }
+            let centerGround: Float? = groundCount == 0 ? nil : groundSum / Float(groundCount)
 
             if let g = centerGround, motion.chairHeight <= g + 0.02 {
                 // 지면 위/근처: 즉시 스냅 대신 부드럽게 따라가 미세 요철을 흡수.
@@ -404,8 +424,13 @@ struct WheelchairMovementSystem: System {
             let hC = g0Hit
 
             // 법선 평균 → 경사(가끔 격자 구멍을 때려도 평균이라 매끈).
+            // 매 프레임 도는 경로라, 배열 리터럴 없이 직접 누적한다.
             var nSum = SIMD3<Float>(0, 0, 0)
-            for h in [hRL, hRR, hFL, hFR, hC] { if let h { nSum += h.1 } }
+            if let hRL { nSum += hRL.1 }
+            if let hRR { nSum += hRR.1 }
+            if let hFL { nSum += hFL.1 }
+            if let hFR { nSum += hFR.1 }
+            if let hC { nSum += hC.1 }
             let navgRaw = simd_length(nSum) > 0.001 ? simd_normalize(nSum) : SIMD3<Float>(0, 1, 0)
             // 5점 공간 평균은 한 프레임 안의 격자 노이즈만 지운다. 겹치는 콜라이더나 메시
             // 이음매 근처에서 매 프레임 다른 표면이 걸리는 시간축 떨림은 저역통과로 흡수한다.

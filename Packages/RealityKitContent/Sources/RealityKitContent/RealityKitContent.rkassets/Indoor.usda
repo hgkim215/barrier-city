@@ -2607,6 +2607,22 @@ def Xform "Root"
                                 bool enableReceiveMeshShadow = 0
                                 uniform token info:id = "RealityKit.GroundingShadow"
                             }
+
+                            # WoodTable.usdz는 벤치(wooden_bench) 메시를 그대로 재사용한 것이라,
+                            # 전체 바운딩 박스 상단(로컬 Z 0.31445m)은 등받이 등 위로 솟은 얇은
+                            # 부분이고, 실제로 물건을 얹을 수 있는 평평한 상판면은 그보다 낮은
+                            # 로컬 Z≈0.1937m다(원본 usdz의 위쪽을 향한 면적을 실측해 확인 — 그
+                            # 높이에 전체 upward-facing 면적의 대부분이 몰려 있고, 바운딩 박스
+                            # 최상단에는 거의 없다). 코드가 바운딩 박스 top을 그대로 표면으로
+                            # 오인해 디저트가 떠 보이던 원인이라, SittingPoint와 같은 방식으로
+                            # 실측 표면 높이를 마커로 authoring해 NPCGuestCoordinator가 이 마커를
+                            # 우선 쓰게 한다(마커가 없는 일반 테이블은 기존처럼 바운딩 박스 top을
+                            # 그대로 쓴다).
+                            def Xform "TableSurfacePoint"
+                            {
+                                float3 xformOp:translate = (0, 0, 0.1937)
+                                uniform token[] xformOpOrder = ["xformOp:translate"]
+                            }
                         }
 
                         def Mesh "tripo_mesh_c2367986_3a8c_4d07_954f_64325fc1016d_1" (
@@ -5616,10 +5632,10 @@ def Xform "Root"
         {
             token info:id = "RealityKit.AnimationLibrary"
 
-            def RealityKitAnimationFile "FemaleWalk"
+            def RealityKitAnimationFile "Walk"
             {
                 uniform asset file = @NPC/Female/FemaleWalk.usdz@
-                uniform string name = "FemaleWalk"
+                uniform string name = "Walk"
             }
 
             def RealityKitAnimationFile "FemaleIdle"

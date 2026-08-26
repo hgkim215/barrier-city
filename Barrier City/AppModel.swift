@@ -152,7 +152,14 @@ final class AppModel {
     }
 
     /// 손 추적을 쓸지(실기), 버튼 입력을 쓸지(시뮬레이터).
+    /// 디버그 빌드는 ControlPanelView 토글로 개발자가 직접 켜는 것을 기본으로 하고,
+    /// 배포(Release) 빌드는 실기 사용자가 별도 토글 없이도 바로 손으로 조작할 수
+    /// 있도록 시작부터 켜 둔다.
+#if DEBUG
     var useHandTracking = false
+#else
+    var useHandTracking = true
+#endif
 
     // MARK: - 테스트용 주먹 드론 조작
     /// true면 바퀴 근처에서 양손을 잡는 대신, 주먹 하나를 가상 스틱처럼 사용한다.

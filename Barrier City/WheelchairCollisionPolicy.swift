@@ -8,6 +8,10 @@ enum WheelchairObstacleKind: Equatable {
 struct WheelchairObstacleHit: Equatable {
     let distance: Float
     let kind: WheelchairObstacleKind
+    /// 실제로 부딪힌 지점의 씬(world) 좌표. 눈에 보이는 것이 없는데 충돌음이 나는
+    /// 제보를 재현할 때, 어느 authored 콜리전 프록시(Cube_N 등)가 그 좌표에 있는지
+    /// Reality Composer Pro에서 바로 대조해볼 수 있게 로그로 남긴다.
+    let position: SIMD3<Float>
 }
 
 /// 충돌 자체(이동 정지)와 사용자 피드백(쿵 소리/시야 반동)을 분리하는 순수 정책.
