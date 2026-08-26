@@ -25,9 +25,20 @@ struct NPCAnimationRequest: Equatable {
 enum NPCClerkPhase: String {
     case unavailable = "실외"
     case working = "업무 중"
+    /// 대화 버튼을 누른 직후, 인사하기 전에 유저 쪽으로 다가가는 중.
+    case approaching = "다가가는 중"
     case greeting = "인사 중"
     case conversing = "대화 중"
     case orderAccepted = "주문 접수 완료"
+}
+
+/// 대화 시작 시 백그라운드로 미리 돌리는 startEncounter()의 진행 상태. 유저에게
+/// 걸어가는 동안 API 로딩이 먼저 끝나면 도착하자마자 곧장 대화로 들어가고, 아직
+/// 안 끝났으면 기존처럼 인사 대기(greeting)로 넘어가 완료를 기다린다.
+private enum NPCEncounterLoadState {
+    case pending
+    case ready
+    case failed
 }
 
 /// Barista 배치와 동선을 한곳에서 조절하는 튜닝값.
@@ -55,6 +66,12 @@ enum NPCClerkTuning {
     /// BarTable의 고객 쪽 경계에서 직원 구역 안/고객 쪽으로 떨어지는 거리.
     static let staffCounterInset: Float = 1.05
     static let customerStandOff: Float = 0.65
+    /// 대화 시작 시 유저 쪽으로 다가가다 NPCObstacleAvoidance의 유저 회피 반경에
+    /// 막혀 더 못 나아가는 상태가 이만큼 이어지면 "최대한 다가갔다"로 보고 멈춘다.
+    static let approachStallGracePeriod: Float = 0.3
+    /// 유저가 감지 반경 끝에 있어도 다가가는 시간이 무한정 늘어지지 않도록 두는
+    /// 상한(초). moveSpeed 기준으로 detectionRadius 전체를 걷고도 여유가 남는다.
+    static let maxApproachDuration: Float = 6.0
 
     /// Barista 자체 스케일·축 변환은 Indoor.usda에 작성되어 있어 wrapper는 보정하지 않는다.
     static let baristaScale: Float = 1.0
@@ -135,6 +152,12 @@ final class NPCClerkController {
     private var workPauseRemaining: Float = 0
     /// 대화 버튼을 누른 순간의 맵 좌표. 값이 있는 동안 업무 동선보다 우선해 위치를 고정한다.
     private var conversationAnchor: SIMD2<Float>?
+    /// .approaching 진입 후 경과 시간(초) — maxApproachDuration 상한 판정용.
+    private var approachElapsed: Float = 0
+    /// .approaching 중 실제 이동량이 기대치보다 계속 작은(막힌) 시간(초).
+    private var approachStallElapsed: Float = 0
+    /// 이번 encounter의 startEncounter() 백그라운드 로딩 진행 상태.
+    private var encounterLoadState: NPCEncounterLoadState = .pending
     private var handledAnimationSequence = 0
     private var handledMissionSequence = 0
     private var hasPlayedGreetingAnimation = false
@@ -194,6 +217,9 @@ final class NPCClerkController {
         hasPlayedGreetingAnimation = false
         pendingOrderConversationEnd = false
         isRemoteDevelopmentConversation = false
+        approachElapsed = 0
+        approachStallElapsed = 0
+        encounterLoadState = .pending
         dialogue.cancelEncounter()
     }
 
@@ -214,6 +240,9 @@ final class NPCClerkController {
         pendingOrderConversationEnd = false
         isRemoteDevelopmentConversation = false
         conversationAnchor = nil
+        approachElapsed = 0
+        approachStallElapsed = 0
+        encounterLoadState = .pending
         isInteractionBubbleVisible = false
         isTalkAvailable = false
         interactionBubble?.isEnabled = false
@@ -329,6 +358,13 @@ final class NPCClerkController {
         case .working:
             updateWorkLoop(deltaTime: dt, playerPosition: player)
 
+        case .approaching:
+            if !isRemoteDevelopmentConversation, playerDistance > NPCClerkTuning.conversationExitRadius {
+                endEncounterForDeparture()
+            } else {
+                updateApproachLoop(deltaTime: dt, playerPosition: player)
+            }
+
         case .greeting, .conversing:
             if playerDistance > NPCClerkTuning.conversationExitRadius {
                 endEncounterForDeparture()
@@ -366,7 +402,7 @@ final class NPCClerkController {
     /// 경로(endEncounterForDeparture)와 완전히 같은 정리를 타되, 거리와 무관하게
     /// 언제든 명시적으로 끝낼 수 있게 한다.
     func endConversation() {
-        guard conversationAnchor != nil || phase == .greeting || phase == .conversing else { return }
+        guard conversationAnchor != nil || phase == .approaching || phase == .greeting || phase == .conversing else { return }
         endEncounterForDeparture()
     }
 
@@ -524,6 +560,57 @@ final class NPCClerkController {
         Float.random(in: NPCClerkTuning.workPauseRange)
     }
 
+    /// 대화 시작 직후 인사하기 전, 유저 쪽으로 걸어가며 최대한 다가간다. 목표를
+    /// 유저의 현재 위치 자체로 두고(매 프레임 다시 계산) move()가 이미 쓰는
+    /// NPCObstacleAvoidance의 유저 회피 반경(halfWidth+wheelchairRadius+skin)이
+    /// 자연스럽게 적당한 대화 거리에서 멈추게 한다 — 그 회피 때문에 실제 이동량이
+    /// 기대치보다 계속 작아지는 상태가 approachStallGracePeriod 이상 이어지면
+    /// "더는 못 다가간다"로 보고 그 자리에서 인사로 넘어간다.
+    private func updateApproachLoop(deltaTime: Float, playerPosition: SIMD2<Float>) {
+        approachElapsed += deltaTime
+        let before = currentClerkPosition
+        guard simd_distance(before, playerPosition) > NPCClerkTuning.arrivalDistance,
+              approachElapsed < NPCClerkTuning.maxApproachDuration else {
+            finishApproaching()
+            return
+        }
+
+        playAnimation(.walk)
+        move(toward: playerPosition, deltaTime: deltaTime, playerPosition: playerPosition)
+
+        let stepTaken = simd_distance(currentClerkPosition, before)
+        let expectedStep = NPCClerkTuning.moveSpeed * deltaTime
+        if expectedStep > 0.0001, stepTaken < expectedStep * NPCClerkTuning.blockedStepFraction {
+            approachStallElapsed += deltaTime
+            if approachStallElapsed >= NPCClerkTuning.approachStallGracePeriod {
+                finishApproaching()
+            }
+        } else {
+            approachStallElapsed = 0
+        }
+    }
+
+    /// 다가가기를 마친다(도착/정체/시간초과 중 하나) — 그 자리에 위치를 고정하고,
+    /// 걸어오는 동안 백그라운드로 진행된 startEncounter() 결과에 따라 곧장
+    /// 대화로 들어가거나(이미 로딩 완료), 인사 대기로 넘어가거나(아직 로딩 중),
+    /// 업무로 되돌아간다(로딩 실패).
+    private func finishApproaching() {
+        conversationAnchor = currentClerkPosition
+        playAnimation(.idle)
+        switch encounterLoadState {
+        case .ready:
+            phase = .conversing
+        case .pending:
+            phase = .greeting
+        case .failed:
+            isRemoteDevelopmentConversation = false
+            conversationAnchor = nil
+            phase = .working
+            workTarget = nil
+            workPauseRemaining = randomWorkPause()
+        }
+    }
+
     @discardableResult
     private func move(toward target: SIMD2<Float>, deltaTime: Float,
                       playerPosition: SIMD2<Float>) -> Bool {
@@ -600,12 +687,14 @@ final class NPCClerkController {
         guard NPCConversationAccessPolicy.canBeginGreeting(
             clerkPhaseAllowsConversation: phase == .working || phase == .orderAccepted,
             guideAllowsConversation: GuideFlowModel.shared.allowsNPCConversation) else { return false }
-        // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 이동을 막는다.
+        // 비동기 startEncounter보다 먼저 잠가 버튼을 누른 바로 그 프레임부터 업무 동선을 막는다.
+        // 위치는 바로 고정하지 않는다 — update()의 .approaching이 유저 쪽으로 걸어가게 한다.
         self.isRemoteDevelopmentConversation = isRemoteDevelopmentConversation
-        conversationAnchor = currentClerkPosition
-        phase = .greeting
+        approachElapsed = 0
+        approachStallElapsed = 0
+        encounterLoadState = .pending
+        phase = .approaching
         isTalkAvailable = false
-        playAnimation(.idle)
         setInteractionBubbleVisible(true)
 
         // 키오스크 장벽 패널과 대화 패널이 겹치지 않게 현재 키오스크 UI를 닫는다.
@@ -614,19 +703,30 @@ final class NPCClerkController {
         interactions.activeTrigger = nil
         interactions.kioskPanelEntity?.isEnabled = false
 
+        // 유저 쪽으로 걸어가는 동안 API(Realtime 세션) 로딩을 백그라운드로 미리 시작한다.
+        // 도착 시점에 이미 끝나 있으면 인사 대기 없이 곧장 대화로 들어간다(finishApproaching 참고).
         greetingTask?.cancel()
         greetingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.dialogue.startEncounter()
-            guard !Task.isCancelled, self.phase == .greeting else { return }
+            guard !Task.isCancelled,
+                  self.phase == .approaching || self.phase == .greeting else { return }
             if self.dialogue.isEncounterActive {
-                self.phase = .conversing
+                self.encounterLoadState = .ready
+                if self.phase == .greeting {
+                    self.phase = .conversing
+                }
+                // .approaching이면 아직 걸어오는 중 — finishApproaching()이 이 상태를 보고 처리한다.
             } else {
-                self.isRemoteDevelopmentConversation = false
-                self.conversationAnchor = nil
-                self.phase = .working
-                self.workTarget = nil
-                self.workPauseRemaining = self.randomWorkPause()
+                self.encounterLoadState = .failed
+                if self.phase == .greeting {
+                    self.isRemoteDevelopmentConversation = false
+                    self.conversationAnchor = nil
+                    self.phase = .working
+                    self.workTarget = nil
+                    self.workPauseRemaining = self.randomWorkPause()
+                }
+                // .approaching이면 finishApproaching()이 이 상태를 보고 업무로 되돌린다.
             }
         }
         return true
