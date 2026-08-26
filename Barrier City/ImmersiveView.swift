@@ -63,8 +63,15 @@ struct ImmersiveView: View {
             worldRoot.components.set(WheelchairComponent())
             content.add(worldRoot)
             model.worldRoot = worldRoot
-            // 배경음악은 로딩(스플래시) 화면이 끝나고 도시가 페이드인되는 순간에
-            // 맞춰 재생한다 — 아래 로딩 완료 지점(BootLoadingOverlay 제거부) 참고.
+            // 배경음악은 로딩 완료 시점(화면 페이드인 직전)이 아니라 여기, 로딩이
+            // 막 시작된 시점에 바로 재생을 건다. mp3 디코딩이 비동기라(내부
+            // AudioFileResource(contentsOf:) await), play() 호출 시점과 실제로 소리가
+            // 들리기 시작하는 시점 사이에 지연이 있다 — 로딩 끝난 뒤에야 걸면 그
+            // 지연만큼 화면이 이미 밝아진 뒤에야 소리가 들리기 시작했다. 최소
+            // 5초(minimumLoadingDuration)짜리 스플래시가 뜨는 이 구간에 디코딩
+            // 지연을 흡수시켜, 스플래시가 보이는 동안 배경음이 실제로 들리기
+            // 시작하게 한다.
+            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
 
             // 로딩 화면: Outdoor 표시 + Indoor/Realtime 프리로드가 끝날 때까지 화면을
             // 가린다. 휠체어 입력·문/키오스크 트리거 판정도 같이 멈춘다(isBootLoading).
@@ -210,15 +217,13 @@ struct ImmersiveView: View {
             // SceneFadeOverlay를 먼저 즉시 불투명하게 만들어(애니메이션 없이) 로딩
             // 화면(BootLoadingOverlay 검은 구체)을 걷어내도 화면이 계속 검게
             // 유지되게 한 뒤, fadeIn으로 매끄럽게 밝아지며 도시로 들어가는 느낌을
-            // 준다. 배경음악도 이 순간(도시 진입 시점)에 맞춰 재생한다. 스플래시
-            // 볼륨 윈도우(ControlPanelView가 열었다)도 같은 시점에 닫는다.
+            // 준다. 배경음악은 위 worldRoot 생성 직후에 이미 재생을 걸어둬서
+            // 스플래시가 보이는 동안부터 들리기 시작한다. 스플래시 볼륨 윈도우
+            // (ControlPanelView가 열었다)도 같은 시점에 닫는다.
             SceneFadeOverlay.shared.snapOpaque()
             BootLoadingOverlay.shared.remove()
             dismissWindow(id: AppSceneID.splash)
             InteractionModel.shared.isBootLoading = false
-            // 음악을 먼저 재생 시작(자체적으로 1.5초에 걸쳐 페이드인됨)한 뒤 화면을
-            // 밝혀, 시야가 밝아지기 전부터 배경음이 들리기 시작하게 한다.
-            AmbientSceneAudioController.shared.play(resource: "background_sound_outdoor", worldRoot: worldRoot)
             SceneFadeOverlay.shared.fadeIn()
 
         } update: { _, _ in
