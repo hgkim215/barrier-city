@@ -207,7 +207,7 @@ final class NPCGuestCoordinator {
         /// 약 1m 떨어진 테이블 안쪽에 디저트를 놓는다. 좁은 테이블에서는 아래 edgeMargin을
         /// 뺀 inset 범위로 다시 클램프되므로, 실제로는 "1m 또는 테이블이 허용하는 한
         /// 최대한 안쪽" 중 더 가까운 쪽에 놓인다.
-        static let perSeatForwardOffset: Float = 1.0
+        static let perSeatForwardOffset: Float = 0.5
         /// 좌석 정면 위치에서 무작위로 살짝 어긋나게 둬 기계적으로 보이지 않게 한다.
         static let placementJitter: Float = 0.03
         /// 테이블 가장자리에 걸치지 않도록 바운즈 절반 폭에서 빼는 여백.
