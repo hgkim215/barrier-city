@@ -29,7 +29,6 @@ final class NPCDialogueController {
         static let postOrderFarewellTimeout: TimeInterval = 1.0
         /// 응답 생성이나 도구 후속 응답이 시작되지 않을 때 무한 대기를 끊는 시간.
         static let generationTimeout: TimeInterval = 30
-        static let inactivityRapportPenalty: Float = 0.1
         static let inactivityFarewell = "그럼 전 일하러 갈게요. 필요하면 다시 부르세요."
     }
 
@@ -38,8 +37,6 @@ final class NPCDialogueController {
     var userText: String = ""      // 내 확정 발화
     var npcSubtitle: String = ""   // NPC 자막(현재 문장)
     var lastEvent: String = ""     // orderPlaced / helpRequested / exited
-    var rapport: Float             // NPC 성향 기반 초기값 + 대화별 변화(AI#4)
-    var tone: Tone
     private(set) var isEncounterActive = false
     private(set) var animationRequest: NPCAnimationRequest?
     private(set) var lastMissionEvent: MissionEvent?
@@ -62,7 +59,6 @@ final class NPCDialogueController {
     private let orderSession: CafeOrderSession
     private let accessibilityAttitude: AccessibilityAttitude
     private let clerkPersonality: ClerkPersonality
-    private var climate: SocialClimate
     private var animationSequence = 0
     private var hasRequestedGreetingAnimation = false
     private var pendingOrderAcceptanceReaction = false
@@ -113,14 +109,10 @@ final class NPCDialogueController {
         clerkPersonality: ClerkPersonality? = nil
     ) {
         let resolvedPersonality = clerkPersonality ?? .random()
-        let initialClimate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
         self.orderSession = orderSession
         self.accessibilityAttitude = accessibilityAttitude
         self.clerkPersonality = resolvedPersonality
         realtimeMission = RealtimeMissionCoordinator()
-        climate = initialClimate
-        rapport = initialClimate.rapport
-        tone = initialClimate.tone
     }
 
     private static func makePersona(
@@ -135,7 +127,7 @@ final class NPCDialogueController {
             clerkPersonality: clerkPersonality)
     }
 
-    /// 몰입 공간 재진입 시 이전 대화·호감도·미션 이벤트를 초기 상태로 되돌린다.
+    /// 몰입 공간 재진입 시 이전 대화·미션 이벤트를 초기 상태로 되돌린다.
     func resetImmersiveProgress() {
         orderReadyAnnouncementTask?.cancel()
         orderReadyAnnouncementTask = nil
@@ -145,9 +137,6 @@ final class NPCDialogueController {
         userText = ""
         npcSubtitle = ""
         lastEvent = ""
-        climate = SocialClimate(rapport: accessibilityAttitude.initialRapport)
-        rapport = climate.rapport
-        tone = climate.tone
         realtimeLiveText = ""
         realtimeSpeechDetected = false
         realtimeMission.resetImmersiveProgress()
@@ -254,7 +243,7 @@ final class NPCDialogueController {
     }
 
     /// ImmersiveSpace가 실제로 닫히는 순간 네트워크 연결과 대화 문맥을 폐기한다.
-    /// 미션·호감도 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
+    /// 미션 전체 초기화는 다음 immersive generation 진입점에서 수행한다.
     func endImmersiveSession() {
         let readySession = orderReadyRealtimeSession
         orderReadyRealtimeSession = nil
@@ -280,7 +269,7 @@ final class NPCDialogueController {
     }
 
     /// 거리 이탈·씬 종료처럼 공간 상태가 대화를 끝낼 때 호출한다.
-    /// 마이크를 즉시 닫고 진행 중인 자동 턴을 취소하되, 호감도와 미션 결과는 보존한다.
+    /// 마이크를 즉시 닫고 진행 중인 자동 턴을 취소하되, 미션 결과는 보존한다.
     func cancelEncounter() {
 #if DEBUG
         Self.lifecycleLogger.debug(
@@ -361,7 +350,6 @@ final class NPCDialogueController {
         do {
             try await session.start(
                 instructions: realtimeInstructions(
-                    for: SocialClimate(rapport: rapport),
                     memory: conversationMemory
                 ),
                 openingInstructions: RealtimeConversationGuide.openingInstructions(
@@ -431,9 +419,6 @@ final class NPCDialogueController {
             realtimeMicrophoneIsReady = false
             status = .thinking
             guard let realtimeSession else { return }
-            climate.apply(Self.assessAttitude(transcript))
-            rapport = climate.rapport
-            tone = climate.tone
             armRealtimeGenerationTimeout()
             realtimeCommandTask?.cancel()
             realtimeCommandTask = Task { @MainActor [weak self, realtimeSession] in
@@ -443,7 +428,7 @@ final class NPCDialogueController {
                     guard self.isEncounterActive,
                           self.realtimeSession === realtimeSession else { return }
                     try await realtimeSession.requestResponse(
-                        instructions: self.realtimeInstructions(for: self.climate),
+                        instructions: self.realtimeInstructions(),
                         toolChoice: .auto,
                         tools: self.fulfillmentContext.allowsOrderCompletion
                             ? [Self.reportOrderAttemptTool, Self.placeMissionOrderTool]
@@ -541,7 +526,6 @@ final class NPCDialogueController {
     }
 
     private func realtimeInstructions(
-        for climate: SocialClimate,
         memory: ConversationMemory? = nil
     ) -> String {
         """
@@ -550,7 +534,6 @@ final class NPCDialogueController {
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
-            climate: climate,
             memory: memory,
             fulfillmentContext: fulfillmentContext
         ))
@@ -567,7 +550,6 @@ final class NPCDialogueController {
                 accessibilityAttitude: accessibilityAttitude,
                 clerkPersonality: clerkPersonality
             ),
-            climate: SocialClimate(rapport: rapport),
             memory: conversationMemory,
             fulfillmentContext: fulfillmentContext
         ))
@@ -660,7 +642,7 @@ final class NPCDialogueController {
 
     /// 주문 확정 뒤 짧은 유예 시간 동안 유저가 아무 반응이 없으면 조용히 대화를 마친다.
     /// 이미 승낙 대사로 자연스럽게 마무리됐으므로, 평소 무응답 종료와 달리 별도 작별
-    /// 대사나 호감도 페널티는 적용하지 않는다.
+    /// 대사는 적용하지 않는다.
     private func finishRealtimeEncounterAfterOrderConfirmation() {
         guard isEncounterActive else { return }
         requestAnimation(.idle)
@@ -747,28 +729,12 @@ final class NPCDialogueController {
     }
 
     private func finishRealtimeEncounterForInactivity() async {
-        guard isEncounterActive else { return }
-        applyInactivityPenalty()
         guard isEncounterActive, !Task.isCancelled else { return }
         npcSubtitle = RealtimeConversationTuning.inactivityFarewell
         requestAnimation(.idle)
         cancelEncounter()
         status = .idle
         publishMissionEvent(.exited)
-    }
-
-    private func applyInactivityPenalty() {
-        climate.applyInactivityPenalty(RealtimeConversationTuning.inactivityRapportPenalty)
-        rapport = climate.rapport
-        tone = climate.tone
-    }
-
-    /// 기존 대화 오케스트레이터와 같은 규칙으로 Realtime 발화의 태도를 반영한다.
-    private static func assessAttitude(_ text: String) -> PlayerTurn {
-        let polite = ["요", "주세요", "감사", "죄송", "부탁"].contains { text.contains($0) }
-        let impatient = ["빨리", "당장", "언제까지", "어휴", "답답"].contains { text.contains($0) }
-        let hostile = ["야", "바보", "멍청", "꺼져", "닥쳐", "짜증나"].contains { text.contains($0) }
-        return PlayerTurn(text: text, polite: polite, impatient: impatient, hostile: hostile)
     }
 
     private static let reportOrderAttemptTool = RealtimeFunctionTool(
