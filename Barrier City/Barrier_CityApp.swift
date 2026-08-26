@@ -35,7 +35,7 @@ struct Barrier_CityApp: App {
             SplashOverlayView()
         }
         .windowStyle(.volumetric)
-        .defaultSize(width: 0.4, height: 0.4, depth: 0.01, in: .meters)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.01, in: .meters)
 
         ImmersiveSpace(id: AppSceneID.wheelchair) {
             ImmersiveView()
