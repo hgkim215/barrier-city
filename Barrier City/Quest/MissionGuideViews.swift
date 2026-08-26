@@ -9,26 +9,24 @@ struct MissionAnnouncementView: View {
             VStack(spacing: 28) {
                 guideBadge("Mission")
 
-                VStack(spacing: 16) {
+                VStack(spacing: 20) {
                     Text(narrative.situation)
-                        .font(.title3.bold())
+                        .font(.largeTitle.bold())
                         .multilineTextAlignment(.center)
+                        .lineSpacing(4)
 
                     Text(narrative.action)
-                        .font(.subheadline.weight(.medium))
+                        .font(.title3.weight(.medium))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
             }
 
-            Button("확인", action: onConfirm)
-                .buttonStyle(.borderedProminent)
-                .tint(GuideTheme.accent)
-                .frame(minWidth: 200, minHeight: 52)
+            GuidePrimaryButton(title: "확인", action: onConfirm)
         }
-        .padding(.horizontal, 60)
-        .padding(.vertical, 32)
-        .frame(width: 553)
+        .padding(.horizontal, 64)
+        .padding(.vertical, 44)
+        .frame(width: GuideCardMetrics.missionWidth)
         .glassBackgroundEffect()
     }
 }
@@ -42,8 +40,8 @@ struct MissionListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Mission List")
-                .font(.callout.bold())
-                .padding(.bottom, 10)
+                .font(.title2.bold())
+                .padding(.bottom, 16)
 
             ForEach(Array(steps.prefix(visibleCount).enumerated()), id: \.element.id) { offset, step in
                 let isClear = allCompleted || offset < visibleCount - 1
@@ -55,15 +53,15 @@ struct MissionListView: View {
 
                 HStack(spacing: 20) {
                     Text("\(offset + 1). \(step.title)")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(isClear ? Color.secondary : Color.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text(statusLabel)
-                        .font(.caption2.bold())
+                        .font(.callout.bold())
                         .foregroundStyle(isClear ? Color.secondary : GuideTheme.accent)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                         .overlay(
                             Capsule().stroke(
                                 isClear ? Color.secondary : GuideTheme.accent,
@@ -71,11 +69,11 @@ struct MissionListView: View {
                             )
                         )
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, 13)
             }
         }
-        .padding(28)
-        .frame(width: 400, alignment: .leading)
+        .padding(34)
+        .frame(width: GuideCardMetrics.missionListWidth, alignment: .leading)
         .glassBackgroundEffect()
     }
 }

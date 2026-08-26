@@ -8,61 +8,64 @@ struct TutorialGuideView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        HStack(spacing: 24) {
+        VStack(spacing: GuideCardMetrics.panelGap) {
+            // 영상은 텍스트 카드와 분리된 별도 글래스 패널로 띄운다.
+            // 한 카드 안에 좌우로 넣으면 16:9 영상 때문에 카드가 가로로만 길어진다.
             LoopingGuideVideoView(resourceName: step.videoResourceName)
-                .frame(width: 383, height: 356)
+                .frame(width: GuideCardMetrics.videoWidth,
+                       height: GuideCardMetrics.videoHeight)
+                .padding(GuideCardMetrics.videoFramePadding)
+                .glassBackgroundEffect(in: .rect(cornerRadius: 32))
 
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("건너뛰기", action: onSkip)
-                        .buttonStyle(.plain)
-                }
-
-                Text("Guide \(step.id + 1) / \(totalCount)")
-                    .font(.caption.bold())
-                    .foregroundStyle(GuideTheme.accent)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .overlay(Capsule().stroke(GuideTheme.accent, lineWidth: 1))
-
-                Spacer()
-
-                Text(step.title)
-                    .font(.title2.bold())
-
-                Text(step.detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 10)
-
-                Spacer()
-
-                HStack(spacing: 20) {
-                    if step.id > 0 {
-                        Button(action: onPrevious) {
-                            Image(systemName: "chevron.left")
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                    }
-
-                    Button(
-                        step.id == totalCount - 1 ? "시작하기" : "다음",
-                        action: onNext
-                    )
-                    .buttonStyle(.borderedProminent)
-                    .tint(GuideTheme.accent)
-                    .frame(minWidth: 200, minHeight: 52)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(20)
+            textCard
         }
-        .padding(20)
-        .frame(width: 767, height: 396)
+        .onboardingAnchored()
+    }
+
+    private var textCard: some View {
+        VStack(spacing: 0) {
+            guideBadge("Guide \(step.id + 1) / \(totalCount)")
+
+            Spacer(minLength: 12)
+
+            Text(step.title)
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+
+            Text(step.detail)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.top, 12)
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 20) {
+                if step.id > 0 {
+                    Button(action: onPrevious) {
+                        Image(systemName: "chevron.left")
+                            .font(.title3.bold())
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                }
+
+                GuidePrimaryButton(
+                    title: step.id == totalCount - 1 ? "시작하기" : "다음",
+                    action: onNext)
+            }
+        }
+        .padding(GuideCardMetrics.padding)
+        .frame(width: GuideCardMetrics.width,
+               height: GuideCardMetrics.cardHeight)
+        .overlay(alignment: .topTrailing) {
+            Button("건너뛰기", action: onSkip)
+                .font(.title3.weight(.semibold))
+                .buttonStyle(.plain)
+                .padding(GuideCardMetrics.padding)
+        }
         .glassBackgroundEffect()
     }
 }
@@ -105,6 +108,6 @@ struct TutorialGuideView: View {
         resourceName: "missing-preview-video",
         placeholderResourceName: nil
     )
-    .frame(width: 383, height: 356)
+    .frame(width: GuideCardMetrics.videoWidth, height: GuideCardMetrics.videoHeight)
     .padding()
 }

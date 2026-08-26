@@ -82,11 +82,12 @@ struct KioskOrderView: View {
                 .foregroundStyle(.black)
 
             HStack {
+                // 실제 동작이 없는 장식 아이콘. 버튼으로 오인되지 않게 VoiceOver에서 숨긴다.
                 Image(systemName: "house.fill")
                     .font(.system(size: 27, weight: .black))
                     .foregroundStyle(.black)
                     .frame(width: 56, height: 56)
-                    .accessibilityLabel("홈")
+                    .accessibilityHidden(true)
 
                 Spacer()
             }
@@ -154,7 +155,7 @@ struct KioskOrderView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible)
         .frame(maxHeight: .infinity)
     }
 
@@ -239,13 +240,16 @@ struct KioskOrderView: View {
 
             Spacer(minLength: 8)
 
+            // 결제는 제공하지 않는다. 눌러도 되는 것처럼 보이지 않게 비활성 표현을 준다.
             Button("주문하기") {}
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 142, height: 58)
-                .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .buttonStyle(.plain)
                 .disabled(true)
+                .font(.system(size: 19, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(width: 142, height: 58)
+                .background(
+                    Color.black.opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHint("결제 기능은 제공되지 않습니다")
         }
         .padding(.horizontal, 20)

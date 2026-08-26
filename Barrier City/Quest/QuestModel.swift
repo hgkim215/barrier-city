@@ -31,11 +31,11 @@ struct QuestStep: Identifiable, Equatable {
 /// lazy-follow HUD 튜닝 상수 단일 진실원(시뮬레이터에서 보며 조정).
 enum QuestTuning {
     /// head 앞으로 띄우는 거리(m)
-    static let forwardDistance: Float = 1.2
+    static let forwardDistance: Float = 0.85
     /// 중앙 모달의 head 기준 좌우 오프셋(m, -면 왼쪽)
     static let centerLateralOffset: Float = 0
     /// 중앙 모달의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
-    static let centerVerticalOffset: Float = -0.05
+    static let centerVerticalOffset: Float = -0.16
     /// 상단 선행 HUD의 head 기준 좌우 오프셋(m, -면 왼쪽)
     static let hudLateralOffset: Float = -0.4
     /// 상단 선행 HUD의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
@@ -47,9 +47,9 @@ enum QuestTuning {
     /// 지수 스무딩 수렴 속도(초당 배율 계수). 클수록 빨리 붙는다.
     static let smoothingRate: Float = 4.0
     /// head 포즈를 못 얻을 때 중앙 모달의 고정 배치 위치(씬 원점 기준).
-    static let centerFallbackPosition = SIMD3<Float>(0, 1.45, -1.2)
+    static let centerFallbackPosition = SIMD3<Float>(0, 1.34, -0.85)
     /// head 포즈를 못 얻을 때 상단 선행 HUD의 고정 배치 위치(씬 원점 기준).
-    static let hudFallbackPosition = SIMD3<Float>(-0.4, 1.65, -1.2)
+    static let hudFallbackPosition = SIMD3<Float>(-0.4, 1.65, -0.85)
 }
 
 enum QuestAdvanceOutcome: Equatable {
