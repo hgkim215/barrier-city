@@ -14,8 +14,12 @@ import SwiftUI
 enum QuestSetup {
     private static var follower: QuestHUDFollower?
     private static var hudPanel: Entity?
+    private static var videoPanel: Entity?
     private static var subscription: EventSubscription?
     private static var startTask: Task<Void, Never>?
+
+    /// 마지막으로 관측된 head 위치. 문 진입 패널이 온보딩과 같은 높이를 쓰려고 읽는다.
+    static var lastHeadPosition: SIMD3<Float>? { follower?.lastHeadPosition }
 
     static func install(content: RealityViewContent,
                         attachments: RealityViewAttachments,
@@ -30,6 +34,13 @@ enum QuestSetup {
         }
         content.add(panel)   // 씬 루트에 직접(HUD는 맵과 함께 움직이면 안 된다)
         hudPanel = panel
+
+        // 안내 영상은 멀리 TV처럼 걸리는 별도 패널이라 attachment도 따로 둔다.
+        if let video = attachments.entity(for: "guideVideo") {
+            video.isEnabled = false
+            content.add(video)
+            videoPanel = video
+        }
         appModel.endingCelebration.attach(to: panel)
 
         let f = QuestHUDFollower()
@@ -39,8 +50,10 @@ enum QuestSetup {
         subscription = content.subscribe(to: SceneEvents.Update.self) { event in
             guard let panel = hudPanel, let f = follower else { return }
             f.update(panel: panel,
+                     videoPanel: videoPanel,
                      dt: Float(event.deltaTime),
                      placement: GuideFlowModel.shared.placement,
+                     showsVideo: GuideFlowModel.shared.showsGuideVideo,
                      model: appModel)
         }
     }
@@ -55,5 +68,7 @@ enum QuestSetup {
         follower = nil
         hudPanel?.removeFromParent()
         hudPanel = nil
+        videoPanel?.removeFromParent()
+        videoPanel = nil
     }
 }

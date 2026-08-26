@@ -91,6 +91,8 @@ enum InteractionTuning {
     nonisolated static let doorPromptEyeFrontPosition = SIMD3<Float>(0, 1.35, -0.60)
     /// 문 선택 패널을 사용자의 시선 쪽으로 비스듬히 기울이는 상향 틸트 각도(라디안, 약 10도).
     nonisolated static let doorPromptTiltAngleRadians: Float = 0.175
+    /// head 포즈를 아직 못 얻었을 때 쓰는 눈높이(m). 실제로는 QuestSetup이 관측한 값을 쓴다.
+    nonisolated static let doorPromptFallbackEyeHeight: Float = 1.5
     /// 최신 Outdoor의 Door 프림을 못 찾을 때 쓰는 authored 문 좌표(맵 좌표 x, z).
     static let doorFallbackCenter = SIMD2<Float>(-0.16957682, -5.889111)
     /// Indoor marker 조회 실패 시 쓰는 문 안쪽 폴백 포즈.
