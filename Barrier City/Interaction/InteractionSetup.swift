@@ -245,7 +245,7 @@ enum InteractionSetup {
         //    예전에는 고정 좌표(y 1.35)라 가이드 카드보다 30cm 가까이 높았다.
         //    QuestHUDFollower가 관측한 실제 눈높이를 기준으로 삼아, 앉은 자세에서도
         //    가이드 카드와 같은 자리에 오게 한다. 키오스크는 표면 앞 배치 그대로.
-        let eyeHeight = QuestSetup.lastHeadPosition?.y
+        let eyeHeight = QuestSetup.baselineEyeHeight
             ?? InteractionTuning.doorPromptFallbackEyeHeight
         if t.kind == .yesNoPrompt {
             worldPos = SIMD3(0,

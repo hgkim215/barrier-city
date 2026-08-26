@@ -18,8 +18,8 @@ enum QuestSetup {
     private static var subscription: EventSubscription?
     private static var startTask: Task<Void, Never>?
 
-    /// 마지막으로 관측된 head 위치. 문 진입 패널이 온보딩과 같은 높이를 쓰려고 읽는다.
-    static var lastHeadPosition: SIMD3<Float>? { follower?.lastHeadPosition }
+    /// 진입 직후 확정한 기준 눈높이. 문 진입 패널이 온보딩과 같은 높이를 쓰려고 읽는다.
+    static var baselineEyeHeight: Float? { follower?.baselineEyeHeight }
 
     static func install(content: RealityViewContent,
                         attachments: RealityViewAttachments,
@@ -51,7 +51,6 @@ enum QuestSetup {
             guard let panel = hudPanel, let f = follower else { return }
             f.update(panel: panel,
                      videoPanel: videoPanel,
-                     dt: Float(event.deltaTime),
                      placement: GuideFlowModel.shared.placement,
                      showsVideo: GuideFlowModel.shared.showsGuideVideo,
                      model: appModel)
