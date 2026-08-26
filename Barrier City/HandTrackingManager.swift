@@ -435,13 +435,15 @@ final class HandTrackingManager {
     /// 쥠 정도와 원시 거리값을 함께 반환.
     /// - strength: 0=편 손, 1=주먹 (보정된 값)
     /// - rawD: 손가락끝-손목 평균거리 / 손크기 (펴면 큼, 주먹이면 작음). 보정 기준값.
+    private static let grabStrengthTips: [HandSkeleton.JointName] = [
+        .indexFingerTip, .middleFingerTip, .ringFingerTip, .littleFingerTip
+    ]
+
     private func grabStrength(_ anchor: HandAnchor) -> (strength: Float, rawD: Float) {
         guard let skeleton = anchor.handSkeleton else { return (0, 0) }
 
         let wrist = skeleton.joint(.wrist).anchorFromJointTransform.columns.3.xyz
-        let tips: [HandSkeleton.JointName] = [
-            .indexFingerTip, .middleFingerTip, .ringFingerTip, .littleFingerTip
-        ]
+        let tips = Self.grabStrengthTips
         // 손 크기 기준(손목→중지 밑동)으로 정규화
         let mid = skeleton.joint(.middleFingerMetacarpal).anchorFromJointTransform.columns.3.xyz
         let handSize = max(0.02, simd_distance(wrist, mid))
