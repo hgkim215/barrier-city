@@ -95,11 +95,11 @@ final class RealtimeMissionCoordinatorTests: XCTestCase {
 
         _ = coordinator.register(name: "report_order_attempt", callID: "call-1", arguments: "{}")
         XCTAssertTrue(coordinator.snapshot.hasRedirectedFirstOrderToKiosk)
-        XCTAssertTrue(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("너무 바빠서 응대할 수 없다") == true)
+        XCTAssertTrue(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("원칙적으로 주문을 키오스크에서만 받는다") == true)
 
         // 이미 리다이렉트가 끝났으면 다시 불러도 키오스크 대사를 반복하지 않는다.
         _ = coordinator.register(name: "report_order_attempt", callID: "call-2", arguments: "{}")
-        XCTAssertFalse(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("너무 바빠서 응대할 수 없다") == true)
+        XCTAssertFalse(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("원칙적으로 주문을 키오스크에서만 받는다") == true)
     }
 
     func test_registerVisitorTurn_onlyCountsAfterRedirectAndBeforeOrderPlaced() {
@@ -175,7 +175,7 @@ final class RealtimeMissionCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.snapshot.orderPlaced)
         let pending = coordinator.takeFunctionCalls()
         XCTAssertEqual(pending.map(\.callID), ["call-1", "call-2"])
-        XCTAssertTrue(pending[0].followUpInstructions.contains("너무 바빠서 응대할 수 없다"))
+        XCTAssertTrue(pending[0].followUpInstructions.contains("원칙적으로 주문을 키오스크에서만 받는다"))
         // 두 번째(무시된) 호출은 API에 결과만 보내고, 서사에 영향을 주는 지시는 담지 않는다.
         XCTAssertTrue(pending[1].followUpInstructions.isEmpty)
         XCTAssertTrue(pending[1].output.contains(#""success":false"#))
@@ -216,7 +216,7 @@ final class RealtimeMissionCoordinatorTests: XCTestCase {
         _ = coordinator.register(name: "report_order_attempt", callID: "call-3", arguments: "{}")
 
         XCTAssertTrue(coordinator.snapshot.orderPlaced)
-        XCTAssertFalse(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("너무 바빠서 응대할 수 없다") == true)
+        XCTAssertFalse(coordinator.takeFunctionCalls().first?.followUpInstructions.contains("원칙적으로 주문을 키오스크에서만 받는다") == true)
     }
 
     func test_secondCall_acceptsExtraUnknownJSONFields() {
