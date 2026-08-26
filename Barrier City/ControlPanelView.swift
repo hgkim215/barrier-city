@@ -351,7 +351,7 @@ struct ControlPanelView: View {
     private var isNPCConversationInProgress: Bool {
         if model.npcDialogue.isEncounterActive { return true }
         switch model.npcClerk.phase {
-        case .greeting, .conversing:
+        case .approaching, .greeting, .conversing:
             return true
         case .unavailable, .working, .orderAccepted:
             return false

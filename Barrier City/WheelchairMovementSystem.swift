@@ -49,6 +49,13 @@ struct WheelchairMovementSystem: System {
     private static let stepProbe: Float = 0.10
     private static let stepMin: Float = 0.02
     private static let stepBlock: Float = 0.03
+    /// isBumpSettling 래치를 푸는 문턱은 stepBlock보다 낮게 둔다(히스테리시스).
+    /// 겹치거나 살짝 어긋난 콜리전 프록시 경계에서는 접지 raycast가 매 프레임
+    /// 다른 표면을 잡아 dy가 stepBlock 바로 위아래로 떨림 — 같은 문턱으로
+    /// 트리거/해제를 모두 판정하면 그 떨림마다 래치가 풀렸다 다시 걸리며
+    /// 단차 흡수음이 연달아 반복 재생된다. HandTrackingManager의 grab/release
+    /// 임계값과 같은 이유의 같은 패턴이다.
+    private static let stepBlockRelease: Float = stepBlock * 0.4
 
     // 덜컹/흔들림
     // 감쇠비(damp / 2√spring)가 1 미만이면 언더댐프라 한 번의 킥에도 여러 번 출렁인다.
@@ -381,8 +388,16 @@ struct WheelchairMovementSystem: System {
                         motion.isBumpSettling = true
                         motion.bumpVelocity = Self.bumpKick * 0.6
                         ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                        // 가만히 서 있어도 가끔 나는 충돌음 제보 재현용 — 겹치는/살짝 어긋난
+                        // 콜리전 프록시 경계에서 접지 높이가 프레임마다 다르게 잡히면 이동
+                        // 없이도 dy가 튈 수 있다. 실제로 튄 지점과 크기를 남겨 둔다.
+                        Self.collisionLogger.notice(
+                            "단차 흡수음 재생 지점: (\(motion.positionX), \(motion.positionZ)) dy=\(dy)m 이동요청=\(forward)")
                     }
-                } else {
+                } else if dy <= Self.stepBlockRelease {
+                    // stepBlockRelease~stepBlock 사이(히스테리시스 구간)에서는 래치를
+                    // 그대로 둔다 — 이 구간에서 매번 풀었다 걸었다 하면 dy가 문턱
+                    // 근처에서 떨릴 때 재생이 반복된다.
                     motion.isBumpSettling = false
                 }
                 motion.chairHeight += dy * min(1, 18 * dt)

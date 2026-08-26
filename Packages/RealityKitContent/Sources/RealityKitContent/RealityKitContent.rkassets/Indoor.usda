@@ -69,9 +69,13 @@ def Xform "Root"
 
     def Xform "collision" (
         active = true
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0)
+        }
     )
     {
         reorder nameChildren = ["Wall", "Cube", "Cube_1", "Cube_2", "Cube_3", "Cube_4", "Cube_5", "Cube_6", "Cube_7", "Cube_8"]
+        quatf xformOp:orient = (1, 0, 0, 0)
         float3 xformOp:translate = (19.248777, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 

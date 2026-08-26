@@ -90,13 +90,17 @@ struct NPCDialoguePanelView: View {
                 }
             }
 
+            // 자막 길이가 매 발화마다 달라 패널 높이가 요동쳤다. 최소 높이를 4줄분으로
+            // 잡고 그보다 길면 축소해, 말풍선이 제자리에 머무르게 한다.
             Text(displayedSubtitle)
                 .font(.system(size: 36, weight: .semibold, design: .rounded))
                 .foregroundStyle(CafePalette.espresso)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(8)
+                .lineLimit(4)
+                .minimumScaleFactor(0.72)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 176, alignment: .topLeading)
 
             userTranscript
 
@@ -224,10 +228,14 @@ private struct RapportHeartGauge: View {
                 heartRow
                     .foregroundStyle(CafePalette.roast.opacity(0.18))
 
+                // .frame(width:)로 줄이면 HStack이 간격을 다시 계산해 하트가 흔들린다.
+                // mask는 레이아웃을 건드리지 않고 그리기만 잘라낸다.
                 heartRow
                     .foregroundStyle(CafePalette.berry)
-                    .frame(width: Self.gaugeWidth * progress, alignment: .leading)
-                    .clipped()
+                    .mask(alignment: .leading) {
+                        Rectangle()
+                            .frame(width: Self.gaugeWidth * progress)
+                    }
             }
             .frame(width: Self.gaugeWidth, height: 36, alignment: .leading)
 

@@ -687,10 +687,10 @@ def Xform "Root" (
             {
                 uniform token info:id = "ND_tiledimage_color3"
                 asset inputs:file = @textures/Road.png@
-                float2 inputs:realworldimagesize = (1, 1.56)
+                float2 inputs:realworldimagesize = (0.5, 0.5)
                 color3f outputs:out
                 float2 ui:nodegraph:node:pos = (-140.84766, 128.86328)
-                int ui:nodegraph:node:stackingOrder = 36
+                int ui:nodegraph:node:stackingOrder = 42
             }
         }
 

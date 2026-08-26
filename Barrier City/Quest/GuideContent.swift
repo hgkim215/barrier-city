@@ -13,8 +13,41 @@ struct MissionNarrative: Equatable {
 }
 
 enum GuideTheme {
-    /// Figma brand accent: #00EAFF.
-    static let accent = Color(red: 0, green: 234.0 / 255.0, blue: 1)
+    /// 시작 화면 CTA와 같은 노랑(#FDD92C). 배지 테두리·글자, 진행 표시에 쓴다.
+    static let accent = Color(red: 0.992, green: 0.851, blue: 0.173)
+    /// 그라데이션 아래쪽 주황(#FE950A).
+    static let accentDeep = Color(red: 0.996, green: 0.584, blue: 0.039)
+
+    /// StartScreenView의 시작 버튼과 동일한 세로 그라데이션.
+    /// 온보딩 → 체험으로 넘어가는 동안 주 버튼의 인상이 끊기지 않게 맞춘다.
+    static let accentGradient = LinearGradient(
+        colors: [accent, accentDeep],
+        startPoint: .top,
+        endPoint: .bottom)
+}
+
+/// 온보딩 카드(인트로 · 튜토리얼)의 치수. 두 카드가 같은 questHUD attachment를
+/// 공유하므로 폭을 함께 두어 단계 전환에서 패널이 좌우로 흔들리지 않게 한다.
+enum GuideCardMetrics {
+    // MARK: 먼 곳의 영상 패널 (TV처럼)
+    //
+    // 사용자에게서 멀리 두므로 포인트 크기를 크게 잡는다. attachment는 대략
+    // 1360pt/m로 렌더되니 2200pt ≈ 1.62m 폭이고, 2.2m 거리에서 약 40도를
+    // 차지한다. 엔티티 scale로 키우면 텍스처가 그대로라 흐려지므로 쓰지 않는다.
+    static let videoWidth: CGFloat = 2200
+    static let videoHeight: CGFloat = videoWidth * 9 / 16       // 1237.5
+    static let videoFramePadding: CGFloat = 16
+    static let videoPanelWidth: CGFloat = videoWidth + videoFramePadding * 2
+    static let videoPanelHeight: CGFloat = videoHeight + videoFramePadding * 2
+
+    // MARK: 손 닿는 곳의 텍스트 카드
+    static let width: CGFloat = 720
+    static let padding: CGFloat = 32
+    static let cardHeight: CGFloat = 380
+
+    /// 미션 안내 모달과 미션 목록 HUD의 폭.
+    static let missionWidth: CGFloat = 780
+    static let missionListWidth: CGFloat = 640
 }
 
 enum GuideContent {
@@ -28,19 +61,19 @@ enum GuideContent {
             id: 0,
             title: "바퀴 조작하기",
             detail: "바퀴를 잡으면 파란색으로 표시됩니다.\n손을 앞뒤로 움직여 바퀴를 회전시켜 보세요.",
-            videoResourceName: "guide-wheel-control"
+            videoResourceName: "Grab"
         ),
         TutorialGuideStep(
             id: 1,
             title: "방향 전환하기",
             detail: "한쪽 바퀴를 움직여\n원하는 방향으로 회전할 수 있습니다.",
-            videoResourceName: "guide-turning"
+            videoResourceName: "Turn"
         ),
         TutorialGuideStep(
             id: 2,
             title: "직진 · 후진하기",
             detail: "양쪽 바퀴를 같은 방향으로 움직이면\n앞으로 또는 뒤로 이동할 수 있습니다.",
-            videoResourceName: "guide-straight-drive"
+            videoResourceName: "BackAndForth"
         ),
     ]
 

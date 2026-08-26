@@ -8,61 +8,54 @@ struct TutorialGuideView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        HStack(spacing: 24) {
-            LoopingGuideVideoView(resourceName: step.videoResourceName)
-                .frame(width: 383, height: 356)
+        // 영상은 별도 attachment("guideVideo")로 멀리 배치된다. 여기는 카드만.
+        textCard
+    }
 
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("건너뛰기", action: onSkip)
-                        .buttonStyle(.plain)
-                }
+    private var textCard: some View {
+        VStack(spacing: 0) {
+            guideBadge("Guide \(step.id + 1) / \(totalCount)")
 
-                Text("Guide \(step.id + 1) / \(totalCount)")
-                    .font(.caption.bold())
-                    .foregroundStyle(GuideTheme.accent)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .overlay(Capsule().stroke(GuideTheme.accent, lineWidth: 1))
+            Spacer(minLength: 12)
 
-                Spacer()
+            Text(step.title)
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
 
-                Text(step.title)
-                    .font(.title2.bold())
+            Text(step.detail)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.top, 12)
 
-                Text(step.detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 10)
+            Spacer(minLength: 12)
 
-                Spacer()
-
-                HStack(spacing: 20) {
-                    if step.id > 0 {
-                        Button(action: onPrevious) {
-                            Image(systemName: "chevron.left")
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
+            HStack(spacing: 20) {
+                if step.id > 0 {
+                    Button(action: onPrevious) {
+                        Image(systemName: "chevron.left")
+                            .font(.title3.bold())
                     }
-
-                    Button(
-                        step.id == totalCount - 1 ? "시작하기" : "다음",
-                        action: onNext
-                    )
-                    .buttonStyle(.borderedProminent)
-                    .tint(GuideTheme.accent)
-                    .frame(minWidth: 200, minHeight: 52)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
+
+                GuidePrimaryButton(
+                    title: step.id == totalCount - 1 ? "시작하기" : "다음",
+                    action: onNext)
             }
-            .frame(maxWidth: .infinity)
-            .padding(20)
         }
-        .padding(20)
-        .frame(width: 767, height: 396)
+        .padding(GuideCardMetrics.padding)
+        .frame(width: GuideCardMetrics.width,
+               height: GuideCardMetrics.cardHeight)
+        .overlay(alignment: .topTrailing) {
+            Button("건너뛰기", action: onSkip)
+                .font(.title3.weight(.semibold))
+                .buttonStyle(.plain)
+                .padding(GuideCardMetrics.padding)
+        }
         .glassBackgroundEffect()
     }
 }
@@ -105,6 +98,6 @@ struct TutorialGuideView: View {
         resourceName: "missing-preview-video",
         placeholderResourceName: nil
     )
-    .frame(width: 383, height: 356)
+    .frame(width: GuideCardMetrics.videoWidth, height: GuideCardMetrics.videoHeight)
     .padding()
 }

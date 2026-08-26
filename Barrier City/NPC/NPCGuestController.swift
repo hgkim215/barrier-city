@@ -156,6 +156,10 @@ final class NPCGuestController {
     private var modelEntity: Entity?
     private var animationPlayback: AnimationPlaybackController?
     private var currentCue: NPCGuestAnimationCue?
+    /// cue별 (entity, resource) 조회 결과 캐시. modelEntity는 배치 시 한 번 정해진
+    /// 뒤 서브트리가 바뀌지 않으므로, 매번 findAnimation/findDefaultSubtreeAnimation로
+    /// 재귀 탐색하는 대신 첫 조회 결과를 재사용한다(modelEntity가 바뀌면 함께 비운다).
+    private var animationCache: [NPCGuestAnimationCue: (entity: Entity, resource: AnimationResource)] = [:]
     private var wanderTarget: SIMD2<Float>?
     /// NPCGuestPathfinder가 찾은, wanderTarget(또는 좌석)까지 순서대로 밟아갈 웨이포인트
     /// 목록. 첫 번째 원소가 다음 목표이고, 마지막 원소는 항상 최종 목적지와 같다.
@@ -336,6 +340,7 @@ final class NPCGuestController {
         worldRoot.addChild(locomotion)
         locomotionRoot = locomotion
         modelEntity = entity
+        animationCache.removeAll()
         wanderTarget = nil
     }
 
@@ -376,6 +381,7 @@ final class NPCGuestController {
         locomotionRoot?.removeFromParent()
         locomotionRoot = nil
         modelEntity = nil
+        animationCache.removeAll()
         currentCue = nil
         wanderTarget = nil
         activePath = []
@@ -1178,7 +1184,10 @@ final class NPCGuestController {
         // 희생하지 않는다" 원칙).
         let preferredDirection: SIMD2<Float>
         if usePredictiveAvoidance, !neighborVelocities.isEmpty {
-            let neighborKinematics = zip(neighboringPositions, neighborVelocities).map {
+            // 매 프레임·매 손님마다 새 배열을 만드는 대신, zip을 지연 순회하며
+            // 그때그때 NPCNeighborKinematics를 만든다(adjustedPreferredDirection은
+            // 한 번만 순회하므로 배열로 실체화할 필요가 없다).
+            let neighborKinematics = zip(neighboringPositions, neighborVelocities).lazy.map {
                 NPCNeighborKinematics(position: $0, velocity: $1)
             }
             preferredDirection = NPCGuestLocalAvoidance.adjustedPreferredDirection(
@@ -1533,9 +1542,15 @@ final class NPCGuestController {
     private func playAnimation(_ cue: NPCGuestAnimationCue) {
         guard currentCue != cue, let model = modelEntity else { return }
 
-        let match = cue == .idle
-            ? findDefaultSubtreeAnimation(in: model)
-            : findAnimation(named: cue.rawValue, in: model)
+        let match: (entity: Entity, resource: AnimationResource)?
+        if let cached = animationCache[cue] {
+            match = cached
+        } else {
+            match = cue == .idle
+                ? findDefaultSubtreeAnimation(in: model)
+                : findAnimation(named: cue.rawValue, in: model)
+            animationCache[cue] = match
+        }
         guard let match else { return }
 
         animationPlayback?.stop(blendOutDuration: 0.15)

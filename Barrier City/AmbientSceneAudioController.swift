@@ -15,7 +15,10 @@ final class AmbientSceneAudioController {
 
     private enum Tuning {
         static let targetGain: Audio.Decibel = -12
+        static let silentGain: Audio.Decibel = -60
         static let fadeInDuration: TimeInterval = 1.5
+        /// 트랙 전환 시 이전 트랙을 하드컷하지 않고 짧게 줄이는 데 쓰는 시간.
+        static let fadeOutDuration: TimeInterval = 0.35
     }
 
     private static let logger = Logger(
@@ -91,13 +94,24 @@ final class AmbientSceneAudioController {
 
     /// 트랙만 정리한다. 세션 사용권은 유지해 outdoor→indoor처럼 같은 프레임 안에서
     /// 트랙만 바뀌는 경우 세션을 불필요하게 반납했다 다시 잡지 않게 한다.
+    ///
+    /// 재생 중인 파형을 그 자리에서 뚝 끊지 않고 짧게 페이드아웃한 뒤 정리한다 —
+    /// 하드컷은 실외→실내처럼 트랙이 바뀌는 바로 그 순간 "딱" 하는 클릭음을
+    /// 내는데, 이 앱의 다른 효과음도 전부 저음 충격음이라 유저에게는 씬이 새로
+    /// 로딩되며 충돌한 것처럼 들렸다.
     private func stopTrack() {
         currentResourceName = nil
         loadTask?.cancel()
         loadTask = nil
-        playback?.stop()
+        if let playback, let audioEntity {
+            playback.fade(to: Tuning.silentGain, duration: Tuning.fadeOutDuration)
+            Task { [playback, audioEntity] in
+                try? await Task.sleep(for: .seconds(Tuning.fadeOutDuration))
+                playback.stop()
+                audioEntity.removeFromParent()
+            }
+        }
         playback = nil
-        audioEntity?.removeFromParent()
         audioEntity = nil
     }
 }

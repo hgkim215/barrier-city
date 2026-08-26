@@ -48,6 +48,12 @@ struct GuideFlowState: Equatable {
         }
     }
 
+    /// 멀리 걸리는 안내 영상 패널을 띄울 단계인지.
+    var showsGuideVideo: Bool {
+        if case .tutorial = phase { return true }
+        return false
+    }
+
     var visibleMissionCount: Int {
         switch phase {
         case .missionAnnouncement(let index), .missionActive(let index): index + 1

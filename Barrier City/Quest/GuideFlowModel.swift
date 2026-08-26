@@ -20,6 +20,7 @@ final class GuideFlowModel {
     var isInteractionLocked: Bool { state.isInteractionLocked }
     var placement: GuidePlacement { state.placement }
     var visibleMissionCount: Int { state.visibleMissionCount }
+    var showsGuideVideo: Bool { state.showsGuideVideo }
     var allowsNPCConversation: Bool { state.allowsNPCConversation }
     var allowsNPCOrderConversation: Bool { state.allowsNPCOrderConversation }
 

@@ -160,7 +160,7 @@ enum NPCGuestLocalAvoidance {
         myPosition: SIMD2<Float>,
         myVelocity: SIMD2<Float>,
         sidePreference: Float,
-        neighbors: [NPCNeighborKinematics],
+        neighbors: some Sequence<NPCNeighborKinematics>,
         strengthScale: Float
     ) -> SIMD2<Float> {
         let preferredLength = simd_length(preferredDirection)
