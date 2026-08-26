@@ -103,19 +103,6 @@ enum NPCGuestNavigation {
     /// 구역 안" 케이스와는 다른, "구역 밖에서 경계를 스치는" 케이스).
     private static let tunnelingCheckMinimumStepLength: Float = 0.5
 
-    /// 막힌 방향과 60도 이내로 비슷한 후보는 escape 방향으로 다시 고르지 않는다.
-    /// blockedDirection이 없거나 유효하지 않으면 모든 후보를 허용한다.
-    static func isDifferentEscapeDirection(
-        _ candidate: SIMD2<Float>,
-        from blockedDirection: SIMD2<Float>?,
-        maximumDot: Float = 0.5
-    ) -> Bool {
-        guard simd_length(candidate) > 0.001,
-              let blockedDirection,
-              simd_length(blockedDirection) > 0.001 else { return true }
-        return simd_dot(simd_normalize(candidate), simd_normalize(blockedDirection)) <= maximumDot
-    }
-
     static func isValid(_ point: SIMD2<Float>,
                         inside floor: NPCGuestArea,
                         excluding exclusions: [NPCGuestArea]) -> Bool {
