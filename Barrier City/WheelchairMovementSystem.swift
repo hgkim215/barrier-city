@@ -381,6 +381,11 @@ struct WheelchairMovementSystem: System {
                         motion.isBumpSettling = true
                         motion.bumpVelocity = Self.bumpKick * 0.6
                         ImpactAudio.shared.playBump(intensity: min(1, dy / 0.15))
+                        // 가만히 서 있어도 가끔 나는 충돌음 제보 재현용 — 겹치는/살짝 어긋난
+                        // 콜리전 프록시 경계에서 접지 높이가 프레임마다 다르게 잡히면 이동
+                        // 없이도 dy가 튈 수 있다. 실제로 튄 지점과 크기를 남겨 둔다.
+                        Self.collisionLogger.notice(
+                            "단차 흡수음 재생 지점: (\(motion.positionX), \(motion.positionZ)) dy=\(dy)m 이동요청=\(forward)")
                     }
                 } else {
                     motion.isBumpSettling = false
