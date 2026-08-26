@@ -846,9 +846,11 @@ final class NPCGuestCoordinator {
                     Self.seatingLogger.error("안전한 대기줄 위치를 찾지 못해 줄서기 이동을 생략")
                 }
             }
-            // 대기줄 중 한 명을 무작위로 골라, 그 손님이 자리에 도착하면 한숨을
-            // 재생해 뒤에 사람이 기다린다는 압박감을 준다.
-            sighingGuestIndex = queuerIndices.randomElement()
+            // 대기줄에서 가장 뒤(가장 높은 rank, queueSlot 기준 유저에게서 가장 먼
+            // 자리)에 서는 손님이 도착하면 한숨을 재생해, 뒤에 사람이 기다린다는
+            // 압박감을 준다 — 무작위 대신 항상 실제로 "뒤에 있는" 손님의 성별로
+            // 한숨(NPCGuestGender.sighResourceName)이 정해지게 고정한다.
+            sighingGuestIndex = queuerIndices.sorted().last
         }
         if !isOrdering {
             queuerIndices.removeAll()
