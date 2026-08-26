@@ -103,11 +103,6 @@ final class NPCGuestCoordinator {
         /// 조정하면 전체가 같이 움직인다 — 더 올리면(+) 전원이 더 높게, 내리면(-)
         /// 전원이 더 낮게 앉는다.
         static let baselineSittingHeightOffset: Float = 0.08
-        /// 카페 테이블 상판이 실제로 있을 법한 절대 높이 범위(worldRoot 기준, m).
-        /// 이 범위를 벗어나는 테이블 그룹은 authoring 오류(WoodTable 3.8배 균일
-        /// 스케일 버그 등)로 보고 좌석 높이 기반으로 보정한다. 실측된 정상 테이블
-        /// (~0.76~0.77m)은 넉넉히 포함하고, 버그 값(~1.20m)은 확실히 배제한다.
-        static let plausibleTableSurfaceHeight: ClosedRange<Float> = 0.5...0.95
     }
 
     /// Indoor.usda에는 성별당 원본 엔티티가 하나씩만 있다("Female", "MaleIdle").
@@ -203,14 +198,16 @@ final class NPCGuestCoordinator {
         /// 맞추므로 이 값만 바꿔도 자동으로 정확히 안착한다.
         static let targetLatteHeight: Float = 0.08
         /// 모델의 실측 바운즈 바닥을 테이블 상단면에 붙인다. 0으로 정확히 맞춰도
-        /// 테이블 표면 높이 추정치가 실측과 몇 mm만 어긋나면(이상치 보정이 못 잡는
-        /// 애매한 케이스) 그 오차가 그대로 "뜬 것처럼" 보인다. 양수 여백은 그 오차
-        /// 위에 더 얹어 뜬 티가 더 커지지만, 음수로 살짝 파묻으면(불투명한 케이크/컵
-        /// 바닥 몇 mm는 테이블 메시에 가려 안 보임) 뜨는 쪽보다 훨씬 눈에 덜 띈다.
+        /// 테이블 표면 높이 추정치가 실측과 몇 mm만 어긋나면 그 오차가 그대로 "뜬
+        /// 것처럼" 보인다. 양수 여백은 그 오차 위에 더 얹어 뜬 티가 더 커지지만,
+        /// 음수로 살짝 파묻으면(불투명한 케이크/컵 바닥 몇 mm는 테이블 메시에 가려
+        /// 안 보임) 뜨는 쪽보다 훨씬 눈에 덜 띈다.
         static let surfaceClearance: Float = -0.004
-        /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨 그 손님
-        /// 바로 앞자리에 디저트를 놓는다. 시각 확인 후 필요하면 이 값만 조정한다.
-        static let perSeatForwardOffset: Float = 0.18
+        /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨, 손님으로부터
+        /// 약 1m 떨어진 테이블 안쪽에 디저트를 놓는다. 좁은 테이블에서는 아래 edgeMargin을
+        /// 뺀 inset 범위로 다시 클램프되므로, 실제로는 "1m 또는 테이블이 허용하는 한
+        /// 최대한 안쪽" 중 더 가까운 쪽에 놓인다.
+        static let perSeatForwardOffset: Float = 1.0
         /// 좌석 정면 위치에서 무작위로 살짝 어긋나게 둬 기계적으로 보이지 않게 한다.
         static let placementJitter: Float = 0.03
         /// 테이블 가장자리에 걸치지 않도록 바운즈 절반 폭에서 빼는 여백.
@@ -345,61 +342,17 @@ final class NPCGuestCoordinator {
         tableSurfaceBoundsByGroupIndex = seatTableGroups.map { seatIndices -> (min: SIMD3<Float>, max: SIMD3<Float>)? in
             guard let firstSeatIndex = seatIndices.first,
                   let anchor = filteredSeatTableEntities[firstSeatIndex] else { return nil }
-            let bounds = anchor.visualBounds(relativeTo: worldRoot)
+            var bounds = anchor.visualBounds(relativeTo: worldRoot)
+            // 일부 테이블(WoodTable 등 다른 용도 애셋을 재사용한 것)은 메시 전체
+            // 바운딩 박스 top이 실제 상판면이 아니라 등받이처럼 위로 솟은, 물건을
+            // 얹을 수 없는 부분일 수 있다. "TableSurfacePoint" 마커가 authoring돼
+            // 있으면(원본 usdz를 실측해 진짜 평평한 상판 높이에 놓은 것) 그 마커의
+            // 월드 Y를 표면 높이로 우선 쓴다 — 마커가 없는 일반 테이블은 지금까지처럼
+            // 바운딩 박스 top을 그대로 쓴다.
+            if let surfaceMarker = anchor.findEntity(named: "TableSurfacePoint") {
+                bounds.max.y = surfaceMarker.position(relativeTo: worldRoot).y
+            }
             return (min: bounds.min, max: bounds.max)
-        }
-        // 긴 벤치형 WoodTable은 실측해보니 authored 바운즈 상단이 약 1.2m로, 다른 일반
-        // 테이블(약 0.77m)보다 훨씬 높았다(원인: 씬에서 WoodTable 전체를 3.8배 균일
-        // 스케일해 길게 늘였는데, 균일 스케일이라 높이까지 같이 3.8배로 부풀었다 —
-        // 길이만 늘이려면 축별 스케일이 필요했지만 authoring을 바꾸는 대신 여기서 보정).
-        // 단일 리프 메시라 상판과 다리를 나눠 인식할 방법이 없어, 이상치 테이블은 전체
-        // 테이블 평균이 아니라 "그 테이블 자신의 좌석 높이 + 정상 테이블들의 평균적인
-        // '좌석 대비 테이블 여유 높이'"로 추정한다 — 예전에는 전체 이상치를 하나의
-        // 전역 중앙값으로 뭉뚱그려 대체했는데, 의자 종류가 다른 테이블(WoodTable은
-        // LongChair 벤치라 다른 의자보다 낮다)에는 그 차이만큼 오차가 남아 디저트가
-        // 표면보다 살짝 높이 떠 보였다.
-        func averageSeatHeight(_ groupIndex: Int) -> Float? {
-            let indices = seatTableGroups[groupIndex]
-            guard !indices.isEmpty else { return nil }
-            return indices.reduce(Float(0)) { $0 + seats[$1].sittingHeightOffset } / Float(indices.count)
-        }
-        // 예전에는 "median에서 outlierTolerance 이상 벗어난 그룹"을 이상치로 봤는데,
-        // 테이블 그룹이 몇 개 안 되는 씬(예: 4개 중 2개가 WoodTable)에서는 median 자체가
-        // 정상 쪽이 아니라 부풀려진 쪽에 걸릴 수 있다 — 실측 로그로 확인된 실제 사례:
-        // WoodTable 2개(1.20m, 완전히 동일값)가 median으로 뽑히고, 정작 정상인 일반
-        // 테이블 2개(0.76m)가 "이상치"로 오판정돼 1.15m로 잘못 끌어올려졌다. 상대적
-        // 통계 대신, 카페 테이블 상판이 있을 법한 절대 높이 범위로 직접 판별한다 —
-        // WoodTable의 3.8배 스케일 버그가 만드는 값(~1.2m)은 이 범위를 확실히 벗어난다.
-        let plausibleSurfaceHeightRange: ClosedRange<Float> = Tuning.plausibleTableSurfaceHeight
-        var clearanceSum: Float = 0
-        var clearanceCount = 0
-        for index in tableSurfaceBoundsByGroupIndex.indices {
-            guard let bounds = tableSurfaceBoundsByGroupIndex[index],
-                  plausibleSurfaceHeightRange.contains(bounds.max.y),
-                  let seatHeight = averageSeatHeight(index) else { continue }
-            clearanceSum += bounds.max.y - seatHeight
-            clearanceCount += 1
-        }
-        let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
-
-        for index in tableSurfaceBoundsByGroupIndex.indices {
-            guard var bounds = tableSurfaceBoundsByGroupIndex[index] else { continue }
-            guard !plausibleSurfaceHeightRange.contains(bounds.max.y) else {
-                // 디저트가 뜬 채 보고되면 이 로그로 어느 테이블 그룹이 실제로
-                // 얼마나 표면 높이를 잘못 재고 있는지 바로 확인할 수 있다.
-                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이(보정 없음): \(bounds.max.y)m")
-                continue
-            }
-            guard let typicalClearance, let seatHeight = averageSeatHeight(index) else {
-                // 보정 기준으로 삼을 "정상" 테이블이 씬에 하나도 없으면(예: 전부
-                // WoodTable) 잘못된 상수로 덮어쓰는 대신 실측값을 그대로 둔다.
-                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 비정상(\(bounds.max.y)m)이지만 보정 기준 없음 — 원본 유지")
-                continue
-            }
-            let corrected = seatHeight + typicalClearance
-            Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(corrected)m")
-            bounds.max.y = corrected
-            tableSurfaceBoundsByGroupIndex[index] = bounds
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")

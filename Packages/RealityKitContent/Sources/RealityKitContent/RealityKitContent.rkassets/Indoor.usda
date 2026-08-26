@@ -2587,15 +2587,7 @@ def Xform "Root"
                 )
                 {
                     quatf xformOp:orient = (0.49804425, 0.49804413, 0.50194824, -0.5019481)
-                    # WoodTable.usdz의 실제 메시는 벤치(wooden_bench) 하나를 재사용한 것으로,
-                    # 로컬 Z(=world Y, 높이) extent가 0~0.31445m뿐이다. 예전에는 긴 통로형
-                    # 상판을 만들려고 이 로컬 X/Y(=world Z/X, 가로/세로 풋프린트)를 3.8배로
-                    # 늘리면서 균일 스케일이라 높이까지 같이 3.8배(→ 약 1.2m)로 부풀어, 다른
-                    # 일반 테이블(약 0.77m)보다 훨씬 높게 잡혔다 — 그 위에 놓이는 디저트가
-                    # 항상 이 테이블에서만 더 떠 보이던 원인. 로컬 Z=0이 이 메시의 바닥
-                    # 접지점이라(위치는 그대로 유지) 높이 축만 정상 테이블 높이(~0.765m)에
-                    # 맞춰 축별로 다르게 스케일한다.
-                    float3 xformOp:scale = (3.8, 3.8, 2.4328)
+                    float3 xformOp:scale = (3.8, 3.8, 3.8)
                     float3 xformOp:translate = (-3.6441426, -4.4703484e-7, 1.0490867)
                     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
@@ -2610,6 +2602,22 @@ def Xform "Root"
                                 bool enableReceiveIBLShadow = 0
                                 bool enableReceiveMeshShadow = 0
                                 uniform token info:id = "RealityKit.GroundingShadow"
+                            }
+
+                            # WoodTable.usdz는 벤치(wooden_bench) 메시를 그대로 재사용한 것이라,
+                            # 전체 바운딩 박스 상단(로컬 Z 0.31445m)은 등받이 등 위로 솟은 얇은
+                            # 부분이고, 실제로 물건을 얹을 수 있는 평평한 상판면은 그보다 낮은
+                            # 로컬 Z≈0.1937m다(원본 usdz의 위쪽을 향한 면적을 실측해 확인 — 그
+                            # 높이에 전체 upward-facing 면적의 대부분이 몰려 있고, 바운딩 박스
+                            # 최상단에는 거의 없다). 코드가 바운딩 박스 top을 그대로 표면으로
+                            # 오인해 디저트가 떠 보이던 원인이라, SittingPoint와 같은 방식으로
+                            # 실측 표면 높이를 마커로 authoring해 NPCGuestCoordinator가 이 마커를
+                            # 우선 쓰게 한다(마커가 없는 일반 테이블은 기존처럼 바운딩 박스 top을
+                            # 그대로 쓴다).
+                            def Xform "TableSurfacePoint"
+                            {
+                                float3 xformOp:translate = (0, 0, 0.1937)
+                                uniform token[] xformOpOrder = ["xformOp:translate"]
                             }
                         }
 
