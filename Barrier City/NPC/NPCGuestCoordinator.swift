@@ -117,8 +117,12 @@ final class NPCGuestCoordinator {
     }
 
     /// wandererCount + cyclerCount + seatedPoolCount(1+2+6=9)에 맞춘 인원 구성.
+    /// 여자 손님 외형을 다양화하려고 기존 Female 5명 중 2명을 같은 성별(sigh 등
+    /// 성별 기반 로직은 동일하게 female)의 다른 템플릿인 Lady로 바꿨다 — 총 인원과
+    /// 역할 배분(Tuning)은 그대로 유지된다.
     private static let genderGroups: [GenderGroup] = [
-        GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3", "Guest_Female_4", "Guest_Female_5"]),
+        GenderGroup(templateName: "Female", gender: .female, displayNames: ["Guest_Female_1", "Guest_Female_2", "Guest_Female_3"]),
+        GenderGroup(templateName: "Lady", gender: .female, displayNames: ["Guest_Lady_1", "Guest_Lady_2"]),
         GenderGroup(templateName: "MaleIdle", gender: .male, displayNames: ["Guest_Male_1", "Guest_Male_2", "Guest_Male_3", "Guest_Male_4"]),
     ]
 
@@ -193,12 +197,17 @@ final class NPCGuestCoordinator {
         /// 배치 위치는 spawnDessert가 스케일 적용 후 바운즈를 다시 재서 표면에
         /// 맞추므로 이 값만 바꿔도 자동으로 정확히 안착한다.
         static let targetLatteHeight: Float = 0.08
-        /// 모델의 실측 바운즈 바닥을 테이블 상단면에 정확히 붙인다. 별도의 시각적
-        /// 여백을 더하면 작은 케이크/라떼에서는 몇 mm도 공중에 뜬 것으로 보인다.
-        static let surfaceClearance: Float = 0
-        /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨 그 손님
-        /// 바로 앞자리에 디저트를 놓는다. 시각 확인 후 필요하면 이 값만 조정한다.
-        static let perSeatForwardOffset: Float = 0.18
+        /// 모델의 실측 바운즈 바닥을 테이블 상단면에 붙인다. 0으로 정확히 맞춰도
+        /// 테이블 표면 높이 추정치가 실측과 몇 mm만 어긋나면 그 오차가 그대로 "뜬
+        /// 것처럼" 보인다. 양수 여백은 그 오차 위에 더 얹어 뜬 티가 더 커지지만,
+        /// 음수로 살짝 파묻으면(불투명한 케이크/컵 바닥 몇 mm는 테이블 메시에 가려
+        /// 안 보임) 뜨는 쪽보다 훨씬 눈에 덜 띈다.
+        static let surfaceClearance: Float = -0.004
+        /// 좌석 위치에서 손님이 바라보는(=테이블 쪽) 방향으로 이만큼 당겨, 손님으로부터
+        /// 약 1m 떨어진 테이블 안쪽에 디저트를 놓는다. 좁은 테이블에서는 아래 edgeMargin을
+        /// 뺀 inset 범위로 다시 클램프되므로, 실제로는 "1m 또는 테이블이 허용하는 한
+        /// 최대한 안쪽" 중 더 가까운 쪽에 놓인다.
+        static let perSeatForwardOffset: Float = 1.0
         /// 좌석 정면 위치에서 무작위로 살짝 어긋나게 둬 기계적으로 보이지 않게 한다.
         static let placementJitter: Float = 0.03
         /// 테이블 가장자리에 걸치지 않도록 바운즈 절반 폭에서 빼는 여백.
@@ -333,51 +342,17 @@ final class NPCGuestCoordinator {
         tableSurfaceBoundsByGroupIndex = seatTableGroups.map { seatIndices -> (min: SIMD3<Float>, max: SIMD3<Float>)? in
             guard let firstSeatIndex = seatIndices.first,
                   let anchor = filteredSeatTableEntities[firstSeatIndex] else { return nil }
-            let bounds = anchor.visualBounds(relativeTo: worldRoot)
+            var bounds = anchor.visualBounds(relativeTo: worldRoot)
+            // 일부 테이블(WoodTable 등 다른 용도 애셋을 재사용한 것)은 메시 전체
+            // 바운딩 박스 top이 실제 상판면이 아니라 등받이처럼 위로 솟은, 물건을
+            // 얹을 수 없는 부분일 수 있다. "TableSurfacePoint" 마커가 authoring돼
+            // 있으면(원본 usdz를 실측해 진짜 평평한 상판 높이에 놓은 것) 그 마커의
+            // 월드 Y를 표면 높이로 우선 쓴다 — 마커가 없는 일반 테이블은 지금까지처럼
+            // 바운딩 박스 top을 그대로 쓴다.
+            if let surfaceMarker = anchor.findEntity(named: "TableSurfacePoint") {
+                bounds.max.y = surfaceMarker.position(relativeTo: worldRoot).y
+            }
             return (min: bounds.min, max: bounds.max)
-        }
-        // 긴 벤치형 WoodTable은 실측해보니 authored 바운즈 상단이 약 1.2m로, 다른 일반
-        // 테이블(약 0.77m)보다 훨씬 높았다(원인: 씬에서 WoodTable 전체를 3.8배 균일
-        // 스케일해 길게 늘였는데, 균일 스케일이라 높이까지 같이 3.8배로 부풀었다 —
-        // 길이만 늘이려면 축별 스케일이 필요했지만 authoring을 바꾸는 대신 여기서 보정).
-        // 단일 리프 메시라 상판과 다리를 나눠 인식할 방법이 없어, 이상치 테이블은 전체
-        // 테이블 평균이 아니라 "그 테이블 자신의 좌석 높이 + 정상 테이블들의 평균적인
-        // '좌석 대비 테이블 여유 높이'"로 추정한다 — 예전에는 전체 이상치를 하나의
-        // 전역 중앙값으로 뭉뚱그려 대체했는데, 의자 종류가 다른 테이블(WoodTable은
-        // LongChair 벤치라 다른 의자보다 낮다)에는 그 차이만큼 오차가 남아 디저트가
-        // 표면보다 살짝 높이 떠 보였다.
-        func averageSeatHeight(_ groupIndex: Int) -> Float? {
-            let indices = seatTableGroups[groupIndex]
-            guard !indices.isEmpty else { return nil }
-            return indices.reduce(Float(0)) { $0 + seats[$1].sittingHeightOffset } / Float(indices.count)
-        }
-        let measuredHeights = tableSurfaceBoundsByGroupIndex.compactMap { $0?.max.y }.sorted()
-        if let medianHeight = measuredHeights.isEmpty ? nil : measuredHeights[measuredHeights.count / 2] {
-            let outlierTolerance: Float = 0.25
-            var clearanceSum: Float = 0
-            var clearanceCount = 0
-            for index in tableSurfaceBoundsByGroupIndex.indices {
-                guard let bounds = tableSurfaceBoundsByGroupIndex[index],
-                      abs(bounds.max.y - medianHeight) <= outlierTolerance,
-                      let seatHeight = averageSeatHeight(index) else { continue }
-                clearanceSum += bounds.max.y - seatHeight
-                clearanceCount += 1
-            }
-            let typicalClearance = clearanceCount > 0 ? clearanceSum / Float(clearanceCount) : nil
-
-            for index in tableSurfaceBoundsByGroupIndex.indices {
-                guard var bounds = tableSurfaceBoundsByGroupIndex[index],
-                      abs(bounds.max.y - medianHeight) > outlierTolerance else { continue }
-                let corrected: Float
-                if let typicalClearance, let seatHeight = averageSeatHeight(index) {
-                    corrected = seatHeight + typicalClearance
-                } else {
-                    corrected = medianHeight
-                }
-                Self.seatingLogger.notice("테이블 그룹 \(index) 표면 높이 이상치 보정: \(bounds.max.y)m → \(corrected)m")
-                bounds.max.y = corrected
-                tableSurfaceBoundsByGroupIndex[index] = bounds
-            }
         }
         let seatDescription = seats.map { seat in "(\(seat.position.x), \(seat.position.y))" }.joined(separator: ", ")
         Self.seatingLogger.notice("발견된 좌석 \(self.seats.count)개(테이블 \(self.seatTableGroups.count)개): \(seatDescription)")
@@ -903,6 +878,19 @@ final class NPCGuestCoordinator {
         // 시작하는" 손님만 이 예산을 넘지 않을 때만 허용한다.
         var activeWalkerCount = guests.filter(\.isWalking).count
 
+        // 손님마다(9명) 매 프레임 자신을 뺀 이웃 배열을 3개씩 새로 만든다.
+        // enumerated().compactMap은 그때마다 성장하는 버퍼를 다시 할당하므로,
+        // 최종 크기(count - 1)를 미리 예약해 재할당 없이 한 번만 채운다.
+        func allExcept<T>(_ values: [T], index: Int) -> [T] {
+            guard values.count > 1 else { return [] }
+            var result: [T] = []
+            result.reserveCapacity(values.count - 1)
+            for i in values.indices where i != index {
+                result.append(values[i])
+            }
+            return result
+        }
+
         for (index, guest) in guests.enumerated() {
             var slot: SIMD2<Float>?
             var facing: SIMD2<Float>?
@@ -910,15 +898,9 @@ final class NPCGuestCoordinator {
                 slot = queueSlot(rank: rank + 1)
                 facing = kioskCenter
             }
-            let neighboringPositions = positions.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
-            let neighboringVelocities = velocities.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
-            let occupiedAnchors = anchors.enumerated().compactMap {
-                $0.offset == index ? nil : $0.element
-            }
+            let neighboringPositions = allExcept(positions, index: index)
+            let neighboringVelocities = allExcept(velocities, index: index)
+            let occupiedAnchors = allExcept(anchors, index: index)
             let wasWalking = guest.isWalking
             guest.update(deltaTime: deltaTime,
                         movementContext: movementContext,

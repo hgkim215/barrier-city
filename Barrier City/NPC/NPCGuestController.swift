@@ -111,9 +111,14 @@ final class NPCGuestController {
         /// Sit_to_Stand를 역재생해 서 있는 자세에서 앉은 자세로 전환하는 구간.
         case sittingDown
         case sitting
-        /// Sit_to_Stand 정방향 애니메이션이 재생되는 짧은 구간. 실제 클립 duration
-        /// 동안 다음 좌석 이동을 시작하지 않아 애니메이션이 끊기지 않는다.
+        /// Sit_to_Stand 정방향 애니메이션이 재생되는 짧은 구간. 이 동안은 제자리에서
+        /// (좌석 위치 그대로) 일어서기만 하고 이동은 하지 않아, "이미 서 있는 자세로
+        /// 좌표만 미끄러지는" 것처럼 보이지 않는다. 실제로 자리를 벗어나는 건 아래
+        /// leavingSeat에서, 애니메이션이 끝난 뒤 걷기로 이어간다.
         case standingUp
+        /// 기립 애니메이션이 끝난 뒤, 좌석 위치에서 가구 밖 보행 접근점까지 실제로
+        /// 걸어 나가는 구간(Walk 애니메이션 재생). 이 구간이 끝나야 좌석을 반납한다.
+        case leavingSeat
     }
 
     /// 전원이 같은 속도와 정지 주기로 움직이면 군무처럼 보인다. 손님마다 생성 시 한 번
@@ -480,6 +485,13 @@ final class NPCGuestController {
             }
             completeStandingUp()
             return
+        case .leavingSeat:
+            updateLeavingSeat(deltaTime: deltaTime,
+                              movementContext: movementContext,
+                              playerPosition: playerPosition,
+                              neighboringPositions: neighboringPositions,
+                              neighboringVelocities: neighboringVelocities)
+            return
         case .none:
             break
         }
@@ -615,32 +627,72 @@ final class NPCGuestController {
             playAnimation(.idle)
         }
         // claimedSeatIndex/claimedSeat는 여기서 비우지 않는다 — 기립 애니메이션이
-        // 끝나 실제로 자리를 벗어날 때(.standingUp 완료 시점, update() 참고)까지는
-        // 이 손님의 몸이 여전히 그 좌석 위치에 있다. 그 전에 코디네이터에 "비었다"고
-        // 통지하면 다른 손님이 아직 사람이 서 있는 자리로 걸어오게 된다.
+        // 끝나고 leavingSeat에서 실제로 접근점까지 걸어 나가 도착할 때(finishLeavingSeat
+        // 참고)까지는 이 손님의 몸이 여전히 그 좌석 위치/근처에 있다. 그 전에
+        // 코디네이터에 "비었다"고 통지하면 다른 손님이 아직 사람이 있는 자리로
+        // 걸어오게 된다.
         seatState = .standingUp
         sittingRemaining = nil
         standingUpRemaining = transitionDuration
         standingUpDuration = transitionDuration
-        seatTransitionStandingPosition = claimedSeat?.approachPosition
         wanderTarget = nil
         activePath = []
         pauseRemaining = 0
     }
 
-    /// 기립 애니메이션이 끝난 위치를 가구 밖의 보행 가능 접근점으로 확정한 뒤에만
-    /// 좌석을 반납한다. 이전처럼 SittingPoint에서 다음 경로의 첫 셀까지 충돌을 끄고
-    /// 걸어 나가지 않으므로 가구 관통이 발생하지 않는다.
+    /// 기립 애니메이션이 끝나면 좌석 위치에 그대로 서 있는 상태다. 여기서 곧장
+    /// 가구 밖 접근점으로 좌표를 스냅하면 "이미 서 있는 자세로 좌표만 이동"하는
+    /// 것처럼 보인다 — 대신 leavingSeat으로 넘어가 실제로 Walk 애니메이션을 재생하며
+    /// 걸어 나가게 하고, 좌석은 그 이동이 끝난 뒤에만 반납한다(이전처럼 SittingPoint에서
+    /// 다음 경로의 첫 셀까지 충돌을 끄고 걸어 나가지 않으므로 가구 관통은 없다).
     private func completeStandingUp() {
         standingUpRemaining = nil
         standingUpDuration = nil
-        if let seat = claimedSeat, let root = locomotionRoot {
-            root.position = SIMD3(seat.approachPosition.x, 0, seat.approachPosition.y)
-        } else {
-            locomotionRoot?.position.y = 0
-        }
+        locomotionRoot?.position.y = 0
         seatTransitionStandingPosition = nil
+        seatState = .leavingSeat
+        stallCheckTarget = nil
+        stallCheckTimer = 0
+        stallCheckStartPosition = nil
+    }
+
+    /// standingUp 애니메이션이 끝난 뒤 좌석 위치에서 가구 밖 보행 접근점까지 실제로
+    /// 걸어 나간다. 이 구간에서만 Walk 애니메이션이 재생되므로 "일어난 채로 좌표만
+    /// 이동"하지 않고 기립→걷기가 자연스럽게 이어진다. 도착해야만 좌석을 반납한다
+    /// (아직 걸어 나가는 중에는 다른 손님이 그 자리로 오면 안 된다).
+    private func updateLeavingSeat(
+        deltaTime: Float,
+        movementContext: NPCGuestMovementContext,
+        playerPosition: SIMD2<Float>,
+        neighboringPositions: [SIMD2<Float>],
+        neighboringVelocities: [SIMD2<Float>]
+    ) {
+        guard let seat = claimedSeat else {
+            finishLeavingSeat()
+            return
+        }
+        let outcome = move(toward: seat.approachPosition, deltaTime: deltaTime,
+                           movementContext: movementContext,
+                           intent: .seating,
+                           arrivalDistance: NPCGuestTuning.queueArrivalDistance,
+                           playerPosition: playerPosition,
+                           neighboringPositions: neighboringPositions,
+                           neighborVelocities: neighboringVelocities,
+                           separationScale: 0.5,
+                           usePredictiveAvoidance: false)
+        if outcome.arrived {
+            finishLeavingSeat()
+            return
+        }
+        playAnimation(outcome.moved ? .walk : .idle)
+    }
+
+    /// 가구 밖 접근점에 실제로 도착한 뒤에만 좌석을 반납하고(다음 손님이 배정될 수
+    /// 있게), cycler라면 곧장 다음 좌석을 요청한다.
+    private func finishLeavingSeat() {
         seatState = .none
+        activePath = []
+        pauseRemaining = 0
         let vacatedSeatIndex = vacateClaimedSeat()
         requestNextSeatIfCycler(excluding: vacatedSeatIndex)
     }
@@ -881,6 +933,14 @@ final class NPCGuestController {
     /// Sit_to_Stand 클립의 진행률과 로코모션 루트 높이를 함께 보간한다. 스켈레톤
     /// 애니메이션만 역재생하고 루트 Y를 한 번에 스냅하면 착석/기립 시작점에서 몸 전체가
     /// 위아래로 튀므로, 앉을 때는 0→좌석 높이, 일어날 때는 좌석 높이→0으로 맞춘다.
+    ///
+    /// 일어날 때(isSittingDown == false)는 X/Z를 건드리지 않고 좌석 위치 그대로
+    /// 둔다 — 예전에는 이때도 X/Z를 접근점까지 같이 보간해서, Sit_to_Stand 애니메이션이
+    /// (특히 다리를 펴고 자세를 잡는 뒷부분에서) 시각적으로 이미 다 일어난 것처럼
+    /// 보이는 동안에도 몸이 계속 미끄러지듯 이동해 "이미 서 있는 자세로 좌표만
+    /// 이동"하는 것처럼 보였다. 이제 기립은 제자리에서만 하고, 실제로 가구 밖으로
+    /// 걸어 나가는 건 애니메이션이 끝난 뒤 leavingSeat에서 Walk 애니메이션으로
+    /// 이어간다(completeStandingUp/updateLeavingSeat 참고).
     private func updateSeatTransitionPose(
         remaining: Float,
         duration: Float?,
@@ -891,9 +951,10 @@ final class NPCGuestController {
               let root = locomotionRoot else { return }
         let remainingFraction = min(1, max(0, remaining / duration))
         let seatedFraction = isSittingDown ? 1 - remainingFraction : remainingFraction
+        root.position.y = seat.sittingHeightOffset * seatedFraction
+        guard isSittingDown else { return }
         let standingPosition = seatTransitionStandingPosition ?? seat.approachPosition
         root.position.x = standingPosition.x + (seat.position.x - standingPosition.x) * seatedFraction
-        root.position.y = seat.sittingHeightOffset * seatedFraction
         root.position.z = standingPosition.y + (seat.position.y - standingPosition.y) * seatedFraction
     }
 
@@ -939,7 +1000,7 @@ final class NPCGuestController {
         stallCheckStartPosition = nil
     }
 
-    /// 역할과 좌석 배정 여부에 관계없이 막힘 다음 프레임부터 가장 넓게 열린 방향으로
+    /// 역할과 좌석 배정 여부에 관계없이 막힘 다음 프레임부터 우회 가능한 방향으로
     /// 직접 빠져나간다. 이 경로에서는 씬/유저/NPC 충돌을 모두 유지한다. escape가 끝난
     /// 뒤에만 cycler의 다음 좌석 요청을 복구한다.
     private func updateEscaping(
@@ -963,7 +1024,9 @@ final class NPCGuestController {
             }
             escapeTarget = target
             activePath = [target]
-            face(point: target, deltaTime: 999)
+            // 방향을 미리 즉시 스냅하지 않는다 — 아래 moveAlongPath가 이번 프레임부터
+            // 걸으면서 face(direction:, deltaTime:)로 자연스럽게 그 방향을 향해
+            // 회전한다(막히자마자 홱 돌아 뒤돌아보는 것처럼 보이던 문제의 원인).
         }
 
         let outcome = moveAlongPath(
@@ -1360,8 +1423,17 @@ final class NPCGuestController {
         return fallback
     }
 
-    /// 막힘 직후 부르는 탈출 방향 탐색. 먼 무작위 목적지 대신 지금 위치 주변을
-    /// 원형으로 훑어 논리적으로 유효하고 가구·유저·NPC에도 실제로 열린 방향을 찾는다.
+    /// 막힘 직후 부르는 탈출 방향 탐색. 예전에는 유효한 후보 중 "가장 멀리 열린
+    /// 방향"을 그대로 골랐는데, 벽 앞에서는 대개 뒤쪽(왔던 길)이 옆(벽을 따라가는
+    /// 방향)보다 훨씬 넓게 트여 있어 결과적으로 거의 항상 정반대로 물러났다. 그
+    /// 뒤 새 배회 목적지가 다시 같은 벽 쪽을 향하면 똑같이 막혀 똑같이 물러나길
+    /// 반복해 "벽을 사이에 두고 왔다갔다"하는 것처럼 보였다.
+    ///
+    /// 이제는 막혔던 방향(avoidingDirection)에서 가까운 각도부터(12방향, 30도 단위로
+    /// ±30·±60·±90·±120·±150·180 순서) 실제로 갈 수 있는 첫 방향을 찾는다 — 사람이
+    /// 벽 앞에서 살짝 옆으로 비껴 지나가듯, 완전히 막다른 곳일 때만 최후 수단으로
+    /// 정반대(180도)를 고르게 된다. 막힌 이유 없이(예: 위치 자체가 이상 상태인 복구
+    /// 경로) 선호 방향이 없을 때만 예전처럼 가장 멀리 열린 방향을 그대로 쓴다.
     private func nearbyEscapeTarget(from current: SIMD2<Float>,
                                     in area: NPCGuestArea,
                                     excluding exclusions: [NPCGuestArea],
@@ -1369,17 +1441,11 @@ final class NPCGuestController {
                                     neighboringPositions: [SIMD2<Float>],
                                     avoidingDirection: SIMD2<Float>?) -> SIMD2<Float>? {
         let scene = locomotionRoot?.scene
-        let sampleCount = 16
+        let sampleCount = 12
+        let stepAngle = 2 * Float.pi / Float(sampleCount)
         let probeDistance = NPCGuestTuning.escapeProbeDistance
-        var best: SIMD2<Float>?
-        var bestTravel: Float = 0
-        for index in 0..<sampleCount {
-            let angle = Float(index) / Float(sampleCount) * 2 * Float.pi
-            let direction = SIMD2<Float>(cos(angle), sin(angle))
-            guard NPCGuestNavigation.isDifferentEscapeDirection(
-                direction,
-                from: avoidingDirection)
-            else { continue }
+
+        func candidate(for direction: SIMD2<Float>) -> (position: SIMD2<Float>, travel: Float)? {
             let clearance: Float
             if let scene {
                 clearance = NPCObstacleAvoidance.allowedStep(
@@ -1392,19 +1458,41 @@ final class NPCGuestController {
                 clearance = probeDistance
             }
             let travel = min(probeDistance, clearance * 0.9)
-            guard travel >= NPCGuestTuning.escapeMinimumDistance,
-                  travel > bestTravel else { continue }
-            let candidate = current + direction * travel
+            guard travel >= NPCGuestTuning.escapeMinimumDistance else { return nil }
+            let position = current + direction * travel
             // 정상 위치에서는 금지 구역에 새로 진입하지 않고, 이미 위반 상태라면
             // 위반 깊이가 얕아지는 방향만 허용한다.
             guard NPCGuestNavigation.isAllowedStep(
-                from: current,
-                to: candidate,
-                inside: area,
-                excluding: exclusions)
-            else { continue }
-            bestTravel = travel
-            best = candidate
+                from: current, to: position, inside: area, excluding: exclusions)
+            else { return nil }
+            return (position, travel)
+        }
+
+        if let avoidingDirection, simd_length(avoidingDirection) > 0.001 {
+            let baseAngle = atan2(avoidingDirection.y, avoidingDirection.x)
+            let half = sampleCount / 2
+            for magnitude in 1..<half {
+                for sign: Float in [1, -1] {
+                    let angle = baseAngle + sign * Float(magnitude) * stepAngle
+                    let probe = SIMD2<Float>(cos(angle), sin(angle))
+                    if let found = candidate(for: probe) { return found.position }
+                }
+            }
+            let angle = baseAngle + Float(half) * stepAngle
+            let probe = SIMD2<Float>(cos(angle), sin(angle))
+            return candidate(for: probe)?.position
+        }
+
+        // 선호 방향이 없으면 이전처럼 논리적으로 유효하고 실제로 가장 멀리 열린
+        // 방향을 고른다.
+        var best: SIMD2<Float>?
+        var bestTravel: Float = 0
+        for index in 0..<sampleCount {
+            let angle = Float(index) * stepAngle
+            let probe = SIMD2<Float>(cos(angle), sin(angle))
+            guard let found = candidate(for: probe), found.travel > bestTravel else { continue }
+            bestTravel = found.travel
+            best = found.position
         }
         return best
     }

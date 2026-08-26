@@ -44,6 +44,12 @@ struct StartScreenView: View {
                 .padding(24)
         }
         .shadow(color: .black.opacity(0.25), radius: 20, x: 2, y: 4)
+        .task {
+            // 손 추적이 기본으로 켜져 있는 빌드(배포)에서는 "시작하기"를 누르고 몰입
+            // 공간에 들어간 뒤가 아니라, 이 시작 화면이 뜨는 즉시 권한 프롬프트를 띄운다.
+            guard model.useHandTracking else { return }
+            await HandTrackingManager.requestAuthorizationEarly()
+        }
     }
 
     private var startButton: some View {

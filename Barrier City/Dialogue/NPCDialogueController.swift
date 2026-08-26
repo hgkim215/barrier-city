@@ -26,7 +26,7 @@ final class NPCDialogueController {
         static let responseTimeout: TimeInterval = 30
         /// 주문이 확정된 직후에는 "감사합니다" 같은 짧은 반응이 있을 수 있으니 잠깐만 더
         /// 듣고, 없으면 자연스럽게 대화를 마친다. 주문 확정 대사가 끝난 시점부터 잰다.
-        static let postOrderFarewellTimeout: TimeInterval = 2.5
+        static let postOrderFarewellTimeout: TimeInterval = 1.0
         /// 응답 생성이나 도구 후속 응답이 시작되지 않을 때 무한 대기를 끊는 시간.
         static let generationTimeout: TimeInterval = 30
         static let inactivityRapportPenalty: Float = 0.1

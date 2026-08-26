@@ -160,22 +160,6 @@ struct ControlPanelView: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
 
-            Button {
-                Task { @MainActor in
-                    guard !isCafeTransitioning else { return }
-                    isCafeTransitioning = true
-                    immersiveError = nil
-                    defer { isCafeTransitioning = false }
-                    await startOrderPlacedScenarioForDevelopment()
-                }
-            } label: {
-                Label(isCafeTransitioning ? "카페 준비 중…" : "개발: 음료 주문 완료 시점 시작",
-                      systemImage: "sparkles")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.teal)
-
 #if targetEnvironment(simulator)
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $simulatorMicrophoneEnabled) {
@@ -362,20 +346,6 @@ struct ControlPanelView: View {
             immersiveError = "NPC가 아직 준비되지 않았습니다. 잠시 후 다시 눌러 주세요."
             return
         }
-    }
-
-    /// 개발 패널에서 점원에게 주문이 접수된 직후의 시나리오를 시작한다.
-    /// 10초 카운트다운 후 스무디가 카운터에 나타나고 점원이 주문 완성 호출을 진행한다.
-    @MainActor
-    private func startOrderPlacedScenarioForDevelopment() async {
-        guard await enterCafeForDevelopment() else { return }
-
-        let guide = GuideFlowModel.shared
-        guide.handleQuestEvent(.kioskFailed)
-        guide.confirmMission()
-        guide.handleQuestEvent(.npcHelpDone)
-
-        model.rainbowSmoothieServing.acceptOrder()
     }
 
     private var isNPCConversationInProgress: Bool {

@@ -59,8 +59,8 @@ struct NPCGuestSeatingTransitionContractTests {
                 "dessert assets must ground their measured model bounds before placement")
         require("placementRoot.setPosition([x, surfaceY, z]", in: coordinator,
                 "grounded dessert roots must be placed directly on the table surface")
-        require("static let surfaceClearance: Float = 0", in: coordinator,
-                "dessert bounds must touch the table instead of retaining an air gap")
+        require("static let surfaceClearance: Float = -0.004", in: coordinator,
+                "dessert bounds must sit at or slightly below the table surface, never floating above it")
 
         if controller.contains("reserveSeat(") || coordinator.contains("cyclerImmediateSeatChance") {
             fail("cycler must not retain probabilistic/deferred seating")
@@ -71,8 +71,9 @@ struct NPCGuestSeatingTransitionContractTests {
         }
 
         let femaleCount = coordinator.components(separatedBy: "\"Guest_Female_").count - 1
+        let ladyCount = coordinator.components(separatedBy: "\"Guest_Lady_").count - 1
         let maleCount = coordinator.components(separatedBy: "\"Guest_Male_").count - 1
-        guard femaleCount + maleCount == 9 else {
+        guard femaleCount + ladyCount + maleCount == 9 else {
             fail("guest display entity count must remain exactly 9")
         }
 

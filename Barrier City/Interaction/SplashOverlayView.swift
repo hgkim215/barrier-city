@@ -22,7 +22,7 @@ struct SplashOverlayView: View {
                         .aspectRatio(contentMode: .fit)
                 }
             }
-            .frame(width: 360, height: 325)
+            .frame(width: 540, height: 488)
 
             HStack(spacing: 8) {
                 Text("도로 공사중")
@@ -37,7 +37,7 @@ struct SplashOverlayView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("도로 공사중")
         }
-        .frame(width: 400, height: 400)
+        .frame(width: 600, height: 600)
         .task {
             images = Self.loadImages()
             frame = 0

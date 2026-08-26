@@ -51,6 +51,16 @@ final class HandTrackingManager {
     /// 축 저역통과 응답 속도(약 100ms 시정수).
     private static let fistSmoothingRate: Float = 10
 
+    /// 몰입 공간에 들어가기 전, 시작 화면에서 미리 손 추적 권한 시스템 프롬프트를
+    /// 띄운다. 실제 추적 시작(session.run)은 여전히 몰입 공간 진입 시 start(model:)가
+    /// 담당한다 — 여기서는 권한 응답만 앱 실행 직후에 먼저 받아 두어, "시작하기"를
+    /// 누른 뒤에 권한 팝업 때문에 흐름이 끊기지 않게 한다. 별도의 일회성 세션을 써서
+    /// start(model:)가 관리하는 세대(generation) 상태를 건드리지 않는다.
+    static func requestAuthorizationEarly() async {
+        guard HandTrackingProvider.isSupported else { return }
+        _ = await ARKitSession().requestAuthorization(for: [.handTracking])
+    }
+
     func start(model: AppModel) async {
         runGeneration &+= 1
         let generation = runGeneration
