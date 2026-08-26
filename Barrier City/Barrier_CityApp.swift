@@ -37,6 +37,11 @@ struct Barrier_CityApp: App {
                 // 베이스플레이트를 띄운다. 스플래시는 이미지 한 장만 보여주므로
                 // 그 판이 그대로 노출돼 거슬린다. (Scene이 아니라 View 모디파이어)
                 .volumeBaseplateVisibility(.hidden)
+                // WindowGroup에서는 이 모디파이어가 윈도우 크롬(하단 핸들바·닫기
+                // 버튼)의 표시 여부에 관여한다. 로딩 중 잠깐 떴다 사라지는 창이라
+                // 사용자가 옮기거나 닫을 일이 없다.
+                // 문서상 '선호'일 뿐이라 시스템이 무시할 수도 있다.
+                .persistentSystemOverlays(.hidden)
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.01, in: .meters)

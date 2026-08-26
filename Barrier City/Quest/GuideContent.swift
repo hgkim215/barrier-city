@@ -29,43 +29,25 @@ enum GuideTheme {
 /// 온보딩 카드(인트로 · 튜토리얼)의 치수. 두 카드가 같은 questHUD attachment를
 /// 공유하므로 폭을 함께 두어 단계 전환에서 패널이 좌우로 흔들리지 않게 한다.
 enum GuideCardMetrics {
-    /// 안내 영상 패널. 원본이 1280x720이라 16:9로 맞춘다(레터박스 없음).
-    static let videoWidth: CGFloat = 840
-    static let videoHeight: CGFloat = videoWidth * 9 / 16       // 472.5
-    /// 영상을 감싸는 글래스 테두리 두께.
-    static let videoFramePadding: CGFloat = 10
+    // MARK: 먼 곳의 영상 패널 (TV처럼)
+    //
+    // 사용자에게서 멀리 두므로 포인트 크기를 크게 잡는다. attachment는 대략
+    // 1360pt/m로 렌더되니 2200pt ≈ 1.62m 폭이고, 2.2m 거리에서 약 40도를
+    // 차지한다. 엔티티 scale로 키우면 텍스처가 그대로라 흐려지므로 쓰지 않는다.
+    static let videoWidth: CGFloat = 2200
+    static let videoHeight: CGFloat = videoWidth * 9 / 16       // 1237.5
+    static let videoFramePadding: CGFloat = 16
     static let videoPanelWidth: CGFloat = videoWidth + videoFramePadding * 2
     static let videoPanelHeight: CGFloat = videoHeight + videoFramePadding * 2
 
-    /// 영상 패널과 아래 텍스트 카드 사이 간격.
-    static let panelGap: CGFloat = 26
-
-    /// 텍스트 카드. 인트로와 튜토리얼이 폭과 높이를 모두 공유해야
-    /// 단계가 바뀌어도 카드가 제자리에 머문다.
+    // MARK: 손 닿는 곳의 텍스트 카드
     static let width: CGFloat = 720
     static let padding: CGFloat = 32
     static let cardHeight: CGFloat = 380
 
-    /// 온보딩 전체가 차지하는 고정 영역.
-    ///
-    /// 인트로에는 영상이 없지만 이 높이를 똑같이 잡고 **하단 정렬**한다.
-    /// 그래야 "다음"을 눌렀을 때 카드가 아래로 밀려나지 않고, 비어 있던
-    /// 위쪽 자리에 영상 패널만 나타난다.
-    static let stackWidth: CGFloat = max(videoPanelWidth, width)
-    static let stackHeight: CGFloat = videoPanelHeight + panelGap + cardHeight
-
     /// 미션 안내 모달과 미션 목록 HUD의 폭.
     static let missionWidth: CGFloat = 780
-    static let missionListWidth: CGFloat = 520
-}
-
-extension View {
-    /// 온보딩 카드를 아래쪽 기준선에 고정한다.
-    func onboardingAnchored() -> some View {
-        frame(width: GuideCardMetrics.stackWidth,
-              height: GuideCardMetrics.stackHeight,
-              alignment: .bottom)
-    }
+    static let missionListWidth: CGFloat = 640
 }
 
 enum GuideContent {

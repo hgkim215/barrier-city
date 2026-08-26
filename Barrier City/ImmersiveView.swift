@@ -79,6 +79,7 @@ struct ImmersiveView: View {
             InteractionModel.shared.isBootLoading = true
             let loadingStartedAt = ContinuousClock.now
 
+
             // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
             // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
             // 맨 끝에서 두 프리로드를 기다린 뒤에야 로딩 화면을 걷어낸다.
@@ -255,6 +256,10 @@ struct ImmersiveView: View {
                     model: .shared,
                     serving: model.rainbowSmoothieServing,
                     elapsedTime: model.experienceRunTimer.formattedElapsed)
+            }
+            // 튜토리얼 안내 영상. 카드와 거리·각도를 따로 주려고 attachment를 분리했다.
+            Attachment(id: "guideVideo") {
+                GuideVideoPanelView()
             }
             // 점원 위에서 말 걸기 버튼과 발화 자막이 교대하는 공간 버블.
             Attachment(id: "npcInteraction") {

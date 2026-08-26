@@ -40,8 +40,8 @@ struct MissionListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Mission List")
-                .font(.title2.bold())
-                .padding(.bottom, 16)
+                .font(.largeTitle.bold())
+                .padding(.bottom, 20)
 
             ForEach(Array(steps.prefix(visibleCount).enumerated()), id: \.element.id) { offset, step in
                 let isClear = allCompleted || offset < visibleCount - 1
@@ -51,17 +51,17 @@ struct MissionListView: View {
                     return "Progress"
                 }()
 
-                HStack(spacing: 20) {
+                HStack(spacing: 24) {
                     Text("\(offset + 1). \(step.title)")
-                        .font(.title3.weight(.semibold))
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(isClear ? Color.secondary : Color.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text(statusLabel)
-                        .font(.callout.bold())
+                        .font(.title3.bold())
                         .foregroundStyle(isClear ? Color.secondary : GuideTheme.accent)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
                         .overlay(
                             Capsule().stroke(
                                 isClear ? Color.secondary : GuideTheme.accent,
@@ -69,10 +69,10 @@ struct MissionListView: View {
                             )
                         )
                 }
-                .padding(.vertical, 13)
+                .padding(.vertical, 16)
             }
         }
-        .padding(34)
+        .padding(40)
         .frame(width: GuideCardMetrics.missionListWidth, alignment: .leading)
         .glassBackgroundEffect()
     }

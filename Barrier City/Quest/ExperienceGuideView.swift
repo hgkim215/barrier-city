@@ -66,7 +66,19 @@ struct ExperienceGuideView: View {
             }
         }
         .id(String(describing: model.phase))
-        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
+        // 나가는 쪽은 애니메이션 없이 즉시 제거한다.
+        //
+        // 대칭 전환이면 0.22초 동안 이전 패널과 새 패널이 같은 attachment 안에
+        // 함께 그려진다. 그 사이 QuestHUDFollower는 placement가 바뀌자마자
+        // (centerModal → upperLeadingHUD) 엔티티를 새 위치로 스냅시키므로,
+        // 이미 지나간 미션 안내 패널이 좌측 상단으로 끌려간 뒤 사라지는
+        // 잔상이 보였다. removal을 .identity로 두면 겹치는 구간이 없어진다.
+        .transition(
+            .asymmetric(
+                insertion: reduceMotion
+                    ? .opacity
+                    : .scale(scale: 0.96).combined(with: .opacity),
+                removal: .identity))
         .animation(.easeOut(duration: 0.22), value: model.phase)
     }
 
@@ -110,7 +122,6 @@ struct IntroductionCardView: View {
         .padding(GuideCardMetrics.padding)
         .frame(width: GuideCardMetrics.width, height: GuideCardMetrics.cardHeight)
         .glassBackgroundEffect()
-        .onboardingAnchored()
     }
 }
 

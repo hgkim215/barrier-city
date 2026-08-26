@@ -8,18 +8,8 @@ struct TutorialGuideView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(spacing: GuideCardMetrics.panelGap) {
-            // 영상은 텍스트 카드와 분리된 별도 글래스 패널로 띄운다.
-            // 한 카드 안에 좌우로 넣으면 16:9 영상 때문에 카드가 가로로만 길어진다.
-            LoopingGuideVideoView(resourceName: step.videoResourceName)
-                .frame(width: GuideCardMetrics.videoWidth,
-                       height: GuideCardMetrics.videoHeight)
-                .padding(GuideCardMetrics.videoFramePadding)
-                .glassBackgroundEffect(in: .rect(cornerRadius: 32))
-
-            textCard
-        }
-        .onboardingAnchored()
+        // 영상은 별도 attachment("guideVideo")로 멀리 배치된다. 여기는 카드만.
+        textCard
     }
 
     private var textCard: some View {

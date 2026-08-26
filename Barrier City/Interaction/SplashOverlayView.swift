@@ -24,15 +24,15 @@ struct SplashOverlayView: View {
             }
             .frame(width: 540, height: 488)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Text("도로 공사중")
                 Text(SplashSequence.progressDots(atFrame: frame) ?? "")
-                    .frame(width: 54, alignment: .leading)
+                    .frame(width: 78, alignment: .leading)
             }
-            .font(.system(size: 22, weight: .semibold, design: .rounded))
+            .font(.system(size: 48, weight: .bold, design: .rounded))
             .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 13)
             .background(.black.opacity(0.58), in: Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("도로 공사중")

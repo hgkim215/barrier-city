@@ -240,16 +240,35 @@ enum InteractionSetup {
         panel.setPosition([t.center.x, InteractionTuning.panelHeight, t.center.y],
                           relativeTo: panel.parent)
         var worldPos = panel.position(relativeTo: nil)
-        // 2) 문은 눈앞 고정 좌표, 키오스크는 표면 앞 월드 좌표로 변환한다.
-        worldPos = InteractionPanelPlacement.worldPosition(
-            worldPos,
-            toward: .zero,
-            kind: t.kind)
+
+        // 2) 문 패널은 온보딩/미션 카드와 같은 높이·거리에 둔다.
+        //    예전에는 고정 좌표(y 1.35)라 가이드 카드보다 30cm 가까이 높았다.
+        //    QuestHUDFollower가 관측한 실제 눈높이를 기준으로 삼아, 앉은 자세에서도
+        //    가이드 카드와 같은 자리에 오게 한다. 키오스크는 표면 앞 배치 그대로.
+        let eyeHeight = QuestSetup.lastHeadPosition?.y
+            ?? InteractionTuning.doorPromptFallbackEyeHeight
+        if t.kind == .yesNoPrompt {
+            worldPos = SIMD3(0,
+                             eyeHeight + QuestTuning.cardVerticalOffset,
+                             -QuestTuning.cardDistance)
+        } else {
+            worldPos = InteractionPanelPlacement.worldPosition(
+                worldPos,
+                toward: .zero,
+                kind: t.kind)
+        }
         panel.setPosition(worldPos, relativeTo: nil)
-        // 3) 사용자를 향하도록 yaw 빌보드 및 상향 틸트 적용.
+
+        // 3) 사용자를 향하도록 yaw 빌보드 + 시선각만큼 상향 틸트.
         let yaw = atan2(-worldPos.x, -worldPos.z)
         let yawQuat = simd_quatf(angle: yaw, axis: [0, 1, 0])
-        let pitchAngle = (t.kind == .yesNoPrompt) ? InteractionTuning.doorPromptTiltAngleRadians : 0
+        var pitchAngle: Float = 0
+        if t.kind == .yesNoPrompt {
+            let horizontal = max(simd_length(SIMD2(worldPos.x, worldPos.z)), 1e-4)
+            pitchAngle = -min(atan2(eyeHeight - worldPos.y, horizontal)
+                                * QuestTuning.cardPitchRatio,
+                              QuestTuning.cardMaxPitch)
+        }
         let pitchQuat = simd_quatf(angle: pitchAngle, axis: [1, 0, 0])
         panel.setOrientation(yawQuat * pitchQuat, relativeTo: nil)
     }
