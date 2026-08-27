@@ -376,6 +376,8 @@ final class NPCDialogueController {
         case .speechStarted:
             if realtimeInputTurnIsActive { return }
             guard realtimeCanAcceptInput else {
+                // 서버가 음성을 받긴 했는데 앱이 무시한 경우 — 마이크 자체는 살아있다.
+                Self.lifecycleLogger.notice("[MIC] speechStarted 무시됨 canAcceptInput=false")
                 realtimeSuppressesCurrentInputTurn = true
                 return
             }
@@ -626,7 +628,13 @@ final class NPCDialogueController {
               realtimeMicrophoneIsReady,
               !realtimeOutputIsPlaying,
               !realtimeResponseDonePending,
-              !realtimeInputTurnIsActive else { return }
+              !realtimeInputTurnIsActive else {
+            // 초록불(status == .listening)은 '받을 준비'일 뿐 실제 입력과 무관하다.
+            // 실기에서 음성이 안 들어갈 때 어느 조건에 걸렸는지 남긴다.
+            Self.lifecycleLogger.notice(
+                "[MIC] listening 차단 micReady=\(self.realtimeMicrophoneIsReady, privacy: .public) outputPlaying=\(self.realtimeOutputIsPlaying, privacy: .public) donePending=\(self.realtimeResponseDonePending, privacy: .public) inputTurn=\(self.realtimeInputTurnIsActive, privacy: .public) status=\(String(describing: self.status), privacy: .public)")
+            return
+        }
         realtimeCanAcceptInput = true
         if pendingPostOrderFarewell {
             pendingPostOrderFarewell = false

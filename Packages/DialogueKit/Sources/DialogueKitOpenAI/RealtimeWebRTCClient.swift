@@ -3,6 +3,9 @@ import Foundation
 import FoundationNetworking
 #endif
 @preconcurrency import LiveKitWebRTC
+#if os(iOS) || os(visionOS) || os(tvOS)
+@preconcurrency import AVFoundation
+#endif
 
 public struct RealtimeClientSecretProvider: Sendable {
     private let config: ProxyConfig
@@ -73,7 +76,41 @@ public actor RealtimeWebRTCClient {
     public static func setPlatformAudioSessionActive(_ active: Bool) {
 #if os(iOS) || os(visionOS) || os(tvOS)
         _ = Self.audioSessionManualModeConfigured
-        LKRTCAudioSession.sharedInstance().isAudioEnabled = active
+        let rtcSession = LKRTCAudioSession.sharedInstance()
+        let avSession = AVAudioSession.sharedInstance()
+
+        // 세션을 활성화한 주체가 WebRTC가 아니라 앱(AudioSessionCoordinator)이므로,
+        // RTCAudioSession은 세션이 이미 .playAndRecord로 활성화된 사실을 모른다.
+        // 알려주지 않으면 오디오 장치 모듈이 "아직 세션이 비활성"이라고 판단해
+        // 입력 유닛을 시작하지 않는다 — 시뮬레이터는 실제 하드웨어가 없어 그냥
+        // 넘어가지만 실기에서는 마이크가 통째로 죽는다.
+        if active {
+            _ = rtcSession.audioSessionDidActivate(avSession)
+        }
+
+        // RTCAudioSession의 속성 변경은 반드시 lock 구간 안에서 해야 한다.
+        // 잠금 없이 쓰면 WebRTC 내부 상태와 어긋나 유닛이 안 붙을 수 있다.
+        rtcSession.lockForConfiguration()
+        rtcSession.isAudioEnabled = active
+        rtcSession.unlockForConfiguration()
+
+        if !active {
+            _ = rtcSession.audioSessionDidDeactivate(avSession)
+        }
+#endif
+    }
+
+    /// 실기 마이크 문제 진단용. WebRTC가 보는 오디오 상태를 한 줄로 요약한다.
+    public static var platformAudioDiagnostics: String {
+#if os(iOS) || os(visionOS) || os(tvOS)
+        let rtc = LKRTCAudioSession.sharedInstance()
+        let av = AVAudioSession.sharedInstance()
+        let inputs = av.currentRoute.inputs.map(\.portType.rawValue).joined(separator: ",")
+        return "rtc(manual=\(rtc.useManualAudio) enabled=\(rtc.isAudioEnabled) active=\(rtc.isActive)) "
+            + "av(cat=\(av.category.rawValue) mode=\(av.mode.rawValue) "
+            + "inputAvailable=\(av.isInputAvailable) inputs=[\(inputs)])"
+#else
+        return "unsupported"
 #endif
     }
 

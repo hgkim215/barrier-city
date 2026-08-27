@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 import DialogueKitOpenAI
 import Foundation
+import OSLog
 
 /// WebRTC의 네이티브 오디오 장치가 마이크와 출력을 소유하는 동안 앱의 다른 오디오와
 /// AVAudioSession 변경이 충돌하지 않도록 기존 코디네이터에 수명주기를 등록한다.
@@ -20,6 +21,10 @@ final class RealtimeMediaTrackAudioSession {
         }
     }
 
+    private static let logger = Logger(
+        subsystem: "com.Television.Barrier-City",
+        category: "RealtimeAudio")
+
     private var hasAudioSessionClaim = false
     private static var didRegisterLifecycle = false
 
@@ -32,11 +37,19 @@ final class RealtimeMediaTrackAudioSession {
         guard !hasAudioSessionClaim else { return }
         let permissionGranted = await AVAudioApplication.requestRecordPermission()
         guard permissionGranted else {
+            Self.logger.error("[MIC] 녹음 권한 거부됨 - 설정에서 마이크를 허용해야 한다")
             throw Error.permissionDenied
         }
         try Task.checkCancellation()
         Self.registerLifecycleIfNeeded()
-        try AudioSessionCoordinator.shared.acquire(.realtimeConversation)
+        do {
+            try AudioSessionCoordinator.shared.acquire(.realtimeConversation)
+        } catch {
+            // 여기서 실패하면 마이크가 아예 안 열린다. 조용히 던지지 말고 남긴다.
+            Self.logger.error(
+                "[MIC] 오디오 세션 획득 실패 \(error.localizedDescription, privacy: .public) \(RealtimeWebRTCClient.platformAudioDiagnostics, privacy: .public)")
+            throw error
+        }
         hasAudioSessionClaim = true
     }
 
@@ -56,12 +69,17 @@ final class RealtimeMediaTrackAudioSession {
     private static func registerLifecycleIfNeeded() {
         guard !didRegisterLifecycle else { return }
         didRegisterLifecycle = true
+        let logger = Self.logger
         AudioSessionCoordinator.shared.registerRealtimeConversationLifecycle { isActive in
             // AVAudioSession이 완전히 .playAndRecord로 구성·활성화된 뒤에만 켜고,
             // 세션을 건드리기 전에 꺼야 한다 — AVAudioEngine을 세션 전환 전에
             // 멈춰야 하는 것과 같은 순서다(AudioSessionCoordinator.transition이
             // 이 순서를 보장한다).
             RealtimeWebRTCClient.setPlatformAudioSessionActive(isActive)
+            // 실기에서 마이크가 안 잡히는 원인을 가리기 위한 상태 스냅샷.
+            // 카테고리/입력 라우트/WebRTC 오디오 유닛 상태를 한 줄로 남긴다.
+            logger.notice(
+                "[MIC] audioUnit active=\(isActive, privacy: .public) \(RealtimeWebRTCClient.platformAudioDiagnostics, privacy: .public)")
         }
     }
 }

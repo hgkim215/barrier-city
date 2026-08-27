@@ -65,6 +65,13 @@ final class AudioSessionCoordinator {
     /// 알고 있는 프로필을 다시 적용해 되찾아온다.
     private func reassertProfileIfNeeded() {
         guard currentProfile != .inactive else { return }
+        // 실시간 대화 중에는 절대 손대지 않는다.
+        //
+        // 실기에서 .playAndRecord/.voiceChat으로 전환하면 마이크가 켜지고 출력이
+        // 바뀌면서 라우트 변경이 연달아 발생한다. 그때마다 setCategory/setActive를
+        // 다시 걸면 WebRTC가 막 세우고 있던 오디오 유닛을 무너뜨려 마이크 입력이
+        // 죽는다. 시뮬레이터는 라우트 변경이 거의 없어 이 경로를 타지 않았다.
+        guard currentProfile != .realtimeConversation else { return }
         try? configure(currentProfile)
         try? session.setActive(true)
     }
@@ -155,10 +162,18 @@ final class AudioSessionCoordinator {
         }
 
         do {
-            if previous != .inactive {
-                try session.setActive(false, options: .notifyOthersOnDeactivation)
-            }
+            // 프로필 사이를 오갈 때 세션을 내렸다 올리지 않는다.
+            //
+            // 카테고리·모드 변경은 활성 세션에서도 그대로 적용된다. 반대로
+            // setActive(false)는 RealityKit 배경음처럼 세션을 쓰고 있는 다른
+            // 클라이언트가 있으면 실기에서 거부된다(FigAudioSession err=-19224).
+            // 그러면 아래 catch가 이전 프로필로 되돌려버려 .playAndRecord 전환
+            // 자체가 실패하고, 마이크는 영영 열리지 않는다. 시뮬레이터에는
+            // 경쟁하는 오디오 클라이언트가 없어 이 경로가 드러나지 않았다.
             guard target != .inactive else {
+                if previous != .inactive {
+                    try session.setActive(false, options: .notifyOthersOnDeactivation)
+                }
                 currentProfile = .inactive
                 return
             }
