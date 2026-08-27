@@ -3,6 +3,9 @@ import Foundation
 import FoundationNetworking
 #endif
 @preconcurrency import LiveKitWebRTC
+#if os(iOS) || os(visionOS) || os(tvOS)
+@preconcurrency import AVFoundation
+#endif
 
 public struct RealtimeClientSecretProvider: Sendable {
     private let config: ProxyConfig
@@ -72,7 +75,19 @@ public actor RealtimeWebRTCClient {
     public static func setPlatformAudioSessionActive(_ active: Bool) {
 #if os(iOS) || os(visionOS) || os(tvOS)
         _ = Self.audioSessionManualModeConfigured
-        LKRTCAudioSession.sharedInstance().isAudioEnabled = active
+        let rtcSession = LKRTCAudioSession.sharedInstance()
+        let avSession = AVAudioSession.sharedInstance()
+
+        // AVAudioSession을 활성화하는 주체가 앱이므로 RTCAudioSession에도 같은
+        // lifecycle을 전달한다. 그렇지 않으면 앱은 active인데 WebRTC ADM은 inactive로
+        // 판단해 voice-processing AudioUnit을 시작하지 않을 수 있다.
+        if active {
+            rtcSession.audioSessionDidActivate(avSession)
+        }
+        rtcSession.isAudioEnabled = active
+        if !active {
+            rtcSession.audioSessionDidDeactivate(avSession)
+        }
 #endif
     }
 

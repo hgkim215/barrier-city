@@ -43,6 +43,9 @@ final class AudioSessionCoordinator {
     private var suspendEffectsHandler: (@MainActor () -> Void)?
     private var resumeEffectsHandler: (@MainActor () -> Void)?
     private var effectsAreSuspended = false
+    private var suspendPlaybackHandler: (@MainActor () -> Void)?
+    private var resumePlaybackHandler: (@MainActor () -> Void)?
+    private var playbackIsSuspended = false
     private var realtimeConversationLifecycleHandler: (@MainActor (Bool) -> Void)?
 
     private init() {
@@ -64,13 +67,21 @@ final class AudioSessionCoordinator {
     /// 외부(AVPlayer 등)가 세션을 건드려 라우트가 바뀌었을 때, 우리가 활성 상태로
     /// 알고 있는 프로필을 다시 적용해 되찾아온다.
     private func reassertProfileIfNeeded() {
-        guard currentProfile != .inactive else { return }
+        // .playAndRecord/.voiceChat 진입 자체가 실기기 route change를 만들 수 있다.
+        // 이 알림에 반응해 다시 category/active를 적용하면 WebRTC가 막 시작한 VPIO
+        // AudioUnit을 무효화하므로 realtime 중에는 WebRTC가 라우트를 소유하게 둔다.
+        guard currentProfile != .inactive,
+              currentProfile != .realtimeConversation else { return }
         try? configure(currentProfile)
         try? session.setActive(true)
     }
 
     var effectsPlaybackIsActive: Bool {
         currentProfile == .playback && count(for: .effects) > 0
+    }
+
+    var realtimeConversationIsActive: Bool {
+        currentProfile == .realtimeConversation
     }
 
     func registerEffectsLifecycle(
@@ -81,6 +92,17 @@ final class AudioSessionCoordinator {
         resumeEffectsHandler = resume
         if currentProfile == .playback, count(for: .effects) > 0 {
             resumeEffectsIfNeeded()
+        }
+    }
+
+    func registerPlaybackLifecycle(
+        suspend: @escaping @MainActor () -> Void,
+        resume: @escaping @MainActor () -> Void
+    ) {
+        suspendPlaybackHandler = suspend
+        resumePlaybackHandler = resume
+        if currentProfile == .playback, count(for: .playback) > 0 {
+            resumePlaybackIfNeeded()
         }
     }
 
@@ -106,6 +128,12 @@ final class AudioSessionCoordinator {
         activityCounts[activity, default: 0] += 1
         do {
             try reconcileProfile()
+            if currentProfile == .realtimeConversation {
+                // realtime보다 우선순위가 낮은 재생 요청이 대화 도중 새로 들어와도
+                // 세션 프로필은 바뀌지 않으므로, 여기서 명시적으로 정지 상태를 맞춘다.
+                suspendEffectsIfNeeded()
+                suspendPlaybackIfNeeded()
+            }
         } catch {
             decrement(activity)
             try? reconcileProfile()
@@ -149,16 +177,17 @@ final class AudioSessionCoordinator {
         let previous = currentProfile
         if previous == .playback, target != .playback {
             suspendEffectsIfNeeded()
+            suspendPlaybackIfNeeded()
         }
         if previous == .realtimeConversation, target != .realtimeConversation {
             realtimeConversationLifecycleHandler?(false)
         }
 
         do {
-            if previous != .inactive {
-                try session.setActive(false, options: .notifyOthersOnDeactivation)
-            }
             guard target != .inactive else {
+                if previous != .inactive {
+                    try session.setActive(false, options: .notifyOthersOnDeactivation)
+                }
                 currentProfile = .inactive
                 return
             }
@@ -168,6 +197,7 @@ final class AudioSessionCoordinator {
             currentProfile = target
             if target == .playback {
                 resumeEffectsIfNeeded()
+                resumePlaybackIfNeeded()
             }
             if target == .realtimeConversation, previous != .realtimeConversation {
                 realtimeConversationLifecycleHandler?(true)
@@ -179,7 +209,10 @@ final class AudioSessionCoordinator {
                 do {
                     try session.setActive(true)
                     currentProfile = previous
-                    if previous == .playback { resumeEffectsIfNeeded() }
+                    if previous == .playback {
+                        resumeEffectsIfNeeded()
+                        resumePlaybackIfNeeded()
+                    }
                     if previous == .realtimeConversation { realtimeConversationLifecycleHandler?(true) }
                 } catch { /* 원래 전환 오류를 호출자에게 전달한다. */ }
             }
@@ -205,7 +238,7 @@ final class AudioSessionCoordinator {
             try session.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+                options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
             )
         }
     }
@@ -222,5 +255,17 @@ final class AudioSessionCoordinator {
         }
         resumeEffectsHandler?()
         effectsAreSuspended = false
+    }
+
+    private func suspendPlaybackIfNeeded() {
+        guard count(for: .playback) > 0, !playbackIsSuspended else { return }
+        suspendPlaybackHandler?()
+        playbackIsSuspended = true
+    }
+
+    private func resumePlaybackIfNeeded() {
+        guard count(for: .playback) > 0, currentProfile == .playback else { return }
+        resumePlaybackHandler?()
+        playbackIsSuspended = false
     }
 }
