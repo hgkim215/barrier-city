@@ -31,7 +31,7 @@ struct QuestStep: Identifiable, Equatable {
 /// lazy-follow HUD 튜닝 상수 단일 진실원(시뮬레이터에서 보며 조정).
 enum QuestTuning {
     /// head 앞으로 띄우는 거리(m)
-    static let forwardDistance: Float = 0.85
+    static let forwardDistance: Float = 0.72
     /// 중앙 모달의 head 기준 좌우 오프셋(m, -면 왼쪽)
     static let centerLateralOffset: Float = 0
     /// 중앙 모달의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
@@ -45,9 +45,9 @@ enum QuestTuning {
     /// 실제로는 몰입 공간 진입 직후 관측한 값을 한 번만 받아 계속 쓴다.
     static let seatedEyeHeightFallback: Float = 1.15
     /// 텍스트 카드까지의 수평 거리(m).
-    static let cardDistance: Float = 0.70
+    static let cardDistance: Float = 0.60
     /// 텍스트 카드의 눈높이 대비 높이(m).
-    static let cardVerticalOffset: Float = -0.56
+    static let cardVerticalOffset: Float = -0.40
     /// 시선각 대비 실제로 적용할 눕힘 비율. 1이면 정확히 정면으로 마주 본다.
     /// 1보다 작으면 그만큼 덜 눕혀 조금 더 세워진다.
     static let cardPitchRatio: Float = 0.8
@@ -58,13 +58,13 @@ enum QuestTuning {
     /// 영상 패널의 눈높이 대비 높이(m).
     static let videoVerticalOffset: Float = 0.18
     /// 상단 선행 HUD의 head 기준 좌우 오프셋(m, -면 왼쪽)
-    static let hudLateralOffset: Float = -0.56
+    static let hudLateralOffset: Float = -0.47
     /// 상단 선행 HUD의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
-    static let hudVerticalOffset: Float = 0.2
+    static let hudVerticalOffset: Float = 0.28
     /// head 포즈를 못 얻을 때 중앙 모달의 고정 배치 위치(씬 원점 기준).
-    static let centerFallbackPosition = SIMD3<Float>(0, 0.80, -0.70)
+    static let centerFallbackPosition = SIMD3<Float>(0, 0.75, -0.60)
     /// head 포즈를 못 얻을 때 상단 선행 HUD의 고정 배치 위치(씬 원점 기준).
-    static let hudFallbackPosition = SIMD3<Float>(-0.56, 1.65, -0.85)
+    static let hudFallbackPosition = SIMD3<Float>(-0.47, 1.43, -0.72)
 }
 
 enum QuestAdvanceOutcome: Equatable {
