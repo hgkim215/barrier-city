@@ -26,6 +26,7 @@ final class RealtimeNPCConversationSession {
     private var receiveTask: Task<Void, Never>?
     private var configurationTask: Task<Void, Never>?
     private var microphoneResumeTask: Task<Void, Never>?
+    private var playoutCompletionWatchdogTask: Task<Void, Never>?
     private var configurationContinuation: CheckedContinuation<Void, Error>?
     private var eventHandler: (@MainActor (Event) -> Void)?
     private var isStarted = false
@@ -34,6 +35,9 @@ final class RealtimeNPCConversationSession {
 
     /// 실제 출력 종료 직후 남는 방 안의 잔향까지 서버 VAD에 들어가지 않도록 둔다.
     private static let microphoneResumeDelay = Duration.milliseconds(250)
+    /// `response.done` 뒤 WebRTC playout drain 이벤트가 유실돼도 영구 잠금되지 않게 한다.
+    /// NPC 응답은 짧게 제한되어 있으므로 정상적인 잔여 재생보다 충분히 긴 값이다.
+    private static let playoutCompletionTimeout = Duration.seconds(12)
 
     init(client: RealtimeWebRTCClient = RealtimeWebRTCClient(config: AppConfig.proxy)) {
         self.client = client
@@ -52,13 +56,8 @@ final class RealtimeNPCConversationSession {
 
         do {
             try await audioSession.start()
-            // 몰입 공간 진입 시 미리 연결해둔 클라이언트가 주어졌다면(RealtimePreconnect)
-            // 다시 connect()를 호출하지 않는다 — 이미 연결된 클라이언트에 또 호출하면
-            // alreadyConnected로 실패한다.
-            if await !client.isConnected {
-                try await client.connect()
-            }
-            await suspendMicrophoneForResponse()
+            try await client.connect()
+            pauseMicrophoneAcceptanceForResponse()
 
             receiveTask = Task { @MainActor [weak self, client] in
                 do {
@@ -98,7 +97,7 @@ final class RealtimeNPCConversationSession {
         responseInstructions: String
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
-        await suspendMicrophoneForResponse()
+        pauseMicrophoneAcceptanceForResponse()
         for call in calls {
             try await client.send(
                 RealtimeClientEvent.functionOutput(callID: call.callID, output: call.output)
@@ -120,7 +119,7 @@ final class RealtimeNPCConversationSession {
         tools: [RealtimeFunctionTool]? = nil
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
-        await suspendMicrophoneForResponse()
+        pauseMicrophoneAcceptanceForResponse()
         responseIsInFlight = true
         try await client.send(
             RealtimeClientEvent.createResponse(
@@ -143,6 +142,8 @@ final class RealtimeNPCConversationSession {
         receiveTask = nil
         microphoneResumeTask?.cancel()
         microphoneResumeTask = nil
+        playoutCompletionWatchdogTask?.cancel()
+        playoutCompletionWatchdogTask = nil
         pendingConfiguration?.cancel()
         pendingReceive?.cancel()
         responseIsInFlight = false
@@ -161,7 +162,7 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.sessionReady)
         case .responseCreated:
             responseIsInFlight = true
-            await suspendMicrophoneForResponse()
+            pauseMicrophoneAcceptanceForResponse()
         case .speechStarted:
             eventHandler?(.speechStarted)
         case .speechStopped:
@@ -175,14 +176,17 @@ final class RealtimeNPCConversationSession {
         case .outputTranscriptDone(let text):
             eventHandler?(.outputTranscriptDone(text))
         case .outputAudioStarted:
+            cancelPlayoutCompletionWatchdog()
             outputAudioIsPlaying = true
-            await suspendMicrophoneForResponse()
+            pauseMicrophoneAcceptanceForResponse()
             eventHandler?(.outputAudioStarted)
         case .outputAudioStopped:
+            cancelPlayoutCompletionWatchdog()
             outputAudioIsPlaying = false
             eventHandler?(.outputAudioStopped)
             if !responseIsInFlight { scheduleMicrophoneResume() }
         case .outputAudioCleared:
+            cancelPlayoutCompletionWatchdog()
             outputAudioIsPlaying = false
             eventHandler?(.outputAudioStopped)
             if !responseIsInFlight { scheduleMicrophoneResume() }
@@ -190,7 +194,11 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.functionCall(name: name, callID: callID, arguments: arguments))
         case .responseDone:
             responseIsInFlight = false
-            if !outputAudioIsPlaying { scheduleMicrophoneResume() }
+            if outputAudioIsPlaying {
+                armPlayoutCompletionWatchdog()
+            } else {
+                scheduleMicrophoneResume()
+            }
             eventHandler?(.responseDone)
         case .error(let message):
             let error = NSError(
@@ -205,15 +213,17 @@ final class RealtimeNPCConversationSession {
         }
     }
 
-    private func suspendMicrophoneForResponse() async {
+    /// 응답 중에는 UI/턴 상태만 입력 불가로 유지한다. 로컬 WebRTC 트랙을 disable하면
+    /// 일부 실기기에서 voice-processing AudioUnit의 녹음과 원격 playout이 함께
+    /// 정지할 수 있으므로, 트랙은 연결 수명 동안 계속 살아 있게 둔다.
+    private func pauseMicrophoneAcceptanceForResponse() {
         microphoneResumeTask?.cancel()
         microphoneResumeTask = nil
-        await client.setMicrophoneEnabled(false)
     }
 
     private func scheduleMicrophoneResume() {
         microphoneResumeTask?.cancel()
-        microphoneResumeTask = Task { @MainActor [weak self, client] in
+        microphoneResumeTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: Self.microphoneResumeDelay)
             } catch {
@@ -223,10 +233,33 @@ final class RealtimeNPCConversationSession {
                   self.isStarted,
                   !self.responseIsInFlight,
                   !self.outputAudioIsPlaying else { return }
-            await client.setMicrophoneEnabled(true)
             self.microphoneResumeTask = nil
             self.eventHandler?(.microphoneReady)
         }
+    }
+
+    private func armPlayoutCompletionWatchdog() {
+        playoutCompletionWatchdogTask?.cancel()
+        playoutCompletionWatchdogTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.playoutCompletionTimeout)
+            } catch {
+                return
+            }
+            guard let self,
+                  self.isStarted,
+                  !self.responseIsInFlight,
+                  self.outputAudioIsPlaying else { return }
+            self.playoutCompletionWatchdogTask = nil
+            self.eventHandler?(
+                .failure("Realtime 음성 재생 종료를 확인하지 못해 연결을 초기화합니다.")
+            )
+        }
+    }
+
+    private func cancelPlayoutCompletionWatchdog() {
+        playoutCompletionWatchdogTask?.cancel()
+        playoutCompletionWatchdogTask = nil
     }
 
     private func configureSession(

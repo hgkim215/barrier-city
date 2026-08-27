@@ -20,7 +20,7 @@ struct DialogueTurnView: View {
             Text(title)
                 .font(.title2.bold())
 
-            Text("상태: \(controller.status.rawValue)   ·   호감도 \(String(format: "%.2f", controller.rapport))   ·   \(controller.tone.rawValue)")
+            Text("상태: \(controller.status.rawValue)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

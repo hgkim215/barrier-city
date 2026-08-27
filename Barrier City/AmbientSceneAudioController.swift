@@ -30,8 +30,14 @@ final class AmbientSceneAudioController {
     private var playback: AudioPlaybackController?
     private var loadTask: Task<Void, Never>?
     private var hasAudioSessionClaim = false
+    private var isSuspendedForRealtime = false
 
-    private init() {}
+    private init() {
+        AudioSessionCoordinator.shared.registerPlaybackLifecycle(
+            suspend: { [weak self] in self?.suspendForRealtime() },
+            resume: { [weak self] in self?.resumeAfterRealtime() }
+        )
+    }
 
     /// 몰입 공간이 열릴 때(Outdoor) 또는 Indoor로 전환될 때 호출.
     /// 이미 같은 트랙이 재생 중이면 아무 것도 하지 않고, 다른 트랙이 재생 중이었다면
@@ -76,8 +82,12 @@ final class AmbientSceneAudioController {
                 return
             }
             let controller = entity.playAudio(resource)
-            controller.gain = -60
-            controller.fade(to: Tuning.targetGain, duration: Tuning.fadeInDuration)
+            controller.gain = Tuning.silentGain
+            if self.isSuspendedForRealtime {
+                controller.pause()
+            } else {
+                controller.fade(to: Tuning.targetGain, duration: Tuning.fadeInDuration)
+            }
             self.playback = controller
             self.loadTask = nil
             Self.logger.info("배경음 재생 시작: \(resourceName, privacy: .public)")
@@ -113,5 +123,22 @@ final class AmbientSceneAudioController {
         }
         playback = nil
         audioEntity = nil
+    }
+
+    private func suspendForRealtime() {
+        guard !isSuspendedForRealtime else { return }
+        isSuspendedForRealtime = true
+        playback?.gain = Tuning.silentGain
+        playback?.pause()
+        Self.logger.info("실시간 대화 중 배경음 일시 정지")
+    }
+
+    private func resumeAfterRealtime() {
+        guard isSuspendedForRealtime else { return }
+        isSuspendedForRealtime = false
+        guard let playback else { return }
+        playback.play()
+        playback.fade(to: Tuning.targetGain, duration: Tuning.fadeInDuration)
+        Self.logger.info("실시간 대화 종료 후 배경음 재개")
     }
 }

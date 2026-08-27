@@ -10,8 +10,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
 
     func test_prioritizesNaturalConversationOverScripts() {
         let guide = RealtimeConversationGuide().instructions(
-            persona: persona,
-            climate: SocialClimate(rapport: 0.1)
+            persona: persona
         )
 
         XCTAssertTrue(guide.contains("자연스러운 일상 구어체 한국어"))
@@ -33,8 +32,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
             accessibilityAttitude: .ableist
         )
         let guide = RealtimeConversationGuide().instructions(
-            persona: ableist,
-            climate: SocialClimate(rapport: ableist.accessibilityAttitude.initialRapport)
+            persona: ableist
         )
 
         XCTAssertTrue(guide.contains("평범한 대화는 게임 상태를 절대 바꾸지 않으며"))
@@ -54,8 +52,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
             clerkPersonality: .chatty
         )
         let realtime = RealtimeConversationGuide().instructions(
-            persona: chatty,
-            climate: SocialClimate()
+            persona: chatty
         )
 
         XCTAssertTrue(realtime.contains("점원 성격: chatty"))
@@ -64,8 +61,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
 
     func test_opensWithoutForcingAnOrderFlow() {
         let guide = RealtimeConversationGuide().instructions(
-            persona: persona,
-            climate: SocialClimate()
+            persona: persona
         )
         let opening = RealtimeConversationGuide.openingInstructions(
             memory: ConversationMemory(),
@@ -82,8 +78,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
 
     func test_missionBoundary_enforcesKioskFirstAndNoAlternatives() {
         let guide = RealtimeConversationGuide().instructions(
-            persona: persona,
-            climate: SocialClimate()
+            persona: persona
         )
 
         XCTAssertTrue(guide.contains("하기 전이자 place_mission_order보다 먼저 report_order_attempt를 호출하라"))
@@ -95,8 +90,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
 
     func test_missionBoundary_allowsLenientAcceptanceAfterRepeatedAttempts() {
         let guide = RealtimeConversationGuide().instructions(
-            persona: persona,
-            climate: SocialClimate()
+            persona: persona
         )
 
         XCTAssertTrue(guide.contains("첫 주문 시도와 같은 호흡으로"))
@@ -105,8 +99,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
 
     func test_missionBoundary_forbidsHandingOffToAnotherEmployee() {
         let guide = RealtimeConversationGuide().instructions(
-            persona: persona,
-            climate: SocialClimate()
+            persona: persona
         )
 
         XCTAssertTrue(guide.contains("지금 근무 중인 직원은 당신뿐이다"))
@@ -130,8 +123,7 @@ final class RealtimeConversationGuideTests: XCTestCase {
                 clerkPersonality: personality
             )
             let guide = RealtimeConversationGuide().instructions(
-                persona: personalityPersona,
-                climate: SocialClimate()
+                persona: personalityPersona
             )
 
             XCTAssertTrue(guide.contains(expected), "Missing rule for \(personality)")
@@ -147,7 +139,6 @@ final class RealtimeConversationGuideTests: XCTestCase {
         ] {
             let guide = RealtimeConversationGuide().instructions(
                 persona: persona,
-                climate: SocialClimate(),
                 fulfillmentContext: context
             )
             XCTAssertTrue(guide.contains(requiredFact), "Missing fact \(requiredFact)")

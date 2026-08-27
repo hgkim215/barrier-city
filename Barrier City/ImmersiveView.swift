@@ -15,7 +15,8 @@ private final class ImmersiveRuntimeState {
     var rightBaseMats: [any RealityKit.Material] = []
     var leftHiMats: [any RealityKit.Material] = []
     var rightHiMats: [any RealityKit.Material] = []
-    var wheelsHighlighted = false
+    var leftWheelHighlighted = false
+    var rightWheelHighlighted = false
 }
 
 /// 몰입 공간 본체: 평지 + 거리 마커 기둥 + 양옆 바퀴.
@@ -80,11 +81,10 @@ struct ImmersiveView: View {
             let loadingStartedAt = ContinuousClock.now
 
 
-            // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
-            // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
-            // 맨 끝에서 두 프리로드를 기다린 뒤에야 로딩 화면을 걷어낸다.
+            // Outdoor를 보여주는 이 구간 동안 Indoor 씬을 미리 준비해둔다. Realtime
+            // 연결은 오디오 세션이 활성화된 실제 대화 시작 시점에 새로 만든다. 실기기
+            // voice-processing AudioUnit은 오래 캐시한 peer를 재사용하지 않는다.
             async let indoorPreload: Void = SceneSwitcher.preloadIndoorScene()
-            async let realtimePreconnect: Void = RealtimePreconnect.shared.preconnect()
 
             do {
                 let outdoorVisible = try await Entity(
@@ -203,10 +203,9 @@ struct ImmersiveView: View {
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
             InteractionSetup.install(content: content, attachments: attachments, appModel: model)
 
-            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor/Realtime
-            // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
+            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor 프리로드가
+            // 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
             _ = await indoorPreload
-            _ = await realtimePreconnect
             // 캐시된 애셋이 있으면 로딩이 순식간에 끝나 스플래시 이미지가 한두 프레임
             // 만에 지나가 버릴 수 있다. 최소 이만큼은 스플래시가 보이도록 부족한
             // 시간만큼 더 기다린다.
@@ -232,14 +231,22 @@ struct ImmersiveView: View {
             // 기울기/덜컹/흔들림은 휠체어가 아니라 '세계'(System)가 처리한다.
             applyRoll(runtime.leftWheel, angle: model.motion.leftWheelAngle)
             applyRoll(runtime.rightWheel, angle: model.motion.rightWheelAngle)
-            // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제.
-            let shouldHighlight = model.leftGrabbed || model.rightGrabbed || model.fistDriveActive
-            if runtime.wheelsHighlighted != shouldHighlight {
-                runtime.wheelsHighlighted = shouldHighlight
+            // 잡힘 하이라이트: 바퀴 메시 발광 틴트 적용/해제. 실제 손 잡기는 바퀴마다
+            // 독립적으로 반영해야 한다 — 이전에는 leftGrabbed/rightGrabbed를 OR로 합쳐
+            // 하나의 상태로만 판정해서, 한쪽 바퀴만 잡아도 양쪽이 같이 발광했다.
+            // fistDriveActive(가상 스틱 테스트 모드)는 한 주먹으로 양쪽을 함께
+            // 조작하는 모드라 원래대로 양쪽 다 켠다.
+            let shouldHighlightLeft = model.leftGrabbed || model.fistDriveActive
+            let shouldHighlightRight = model.rightGrabbed || model.fistDriveActive
+            if runtime.leftWheelHighlighted != shouldHighlightLeft {
+                runtime.leftWheelHighlighted = shouldHighlightLeft
                 setMaterials(runtime.leftWheelMesh,
-                             shouldHighlight ? runtime.leftHiMats : runtime.leftBaseMats)
+                             shouldHighlightLeft ? runtime.leftHiMats : runtime.leftBaseMats)
+            }
+            if runtime.rightWheelHighlighted != shouldHighlightRight {
+                runtime.rightWheelHighlighted = shouldHighlightRight
                 setMaterials(runtime.rightWheelMesh,
-                             shouldHighlight ? runtime.rightHiMats : runtime.rightBaseMats)
+                             shouldHighlightRight ? runtime.rightHiMats : runtime.rightBaseMats)
             }
         } attachments: {
             // [김현기] 사용자 눈앞 입장 패널(content-root 배치는 InteractionSetup이 처리)

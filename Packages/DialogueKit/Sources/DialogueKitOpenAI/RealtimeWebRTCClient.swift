@@ -3,6 +3,9 @@ import Foundation
 import FoundationNetworking
 #endif
 @preconcurrency import LiveKitWebRTC
+#if os(iOS) || os(visionOS) || os(tvOS)
+@preconcurrency import AVFoundation
+#endif
 
 public struct RealtimeClientSecretProvider: Sendable {
     private let config: ProxyConfig
@@ -46,6 +49,47 @@ public actor RealtimeWebRTCClient {
     private var audioSource: LKRTCAudioSource?
     private var audioTrack: LKRTCAudioTrack?
     private static let sslInitialized = LKRTCInitializeSSL()
+#if os(iOS) || os(visionOS) || os(tvOS)
+    /// WebRTC는 기본값(useManualAudio=NO)에서 오디오 트랙이 준비되는 즉시 스스로
+    /// AVAudioSession을 초기화·활성화한다. 이 앱은 AudioSessionCoordinator가
+    /// AVAudioSession을 직접 구성/활성화해 다른 오디오(효과음 등)와 조율하므로, 그
+    /// 자동 관리와 충돌한다. 앱이 세션을 다시 구성/활성화할 때 WebRTC가 서로 다른
+    /// 활성 상태를 믿으면 오디오 유닛이 무효화되어 마이크 입력·음성 출력이 함께
+    /// 멈출 수 있다. 수동 모드로 두고 앱이 setPlatformAudioSessionActive로
+    /// 명시적으로 켜고 끄게 한다.
+    ///
+    /// AVAudioSession 자체가 없는 macOS 슬라이스에는 RTCAudioSession이 아예
+    /// 포함돼 있지 않다 — 이 패키지는 `swift test`용으로 macOS도 지원 플랫폼에
+    /// 넣어 두었으므로(Package.swift), 이 블록 전체를 iOS 계열로만 한정한다.
+    private static let audioSessionManualModeConfigured: Void = {
+        let session = LKRTCAudioSession.sharedInstance()
+        session.useManualAudio = true
+        session.isAudioEnabled = false
+    }()
+#endif
+
+    /// 앱의 AudioSessionCoordinator가 AVAudioSession을 완전히 구성·활성화한
+    /// "뒤"에만 켜고, 세션을 건드리기 "전"에 꺼야 한다 — AVAudioEngine을 세션 전환
+    /// 전에 멈춰야 하는 것과 같은 이유다. macOS에는 AVAudioSession 개념 자체가
+    /// 없어 아무 것도 하지 않는다.
+    public static func setPlatformAudioSessionActive(_ active: Bool) {
+#if os(iOS) || os(visionOS) || os(tvOS)
+        _ = Self.audioSessionManualModeConfigured
+        let rtcSession = LKRTCAudioSession.sharedInstance()
+        let avSession = AVAudioSession.sharedInstance()
+
+        // AVAudioSession을 활성화하는 주체가 앱이므로 RTCAudioSession에도 같은
+        // lifecycle을 전달한다. 그렇지 않으면 앱은 active인데 WebRTC ADM은 inactive로
+        // 판단해 voice-processing AudioUnit을 시작하지 않을 수 있다.
+        if active {
+            rtcSession.audioSessionDidActivate(avSession)
+        }
+        rtcSession.isAudioEnabled = active
+        if !active {
+            rtcSession.audioSessionDidDeactivate(avSession)
+        }
+#endif
+    }
 
     public init(
         config: ProxyConfig,
@@ -67,11 +111,6 @@ public actor RealtimeWebRTCClient {
         continuation.finish()
     }
 
-    /// 이미 연결(peerConnection 존재)돼 있는지. 몰입 공간 진입 시 미리 연결해둔
-    /// 클라이언트를 실제 대화 시작 시 재사용할 때, connect()를 다시 호출해
-    /// alreadyConnected로 실패하지 않도록 호출부가 먼저 확인하는 용도.
-    public var isConnected: Bool { peerConnection != nil }
-
     public func connect() async throws {
         guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }
 
@@ -79,6 +118,9 @@ public actor RealtimeWebRTCClient {
         try Task.checkCancellation()
 
         _ = Self.sslInitialized
+#if os(iOS) || os(visionOS) || os(tvOS)
+        _ = Self.audioSessionManualModeConfigured
+#endif
         let factory = LKRTCPeerConnectionFactory()
         let configuration = LKRTCConfiguration()
         configuration.sdpSemantics = .unifiedPlan
@@ -149,12 +191,6 @@ public actor RealtimeWebRTCClient {
         guard dataChannel.sendData(buffer) else {
             throw RealtimeClientError.channelUnavailable
         }
-    }
-
-    /// NPC 출력이 재생되는 동안 로컬 마이크 트랙을 닫아 스피커 에코가
-    /// 새 사용자 턴으로 서버에 전달되지 않게 한다.
-    public func setMicrophoneEnabled(_ enabled: Bool) {
-        audioTrack?.isEnabled = enabled
     }
 
     public func disconnect() async {

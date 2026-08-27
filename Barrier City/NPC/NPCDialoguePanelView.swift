@@ -7,7 +7,6 @@ private enum CafePalette {
     static let caramel = Color(red: 0.82, green: 0.48, blue: 0.22)
     static let cream = Color(red: 1.00, green: 0.94, blue: 0.82)
     static let foam = Color(red: 1.00, green: 0.98, blue: 0.92)
-    static let berry = Color(red: 0.88, green: 0.30, blue: 0.36)
 }
 
 /// Barista 머리 위를 따라다니는 단일 공간 UI.
@@ -18,51 +17,43 @@ struct NPCDialoguePanelView: View {
     let clerk: NPCClerkController
 
     var body: some View {
-        VStack(spacing: 20) {
-            RapportHeartGauge(rapport: controller.rapport)
-
-            Group {
-                if showsTalkButton {
-                    talkButton
-                        .transition(.scale(scale: 0.94).combined(with: .opacity))
-                } else {
-                    subtitleCard
-                        .transition(.scale(scale: 0.97).combined(with: .opacity))
-                }
+        Group {
+            if showsTalkButton {
+                talkButton
+                    .transition(.scale(scale: 0.94).combined(with: .opacity))
+            } else {
+                subtitleCard
+                    .frame(width: 760)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
-        .frame(width: 760)
         .animation(.easeInOut(duration: 0.2), value: controller.isEncounterActive)
-        .animation(.easeInOut(duration: 0.3), value: controller.rapport)
     }
+
+    /// NPC 머리 위에 떠 있는 만큼, 실제 머리 크기와 비슷하게 커야 눈에 잘 띈다 —
+    /// subtitleCard(자막 패널)와는 별개로 이 버튼만 크게 잡는다.
+    private static let talkButtonSize: CGFloat = 420
 
     private var talkButton: some View {
         Button {
             clerk.startConversation()
         } label: {
-            HStack(spacing: 20) {
+            VStack(spacing: 20) {
                 Image(systemName: clerk.isTalkAvailable
                       ? "cup.and.saucer.fill"
                       : "figure.walk")
-                    .font(.title.weight(.semibold))
+                    .font(.system(size: 96, weight: .semibold))
                     .foregroundStyle(CafePalette.cream)
-                    .frame(width: 54)
 
                 Text(clerk.isTalkAvailable ? "직원과 대화하기" : "직원에게 가까이 가세요")
-                    .font(.title.bold())
+                    .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(CafePalette.foam)
-
-                Spacer(minLength: 12)
-
-                Image(systemName: "chevron.right")
-                    .font(.title2.bold())
-                    .foregroundStyle(CafePalette.cream.opacity(0.82))
+                    .multilineTextAlignment(.center)
             }
-            .padding(.horizontal, 30)
-            .padding(.vertical, 24)
-            .frame(maxWidth: .infinity)
+            .padding(24)
+            .frame(width: Self.talkButtonSize, height: Self.talkButtonSize)
             .background(CafePalette.espresso,
-                        in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 56, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!clerk.isTalkAvailable)
@@ -200,66 +191,5 @@ private struct ListeningIndicator: View {
                 }
             }
             .accessibilityLabel("듣고 있어요")
-    }
-}
-
-/// -1...1 관계 점수를 NPC 머리 위의 5칸 하트 게이지로 표시한다.
-private struct RapportHeartGauge: View {
-    let rapport: Float
-
-    private static let gaugeWidth: CGFloat = 220
-    private static let heartCount = 5
-
-    private var progress: CGFloat {
-        CGFloat(max(0, min(1, (rapport + 1) * 0.5)))
-    }
-
-    private var percentage: Int {
-        Int((progress * 100).rounded())
-    }
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Text("호감도")
-                .font(.title3.bold())
-                .foregroundStyle(CafePalette.espresso)
-
-            ZStack(alignment: .leading) {
-                heartRow
-                    .foregroundStyle(CafePalette.roast.opacity(0.18))
-
-                // .frame(width:)로 줄이면 HStack이 간격을 다시 계산해 하트가 흔들린다.
-                // mask는 레이아웃을 건드리지 않고 그리기만 잘라낸다.
-                heartRow
-                    .foregroundStyle(CafePalette.berry)
-                    .mask(alignment: .leading) {
-                        Rectangle()
-                            .frame(width: Self.gaugeWidth * progress)
-                    }
-            }
-            .frame(width: Self.gaugeWidth, height: 36, alignment: .leading)
-
-            Text("\(percentage)%")
-                .font(.title3.monospacedDigit().bold())
-                .foregroundStyle(CafePalette.roast)
-                .frame(minWidth: 56, alignment: .trailing)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .background(CafePalette.cream.opacity(0.9), in: Capsule())
-        .glassBackgroundEffect(in: Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("직원 호감도")
-        .accessibilityValue("\(percentage)퍼센트")
-    }
-
-    private var heartRow: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<Self.heartCount, id: \.self) { _ in
-                Image(systemName: "heart.fill")
-                    .frame(width: 36, height: 36)
-            }
-        }
-        .font(.title2)
     }
 }
