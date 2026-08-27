@@ -46,6 +46,27 @@ public actor RealtimeWebRTCClient {
     private var audioSource: LKRTCAudioSource?
     private var audioTrack: LKRTCAudioTrack?
     private static let sslInitialized = LKRTCInitializeSSL()
+    /// WebRTC는 기본값(useManualAudio=NO)에서 오디오 트랙이 준비되는 즉시 스스로
+    /// AVAudioSession을 초기화·활성화한다. 이 앱은 AudioSessionCoordinator가
+    /// AVAudioSession을 직접 구성/활성화해 다른 오디오(효과음 등)와 조율하므로, 그
+    /// 자동 관리와 충돌한다 — 특히 RealtimePreconnect로 미리 만들어둔 오디오 트랙을
+    /// 재사용할 때, 실제 대화 시작 시 코디네이터가 세션을 다시 구성/활성화해도
+    /// WebRTC는 이를 모른 채 preconnect 시점에 초기화했던(이제 무효가 된) 오디오
+    /// 유닛을 그대로 쓰려 해 마이크 입력·음성 출력이 통째로 죽는다. 수동 모드로
+    /// 두고 앱이 setPlatformAudioSessionActive로 명시적으로 켜고 끄게 한다.
+    private static let audioSessionManualModeConfigured: Void = {
+        let session = LKRTCAudioSession.sharedInstance()
+        session.useManualAudio = true
+        session.isAudioEnabled = false
+    }()
+
+    /// 앱의 AudioSessionCoordinator가 AVAudioSession을 완전히 구성·활성화한
+    /// "뒤"에만 켜고, 세션을 건드리기 "전"에 꺼야 한다 — AVAudioEngine을 세션 전환
+    /// 전에 멈춰야 하는 것과 같은 이유다.
+    public static func setPlatformAudioSessionActive(_ active: Bool) {
+        _ = Self.audioSessionManualModeConfigured
+        LKRTCAudioSession.sharedInstance().isAudioEnabled = active
+    }
 
     public init(
         config: ProxyConfig,
@@ -79,6 +100,7 @@ public actor RealtimeWebRTCClient {
         try Task.checkCancellation()
 
         _ = Self.sslInitialized
+        _ = Self.audioSessionManualModeConfigured
         let factory = LKRTCPeerConnectionFactory()
         let configuration = LKRTCConfiguration()
         configuration.sdpSemantics = .unifiedPlan
