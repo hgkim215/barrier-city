@@ -81,11 +81,10 @@ struct ImmersiveView: View {
             let loadingStartedAt = ContinuousClock.now
 
 
-            // Outdoor를 보여주는 이 구간 동안 Indoor 씬과 NPC 대화용 Realtime 연결을
-            // 미리 준비해둔다. 아래 Outdoor/휠체어/InteractionSetup 로직은 그대로 두고,
-            // 맨 끝에서 두 프리로드를 기다린 뒤에야 로딩 화면을 걷어낸다.
+            // Outdoor를 보여주는 이 구간 동안 Indoor 씬을 미리 준비해둔다. Realtime
+            // 연결은 오디오 세션이 활성화된 실제 대화 시작 시점에 새로 만든다. 실기기
+            // voice-processing AudioUnit은 오래 캐시한 peer를 재사용하지 않는다.
             async let indoorPreload: Void = SceneSwitcher.preloadIndoorScene()
-            async let realtimePreconnect: Void = RealtimePreconnect.shared.preconnect()
 
             do {
                 let outdoorVisible = try await Entity(
@@ -204,10 +203,9 @@ struct ImmersiveView: View {
             // [김현기] 공간 인터랙션: 근접 패널 attachment + 문 트리거 + 매 프레임 판정 구독
             InteractionSetup.install(content: content, attachments: attachments, appModel: model)
 
-            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor/Realtime
-            // 프리로드가 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
+            // Outdoor가 이미 다 보이는 상태로 여기까지 왔더라도, Indoor 프리로드가
+            // 아직 안 끝났으면 그게 끝날 때까지 로딩 화면을 유지한다.
             _ = await indoorPreload
-            _ = await realtimePreconnect
             // 캐시된 애셋이 있으면 로딩이 순식간에 끝나 스플래시 이미지가 한두 프레임
             // 만에 지나가 버릴 수 있다. 최소 이만큼은 스플래시가 보이도록 부족한
             // 시간만큼 더 기다린다.

@@ -56,12 +56,7 @@ final class RealtimeNPCConversationSession {
 
         do {
             try await audioSession.start()
-            // 몰입 공간 진입 시 미리 연결해둔 클라이언트가 주어졌다면(RealtimePreconnect)
-            // 다시 connect()를 호출하지 않는다 — 이미 연결된 클라이언트에 또 호출하면
-            // alreadyConnected로 실패한다.
-            if await !client.isConnected {
-                try await client.connect()
-            }
+            try await client.connect()
             pauseMicrophoneAcceptanceForResponse()
 
             receiveTask = Task { @MainActor [weak self, client] in

@@ -50,11 +50,10 @@ public actor RealtimeWebRTCClient {
     /// WebRTC는 기본값(useManualAudio=NO)에서 오디오 트랙이 준비되는 즉시 스스로
     /// AVAudioSession을 초기화·활성화한다. 이 앱은 AudioSessionCoordinator가
     /// AVAudioSession을 직접 구성/활성화해 다른 오디오(효과음 등)와 조율하므로, 그
-    /// 자동 관리와 충돌한다 — 특히 RealtimePreconnect로 미리 만들어둔 오디오 트랙을
-    /// 재사용할 때, 실제 대화 시작 시 코디네이터가 세션을 다시 구성/활성화해도
-    /// WebRTC는 이를 모른 채 preconnect 시점에 초기화했던(이제 무효가 된) 오디오
-    /// 유닛을 그대로 쓰려 해 마이크 입력·음성 출력이 통째로 죽는다. 수동 모드로
-    /// 두고 앱이 setPlatformAudioSessionActive로 명시적으로 켜고 끄게 한다.
+    /// 자동 관리와 충돌한다. 앱이 세션을 다시 구성/활성화할 때 WebRTC가 서로 다른
+    /// 활성 상태를 믿으면 오디오 유닛이 무효화되어 마이크 입력·음성 출력이 함께
+    /// 멈출 수 있다. 수동 모드로 두고 앱이 setPlatformAudioSessionActive로
+    /// 명시적으로 켜고 끄게 한다.
     ///
     /// AVAudioSession 자체가 없는 macOS 슬라이스에는 RTCAudioSession이 아예
     /// 포함돼 있지 않다 — 이 패키지는 `swift test`용으로 macOS도 지원 플랫폼에
@@ -96,11 +95,6 @@ public actor RealtimeWebRTCClient {
         peerConnection?.close()
         continuation.finish()
     }
-
-    /// 이미 연결(peerConnection 존재)돼 있는지. 몰입 공간 진입 시 미리 연결해둔
-    /// 클라이언트를 실제 대화 시작 시 재사용할 때, connect()를 다시 호출해
-    /// alreadyConnected로 실패하지 않도록 호출부가 먼저 확인하는 용도.
-    public var isConnected: Bool { peerConnection != nil }
 
     public func connect() async throws {
         guard peerConnection == nil else { throw RealtimeClientError.alreadyConnected }

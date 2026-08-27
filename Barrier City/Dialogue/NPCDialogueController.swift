@@ -342,10 +342,10 @@ final class NPCDialogueController {
             requestAnimation(.greet)
         }
 
-        // 몰입 공간 진입 시 미리 연결해둔 클라이언트가 있으면 재사용해 연결 지연 없이
-        // 바로 시작한다. 없으면(아직 준비 중이거나 프리커넥트 실패) 평소대로 새로 만든다.
-        let session = RealtimePreconnect.shared.takeClient().map(RealtimeNPCConversationSession.init)
-            ?? RealtimeNPCConversationSession()
+        // 실기기에서는 오래 캐시한 peer의 ICE/data channel은 살아 있어 보여도 WebRTC
+        // AudioUnit이 이미 정지한 상태일 수 있다. 활성 오디오 세션 안에서 매 encounter
+        // 새 peer를 만들어 stale preconnect를 재사용하지 않는다.
+        let session = RealtimeNPCConversationSession()
         realtimeSession = session
         do {
             try await session.start(
