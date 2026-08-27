@@ -21,6 +21,7 @@ final class RealtimeMediaTrackAudioSession {
     }
 
     private var hasAudioSessionClaim = false
+    private static var didRegisterLifecycle = false
 
     func start() async throws {
 #if targetEnvironment(simulator)
@@ -34,20 +35,33 @@ final class RealtimeMediaTrackAudioSession {
             throw Error.permissionDenied
         }
         try Task.checkCancellation()
+        Self.registerLifecycleIfNeeded()
         try AudioSessionCoordinator.shared.acquire(.realtimeConversation)
         hasAudioSessionClaim = true
-        // AVAudioSession이 완전히 .playAndRecord로 구성·활성화된 뒤에만 WebRTC의
-        // 오디오 유닛을 켠다 — 그 전에 켜면 preconnect 때 초기화된(혹은 아직 앱이
-        // 구성하지 않은 세션 기준의) 유닛을 그대로 쓰게 돼 마이크/음성이 죽는다.
-        RealtimeWebRTCClient.setPlatformAudioSessionActive(true)
     }
 
     func stop() {
         guard hasAudioSessionClaim else { return }
         hasAudioSessionClaim = false
-        // 세션 카테고리를 바꾸거나 비활성화하기 전에 WebRTC의 오디오 유닛부터
-        // 끈다 — AVAudioEngine을 세션 전환 전에 멈춰야 하는 것과 같은 순서다.
-        RealtimeWebRTCClient.setPlatformAudioSessionActive(false)
         AudioSessionCoordinator.shared.release(.realtimeConversation)
+    }
+
+    /// WebRTC의 오디오 유닛 on/off를 이 인스턴스가 직접 켜고 끄지 않고
+    /// AudioSessionCoordinator의 realtimeConversation 프로필 전환에 묶는다. 이
+    /// 대화(NPCDialogueController)와 주문 완료 안내(orderReadyRealtimeSession)처럼
+    /// 서로 다른 RealtimeMediaTrackAudioSession 인스턴스가 있을 수 있는데, 각자
+    /// 직접 켜고 끄면 참조 카운트가 없어 하나가 먼저 stop()해도 다른 하나의
+    /// 오디오까지 무음이 된다. activityCounts로 이미 참조 카운트되는 프로필
+    /// 전환 시점(마지막 참조가 빠질 때만 off)에 걸면 이 문제가 없다.
+    private static func registerLifecycleIfNeeded() {
+        guard !didRegisterLifecycle else { return }
+        didRegisterLifecycle = true
+        AudioSessionCoordinator.shared.registerRealtimeConversationLifecycle { isActive in
+            // AVAudioSession이 완전히 .playAndRecord로 구성·활성화된 뒤에만 켜고,
+            // 세션을 건드리기 전에 꺼야 한다 — AVAudioEngine을 세션 전환 전에
+            // 멈춰야 하는 것과 같은 순서다(AudioSessionCoordinator.transition이
+            // 이 순서를 보장한다).
+            RealtimeWebRTCClient.setPlatformAudioSessionActive(isActive)
+        }
     }
 }

@@ -46,6 +46,7 @@ public actor RealtimeWebRTCClient {
     private var audioSource: LKRTCAudioSource?
     private var audioTrack: LKRTCAudioTrack?
     private static let sslInitialized = LKRTCInitializeSSL()
+#if os(iOS) || os(visionOS) || os(tvOS)
     /// WebRTC는 기본값(useManualAudio=NO)에서 오디오 트랙이 준비되는 즉시 스스로
     /// AVAudioSession을 초기화·활성화한다. 이 앱은 AudioSessionCoordinator가
     /// AVAudioSession을 직접 구성/활성화해 다른 오디오(효과음 등)와 조율하므로, 그
@@ -54,18 +55,26 @@ public actor RealtimeWebRTCClient {
     /// WebRTC는 이를 모른 채 preconnect 시점에 초기화했던(이제 무효가 된) 오디오
     /// 유닛을 그대로 쓰려 해 마이크 입력·음성 출력이 통째로 죽는다. 수동 모드로
     /// 두고 앱이 setPlatformAudioSessionActive로 명시적으로 켜고 끄게 한다.
+    ///
+    /// AVAudioSession 자체가 없는 macOS 슬라이스에는 RTCAudioSession이 아예
+    /// 포함돼 있지 않다 — 이 패키지는 `swift test`용으로 macOS도 지원 플랫폼에
+    /// 넣어 두었으므로(Package.swift), 이 블록 전체를 iOS 계열로만 한정한다.
     private static let audioSessionManualModeConfigured: Void = {
         let session = LKRTCAudioSession.sharedInstance()
         session.useManualAudio = true
         session.isAudioEnabled = false
     }()
+#endif
 
     /// 앱의 AudioSessionCoordinator가 AVAudioSession을 완전히 구성·활성화한
     /// "뒤"에만 켜고, 세션을 건드리기 "전"에 꺼야 한다 — AVAudioEngine을 세션 전환
-    /// 전에 멈춰야 하는 것과 같은 이유다.
+    /// 전에 멈춰야 하는 것과 같은 이유다. macOS에는 AVAudioSession 개념 자체가
+    /// 없어 아무 것도 하지 않는다.
     public static func setPlatformAudioSessionActive(_ active: Bool) {
+#if os(iOS) || os(visionOS) || os(tvOS)
         _ = Self.audioSessionManualModeConfigured
         LKRTCAudioSession.sharedInstance().isAudioEnabled = active
+#endif
     }
 
     public init(
@@ -100,7 +109,9 @@ public actor RealtimeWebRTCClient {
         try Task.checkCancellation()
 
         _ = Self.sslInitialized
+#if os(iOS) || os(visionOS) || os(tvOS)
         _ = Self.audioSessionManualModeConfigured
+#endif
         let factory = LKRTCPeerConnectionFactory()
         let configuration = LKRTCConfiguration()
         configuration.sdpSemantics = .unifiedPlan
