@@ -303,7 +303,8 @@ final class NPCGuestController {
     /// 뒤에서 나는 것처럼 들린다). 리소스는 타입 전체가 공유하는 캐시에 한 번만
     /// 로드해 재사용한다.
     func playSigh() {
-        guard let root = locomotionRoot else { return }
+        guard !AudioSessionCoordinator.shared.realtimeConversationIsActive,
+              let root = locomotionRoot else { return }
         let gender = self.gender
         Task { @MainActor in
             let resource: AudioFileResource
@@ -316,6 +317,8 @@ final class NPCGuestController {
                 resource = loaded
                 Self.cachedSighResources[gender] = loaded
             }
+            // 리소스를 비동기로 읽는 사이 대화가 시작됐을 수도 있다.
+            guard !AudioSessionCoordinator.shared.realtimeConversationIsActive else { return }
             root.playAudio(resource)
         }
     }

@@ -43,6 +43,9 @@ final class AudioSessionCoordinator {
     private var suspendEffectsHandler: (@MainActor () -> Void)?
     private var resumeEffectsHandler: (@MainActor () -> Void)?
     private var effectsAreSuspended = false
+    private var suspendPlaybackHandler: (@MainActor () -> Void)?
+    private var resumePlaybackHandler: (@MainActor () -> Void)?
+    private var playbackIsSuspended = false
     private var realtimeConversationLifecycleHandler: (@MainActor (Bool) -> Void)?
 
     private init() {
@@ -64,20 +67,21 @@ final class AudioSessionCoordinator {
     /// 외부(AVPlayer 등)가 세션을 건드려 라우트가 바뀌었을 때, 우리가 활성 상태로
     /// 알고 있는 프로필을 다시 적용해 되찾아온다.
     private func reassertProfileIfNeeded() {
-        guard currentProfile != .inactive else { return }
-        // 실시간 대화 중에는 절대 손대지 않는다.
-        //
-        // 실기에서 .playAndRecord/.voiceChat으로 전환하면 마이크가 켜지고 출력이
-        // 바뀌면서 라우트 변경이 연달아 발생한다. 그때마다 setCategory/setActive를
-        // 다시 걸면 WebRTC가 막 세우고 있던 오디오 유닛을 무너뜨려 마이크 입력이
-        // 죽는다. 시뮬레이터는 라우트 변경이 거의 없어 이 경로를 타지 않았다.
-        guard currentProfile != .realtimeConversation else { return }
+        // .playAndRecord/.voiceChat 진입 자체가 실기기 route change를 만들 수 있다.
+        // 이 알림에 반응해 다시 category/active를 적용하면 WebRTC가 막 시작한 VPIO
+        // AudioUnit을 무효화하므로 realtime 중에는 WebRTC가 라우트를 소유하게 둔다.
+        guard currentProfile != .inactive,
+              currentProfile != .realtimeConversation else { return }
         try? configure(currentProfile)
         try? session.setActive(true)
     }
 
     var effectsPlaybackIsActive: Bool {
         currentProfile == .playback && count(for: .effects) > 0
+    }
+
+    var realtimeConversationIsActive: Bool {
+        currentProfile == .realtimeConversation
     }
 
     func registerEffectsLifecycle(
@@ -88,6 +92,17 @@ final class AudioSessionCoordinator {
         resumeEffectsHandler = resume
         if currentProfile == .playback, count(for: .effects) > 0 {
             resumeEffectsIfNeeded()
+        }
+    }
+
+    func registerPlaybackLifecycle(
+        suspend: @escaping @MainActor () -> Void,
+        resume: @escaping @MainActor () -> Void
+    ) {
+        suspendPlaybackHandler = suspend
+        resumePlaybackHandler = resume
+        if currentProfile == .playback, count(for: .playback) > 0 {
+            resumePlaybackIfNeeded()
         }
     }
 
@@ -113,6 +128,12 @@ final class AudioSessionCoordinator {
         activityCounts[activity, default: 0] += 1
         do {
             try reconcileProfile()
+            if currentProfile == .realtimeConversation {
+                // realtime보다 우선순위가 낮은 재생 요청이 대화 도중 새로 들어와도
+                // 세션 프로필은 바뀌지 않으므로, 여기서 명시적으로 정지 상태를 맞춘다.
+                suspendEffectsIfNeeded()
+                suspendPlaybackIfNeeded()
+            }
         } catch {
             decrement(activity)
             try? reconcileProfile()
@@ -156,20 +177,13 @@ final class AudioSessionCoordinator {
         let previous = currentProfile
         if previous == .playback, target != .playback {
             suspendEffectsIfNeeded()
+            suspendPlaybackIfNeeded()
         }
         if previous == .realtimeConversation, target != .realtimeConversation {
             realtimeConversationLifecycleHandler?(false)
         }
 
         do {
-            // 프로필 사이를 오갈 때 세션을 내렸다 올리지 않는다.
-            //
-            // 카테고리·모드 변경은 활성 세션에서도 그대로 적용된다. 반대로
-            // setActive(false)는 RealityKit 배경음처럼 세션을 쓰고 있는 다른
-            // 클라이언트가 있으면 실기에서 거부된다(FigAudioSession err=-19224).
-            // 그러면 아래 catch가 이전 프로필로 되돌려버려 .playAndRecord 전환
-            // 자체가 실패하고, 마이크는 영영 열리지 않는다. 시뮬레이터에는
-            // 경쟁하는 오디오 클라이언트가 없어 이 경로가 드러나지 않았다.
             guard target != .inactive else {
                 if previous != .inactive {
                     try session.setActive(false, options: .notifyOthersOnDeactivation)
@@ -183,6 +197,7 @@ final class AudioSessionCoordinator {
             currentProfile = target
             if target == .playback {
                 resumeEffectsIfNeeded()
+                resumePlaybackIfNeeded()
             }
             if target == .realtimeConversation, previous != .realtimeConversation {
                 realtimeConversationLifecycleHandler?(true)
@@ -194,7 +209,10 @@ final class AudioSessionCoordinator {
                 do {
                     try session.setActive(true)
                     currentProfile = previous
-                    if previous == .playback { resumeEffectsIfNeeded() }
+                    if previous == .playback {
+                        resumeEffectsIfNeeded()
+                        resumePlaybackIfNeeded()
+                    }
                     if previous == .realtimeConversation { realtimeConversationLifecycleHandler?(true) }
                 } catch { /* 원래 전환 오류를 호출자에게 전달한다. */ }
             }
@@ -220,7 +238,7 @@ final class AudioSessionCoordinator {
             try session.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+                options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
             )
         }
     }
@@ -237,5 +255,17 @@ final class AudioSessionCoordinator {
         }
         resumeEffectsHandler?()
         effectsAreSuspended = false
+    }
+
+    private func suspendPlaybackIfNeeded() {
+        guard count(for: .playback) > 0, !playbackIsSuspended else { return }
+        suspendPlaybackHandler?()
+        playbackIsSuspended = true
+    }
+
+    private func resumePlaybackIfNeeded() {
+        guard count(for: .playback) > 0, currentProfile == .playback else { return }
+        resumePlaybackHandler?()
+        playbackIsSuspended = false
     }
 }
