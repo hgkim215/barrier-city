@@ -24,13 +24,11 @@ final class RealtimePreconnect {
         let client = RealtimeWebRTCClient(config: AppConfig.proxy)
         do {
             try await client.connect()
-            // 실제 대화가 시작돼 session.update(turn_detection.create_response=false,
-            // 한국어 지침)를 보내기 전까지는 이 세션이 OpenAI 기본값(서버 VAD가 알아서
-            // 응답을 생성)으로 동작한다. 마이크를 계속 켜 두면 그 사이 주변 소음만으로도
-            // 서버가 우리 페르소나와 무관한 기본 영어 응답을 자동으로 만들어 낼 수 있다 —
-            // RealtimeNPCConversationSession.start()가 연결 직후 항상 마이크부터 끄는
-            // 것과 같은 이유로, 여기서도 즉시 꺼서 그 창을 없앤다.
-            await client.setMicrophoneEnabled(false)
+            // 로컬 트랙은 연결 수명 동안 활성 상태를 유지한다. 실기기에서는 트랙을
+            // disable할 때 WebRTC voice-processing AudioUnit 전체가 멈춰 원격 playout도
+            // 복구되지 않는 경우가 있다. preconnect의 기본 세션 노출 시간은 실제 대화
+            // 시작 직후 session.update를 보내 최소화하며, 3차 수정에서 stale preconnect
+            // 자체를 제거한다.
             connectedClient = client
         } catch {
             // 조용히 무시. 실제 대화 시작 시 새 클라이언트로 다시 시도한다.

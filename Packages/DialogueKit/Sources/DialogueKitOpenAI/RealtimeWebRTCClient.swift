@@ -184,12 +184,6 @@ public actor RealtimeWebRTCClient {
         }
     }
 
-    /// NPC 출력이 재생되는 동안 로컬 마이크 트랙을 닫아 스피커 에코가
-    /// 새 사용자 턴으로 서버에 전달되지 않게 한다.
-    public func setMicrophoneEnabled(_ enabled: Bool) {
-        audioTrack?.isEnabled = enabled
-    }
-
     public func disconnect() async {
         delegateBridge.clearCallbacks()
         dataChannel?.delegate = nil

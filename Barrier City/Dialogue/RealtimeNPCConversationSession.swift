@@ -58,7 +58,7 @@ final class RealtimeNPCConversationSession {
             if await !client.isConnected {
                 try await client.connect()
             }
-            await suspendMicrophoneForResponse()
+            pauseMicrophoneAcceptanceForResponse()
 
             receiveTask = Task { @MainActor [weak self, client] in
                 do {
@@ -98,7 +98,7 @@ final class RealtimeNPCConversationSession {
         responseInstructions: String
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
-        await suspendMicrophoneForResponse()
+        pauseMicrophoneAcceptanceForResponse()
         for call in calls {
             try await client.send(
                 RealtimeClientEvent.functionOutput(callID: call.callID, output: call.output)
@@ -120,7 +120,7 @@ final class RealtimeNPCConversationSession {
         tools: [RealtimeFunctionTool]? = nil
     ) async throws {
         guard isStarted else { throw RealtimeClientError.notConnected }
-        await suspendMicrophoneForResponse()
+        pauseMicrophoneAcceptanceForResponse()
         responseIsInFlight = true
         try await client.send(
             RealtimeClientEvent.createResponse(
@@ -161,7 +161,7 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.sessionReady)
         case .responseCreated:
             responseIsInFlight = true
-            await suspendMicrophoneForResponse()
+            pauseMicrophoneAcceptanceForResponse()
         case .speechStarted:
             eventHandler?(.speechStarted)
         case .speechStopped:
@@ -176,7 +176,7 @@ final class RealtimeNPCConversationSession {
             eventHandler?(.outputTranscriptDone(text))
         case .outputAudioStarted:
             outputAudioIsPlaying = true
-            await suspendMicrophoneForResponse()
+            pauseMicrophoneAcceptanceForResponse()
             eventHandler?(.outputAudioStarted)
         case .outputAudioStopped:
             outputAudioIsPlaying = false
@@ -205,15 +205,17 @@ final class RealtimeNPCConversationSession {
         }
     }
 
-    private func suspendMicrophoneForResponse() async {
+    /// 응답 중에는 UI/턴 상태만 입력 불가로 유지한다. 로컬 WebRTC 트랙을 disable하면
+    /// 일부 실기기에서 voice-processing AudioUnit의 녹음과 원격 playout이 함께
+    /// 정지할 수 있으므로, 트랙은 연결 수명 동안 계속 살아 있게 둔다.
+    private func pauseMicrophoneAcceptanceForResponse() {
         microphoneResumeTask?.cancel()
         microphoneResumeTask = nil
-        await client.setMicrophoneEnabled(false)
     }
 
     private func scheduleMicrophoneResume() {
         microphoneResumeTask?.cancel()
-        microphoneResumeTask = Task { @MainActor [weak self, client] in
+        microphoneResumeTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: Self.microphoneResumeDelay)
             } catch {
@@ -223,7 +225,6 @@ final class RealtimeNPCConversationSession {
                   self.isStarted,
                   !self.responseIsInFlight,
                   !self.outputAudioIsPlaying else { return }
-            await client.setMicrophoneEnabled(true)
             self.microphoneResumeTask = nil
             self.eventHandler?(.microphoneReady)
         }
