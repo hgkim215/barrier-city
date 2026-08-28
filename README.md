@@ -155,7 +155,7 @@ barrier-city/
 ### 실행
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/hgkim215/barrier-city.git
 cd barrier-city
 open "Barrier City.xcodeproj"
 ```
