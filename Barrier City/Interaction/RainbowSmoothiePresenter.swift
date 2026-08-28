@@ -114,6 +114,14 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
             lapAnchor = anchor
         }
 
+        // 손에 든 뒤에는 더 이상 장애물도, 탭 대상도 아니다.
+        //
+        // setupInteractivity가 붙여둔 콜리전 박스는 시각 크기의 1.4배라 휠체어
+        // 바로 앞에서 주행용 벽 광선(WheelchairMovementSystem.wallRayY)에 걸린다.
+        // 그러면 매 프레임 stopAtObstacle이 좌우 바퀴 속도를 0으로 만들어
+        // 휠체어가 기어가듯 움직인다. 수령이 끝났으니 상호작용 컴포넌트도 함께 뗀다.
+        Self.stripInteraction(from: smoothieEntity)
+
         smoothieEntity.removeFromParent()
         smoothieEntity.position = .zero
         smoothieEntity.orientation = authoredOrientation
@@ -121,6 +129,16 @@ final class RainbowSmoothiePresenter: RainbowSmoothiePresenting {
         smoothieEntity.isEnabled = true
 
         return true
+    }
+
+    private static func stripInteraction(from entity: Entity) {
+        entity.components.remove(CollisionComponent.self)
+        entity.components.remove(InputTargetComponent.self)
+        entity.components.remove(HoverEffectComponent.self)
+        entity.components.remove(PhysicsBodyComponent.self)
+        for child in entity.children {
+            stripInteraction(from: child)
+        }
     }
 
     func reset() {

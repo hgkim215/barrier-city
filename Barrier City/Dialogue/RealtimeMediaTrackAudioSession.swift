@@ -25,6 +25,20 @@ final class RealtimeMediaTrackAudioSession {
         subsystem: "com.Television.Barrier-City",
         category: "RealtimeAudio")
 
+    /// 실기 마이크 문제 진단용 스냅샷.
+    ///
+    /// 패키지(DialogueKitOpenAI)는 팀원 구현을 그대로 두기로 해서, WebRTC 오디오
+    /// 유닛 상태 대신 AVAudioSession만으로 앱 쪽에서 만든다. 카테고리와 입력
+    /// 라우트만 있어도 realtimeConversation 전환이 실제로 일어났는지는 판별된다.
+    private static var audioDiagnostics: String {
+        let session = AVAudioSession.sharedInstance()
+        let inputs = session.currentRoute.inputs
+            .map(\.portType.rawValue)
+            .joined(separator: ",")
+        return "av(cat=\(session.category.rawValue) mode=\(session.mode.rawValue) "
+            + "inputAvailable=\(session.isInputAvailable) inputs=[\(inputs)])"
+    }
+
     private var hasAudioSessionClaim = false
     private static var didRegisterLifecycle = false
 
@@ -47,7 +61,7 @@ final class RealtimeMediaTrackAudioSession {
         } catch {
             // 여기서 실패하면 마이크가 아예 안 열린다. 조용히 던지지 말고 남긴다.
             Self.logger.error(
-                "[MIC] 오디오 세션 획득 실패 \(error.localizedDescription, privacy: .public) \(RealtimeWebRTCClient.platformAudioDiagnostics, privacy: .public)")
+                "[MIC] 오디오 세션 획득 실패 \(error.localizedDescription, privacy: .public) \(RealtimeMediaTrackAudioSession.audioDiagnostics, privacy: .public)")
             throw error
         }
         hasAudioSessionClaim = true
@@ -79,7 +93,7 @@ final class RealtimeMediaTrackAudioSession {
             // 실기에서 마이크가 안 잡히는 원인을 가리기 위한 상태 스냅샷.
             // 카테고리/입력 라우트/WebRTC 오디오 유닛 상태를 한 줄로 남긴다.
             logger.notice(
-                "[MIC] audioUnit active=\(isActive, privacy: .public) \(RealtimeWebRTCClient.platformAudioDiagnostics, privacy: .public)")
+                "[MIC] audioUnit active=\(isActive, privacy: .public) \(RealtimeMediaTrackAudioSession.audioDiagnostics, privacy: .public)")
         }
     }
 }

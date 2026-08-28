@@ -229,6 +229,13 @@ struct WheelchairMovementSystem: System {
                             "환경 충돌음 재생 지점: (\(hitPosition.x), \(hitPosition.y), \(hitPosition.z)) 속도=\(impactSpeed)")
                     }
                 }
+                // 통로에서 왜 느려지는지 가리기 위한 진단.
+                // 같은 접촉이 이어지는 동안은 한 번만 남긴다.
+                if !motion.isBlocked {
+                    let px = hitPosition.map { "(\($0.x), \($0.y), \($0.z))" } ?? "-"
+                    Self.collisionLogger.notice(
+                        "[BLOCK] kind=\(String(describing: obstacleKind), privacy: .public) hit=\(px, privacy: .public) chair=(\(motion.positionX, privacy: .public), \(motion.positionZ, privacy: .public)) heading=\(motion.heading, privacy: .public) speed=\(impactSpeed, privacy: .public)")
+                }
                 motion.leftVelocity = 0
                 motion.rightVelocity = 0
                 motion.isBlocked = true
@@ -341,7 +348,20 @@ struct WheelchairMovementSystem: System {
                 let contactTravel = min(requestedTravel, allowedTravel)
                 motion.positionX += leadDirX * contactTravel
                 motion.positionZ += leadDirZ * contactTravel
-                stopAtObstacle(impactSpeed: forward, obstacleKind: obstacleHit.kind, hitPosition: obstacleHit.position)
+                // 실제로 닿아서 이동이 잘렸을 때만 멈춘다.
+                //
+                // 예전에는 스윕 안에 뭔가 '보이기만' 해도 stopAtObstacle을 불러
+                // 좌우 바퀴 속도를 0으로 만들었다. 스윕 거리가 bodyFront(0.42) +
+                // 이동거리 + skin이라, 앞쪽 44cm 안에 가구나 NPC가 들어오면 아직
+                // 닿지도 않았는데 매 프레임 속도가 리셋됐다. 테이블 사이 통로처럼
+                // 양옆에 콜리전이 가까운 구간에서 휠체어가 기어가듯 움직인 이유다.
+                if allowedTravel < requestedTravel {
+                    stopAtObstacle(impactSpeed: forward,
+                                   obstacleKind: obstacleHit.kind,
+                                   hitPosition: obstacleHit.position)
+                } else {
+                    motion.isBlocked = false
+                }
             } else if requestedTravel > 0.0001 {
                 // 낮은 턱/계단 단차: 진행 끝의 높이 상승으로 판정.
                 let lx = newX + leadDirX * stepLeadExtent
@@ -350,7 +370,14 @@ struct WheelchairMovementSystem: System {
                 let h1 = groundY(lx + leadDirX * Self.stepProbe, lz + leadDirZ * Self.stepProbe) ?? h0
                 let rise = h1 - h0
                 if rise > Self.climbLimit {
-                    // 못 넘는 단차(계단) → 막힘
+                    // 못 넘는 단차(계단) → 막힘.
+                    // groundY가 테이블 콜리전(Cube_N) 윗면을 '바닥'으로 읽으면
+                    // rise가 0.4m씩 나와 여기로 빠진다 — 통로 진입 각도에 따라
+                    // 전방 프로브가 테이블 위를 스치면 매 프레임 여기서 멈춘다.
+                    if !motion.isBlocked {
+                        Self.collisionLogger.notice(
+                            "[BLOCK] kind=step rise=\(rise, privacy: .public) probe=(\(lx, privacy: .public), \(lz, privacy: .public)) h0=\(h0, privacy: .public) h1=\(h1, privacy: .public)")
+                    }
                     stopAtObstacle(impactSpeed: forward, obstacleKind: .environment)
                 } else if rise > Self.stepMin {
                     // 넘을 수 있는 낮은 턱 → 저항 후 통과

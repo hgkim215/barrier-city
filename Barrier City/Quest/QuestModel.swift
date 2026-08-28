@@ -45,7 +45,7 @@ enum QuestTuning {
     /// 실제로는 몰입 공간 진입 직후 관측한 값을 한 번만 받아 계속 쓴다.
     static let seatedEyeHeightFallback: Float = 1.15
     /// 텍스트 카드까지의 수평 거리(m).
-    static let cardDistance: Float = 0.60
+    static let cardDistance: Float = 0.50
     /// 텍스트 카드의 눈높이 대비 높이(m).
     static let cardVerticalOffset: Float = -0.40
     /// 시선각 대비 실제로 적용할 눕힘 비율. 1이면 정확히 정면으로 마주 본다.

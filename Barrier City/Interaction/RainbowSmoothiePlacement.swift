@@ -6,8 +6,17 @@ enum ServingPlacementTuning {
     static let counterDepthFraction: Float = 0.174
     static let surfaceClearance: Float = 0.01
     static let targetSmoothieHeight: Float = 0.28
-    /// 휠체어 탑승자 무릎/시야 앞쪽 쟁반 로컬 위치 (X: 중앙, Y: 시야 높이 앞, Z: 휠체어 전방)
-    static let wheelchairTrayPosition = SIMD3<Float>(0.0, 0.58, -0.48)
+    /// 휠체어 탑승자 무릎 앞쪽 쟁반 로컬 위치 (X: 중앙, Y: 무릎 높이, Z: 휠체어 전방)
+    ///
+    /// 미션 안내 카드(QuestTuning.cardDistance)보다 반드시 더 멀고 낮아야 한다.
+    /// 예전 값(0.58, -0.48)은 카드(0.60m, y≈0.75)보다 앞이라 스무디가 카드를
+    /// 가렸고, 시선·핀치 히트도 스무디가 먼저 가져가 버튼이 안 눌렸다.
+    ///
+    /// 높이로는 못 피한다 — 카드가 y 0.61~0.89를 차지하는데 스무디 위쪽이
+    /// 그 구간에 걸리므로, 컵 끝이 카드를 뚫고 나오지 않으려면 깊이로
+    /// 벌려야 한다. 카드가 0.50m이므로 모델 깊이(약 ±0.07)를 감안해
+    /// 0.82m까지 밀어 25cm 이상 띄운다.
+    static let wheelchairTrayPosition = SIMD3<Float>(0.0, 0.56, -0.82)
 }
 
 enum RainbowSmoothiePlacement {
