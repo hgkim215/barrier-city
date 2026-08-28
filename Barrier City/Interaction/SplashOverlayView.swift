@@ -24,20 +24,22 @@ struct SplashOverlayView: View {
             }
             .frame(width: 540, height: 488)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 14) {
                 Text("도로 공사중")
                 Text(SplashSequence.progressDots(atFrame: frame) ?? "")
-                    .frame(width: 78, alignment: .leading)
+                    .frame(width: 106, alignment: .leading)
             }
-            .font(.system(size: 48, weight: .bold, design: .rounded))
+            .font(.system(size: 48, weight: .black, design: .rounded))
             .foregroundStyle(.white)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 13)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
             .background(.black.opacity(0.58), in: Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("도로 공사중")
         }
-        .frame(width: 600, height: 600)
+        // 이미지(540x488)는 그대로 두고, 커진 문구가 들어갈 만큼 세로만 늘렸다.
+        // 아래 defaultSize의 height와 비율을 맞춰야 잘리지 않는다.
+        .frame(width: 600, height: 720)
         .task {
             images = Self.loadImages()
             frame = 0

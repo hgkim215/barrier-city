@@ -24,8 +24,10 @@ final class QuestHUDFollower {
     private var runGeneration = 0
     private var wasUsingFallback = false
     private var lastPlacement: GuidePlacement?
-    /// 문 진입 패널 등 다른 UI가 온보딩과 같은 높이를 쓰도록 마지막 head 위치를 공유한다.
-    private(set) var lastHeadPosition: SIMD3<Float>?
+    /// 진입 직후 한 번만 확정하는 기준 눈높이(m).
+    /// 매 프레임 head를 따라가면 고개를 숙일 때마다 패널이 같이 내려가서,
+    /// 앉은 자세 기준 높이를 한 번 정해 고정한다. 문 진입 패널도 이 값을 쓴다.
+    private(set) var baselineEyeHeight: Float?
 
     /// world tracking 시작. 실패하면 running=false로 남아 update가 폴백 배치를 쓴다.
     func start(model: AppModel) async {
@@ -56,14 +58,12 @@ final class QuestHUDFollower {
         }
     }
 
-    /// 매 프레임 호출. 카드는 head 기준 타깃으로 스무딩 이동 + 빌보드,
+    /// 매 프레임 호출. 실제 배치는 placement가 바뀔 때 한 번만 일어난다.
     /// 영상 패널은 멀리 눈높이에 세워 yaw만 맞춘다.
     /// - panel: 텍스트 카드("questHUD") 엔티티.
     /// - videoPanel: 안내 영상("guideVideo") 엔티티. 없으면 무시한다.
-    /// - dt: 이전 프레임과의 시간 간격(초).
     func update(panel: Entity,
                 videoPanel: Entity?,
-                dt: Float,
                 placement: GuidePlacement,
                 showsVideo: Bool,
                 model: AppModel) {
@@ -72,24 +72,30 @@ final class QuestHUDFollower {
             lastPlacement = placement
         }
 
-        let frame: HeadFrame
-        if let live = liveHeadFrame() {
+        // 기준 눈높이는 처음 관측한 값 하나로 고정한다.
+        if baselineEyeHeight == nil, let live = liveHeadFrame() {
+            baselineEyeHeight = live.position.y
             if wasUsingFallback {
                 wasUsingFallback = false
                 model.worldTrackingStatus = "추적 복구"
             }
-            frame = live
-        } else {
-            if !wasUsingFallback {
-                wasUsingFallback = true
-                model.worldTrackingFallbacks += 1
-                model.worldTrackingStatus = "추적 유실 · 고정 배치"
-            }
-            frame = HeadFrame(position: SIMD3(0, 1.5, 0),
-                              forward: SIMD3(0, 0, -1),
-                              right: SIMD3(1, 0, 0))
+        } else if baselineEyeHeight == nil, !wasUsingFallback {
+            wasUsingFallback = true
+            model.worldTrackingFallbacks += 1
+            model.worldTrackingStatus = "추적 대기 · 고정 배치"
         }
-        lastHeadPosition = frame.position
+
+        // 배치는 head가 아니라 씬 원점 기준 고정 좌표를 쓴다.
+        //
+        // 예전에는 head의 yaw로 forward/right를 잡아서, 패널이 놓이는 순간
+        // 사용자가 왼쪽을 보고 있으면 왼쪽에, 고개를 숙이고 있으면 더 아래에
+        // 생성됐다. 앉아서 하는 체험이고 이동은 worldRoot가 움직여 처리하므로
+        // 사용자는 늘 씬 원점 근처에 있다. 따라서 정면을 씬의 -Z로 고정하면
+        // 시선과 무관하게 항상 같은 자리에 뜬다.
+        let eyeHeight = baselineEyeHeight ?? QuestTuning.seatedEyeHeightFallback
+        let origin = SIMD3<Float>(0, eyeHeight, 0)
+        let forward = SIMD3<Float>(0, 0, -1)
+        let right = SIMD3<Float>(1, 0, 0)
 
         // MARK: 텍스트 카드
         let cardTarget: SIMD3<Float>
@@ -97,14 +103,14 @@ final class QuestHUDFollower {
         switch placement {
         case .centerModal:
             // 손 닿는 거리에 낮게. 아래에서 시선각만큼 눕혀 책상 위 패널처럼 둔다.
-            cardTarget = frame.position
-                + frame.forward * QuestTuning.cardDistance
+            cardTarget = origin
+                + forward * QuestTuning.cardDistance
                 + SIMD3(0, QuestTuning.cardVerticalOffset, 0)
             cardTilts = true
         case .upperLeadingHUD:
-            cardTarget = frame.position
-                + frame.forward * QuestTuning.forwardDistance
-                + frame.right * QuestTuning.hudLateralOffset
+            cardTarget = origin
+                + forward * QuestTuning.forwardDistance
+                + right * QuestTuning.hudLateralOffset
                 + SIMD3(0, QuestTuning.hudVerticalOffset, 0)
             cardTilts = false
         }
@@ -118,14 +124,10 @@ final class QuestHUDFollower {
         //  - 미션이 시작되면 .upperLeadingHUD로 바뀌며 그 순간의 좌측 상단에
         //    다시 배치되고, 다음 미션 안내에서 또 한 번 정면에 배치된다.
         if !placed {
-            let cardPosition = smoothed(current: panel.position(relativeTo: nil),
-                                        target: cardTarget,
-                                        head: frame.position,
-                                        dt: dt,
-                                        placed: &placed)
-            panel.setPosition(cardPosition, relativeTo: nil)
+            placed = true
+            panel.setPosition(cardTarget, relativeTo: nil)
             panel.setOrientation(
-                facingOrientation(from: cardPosition, toward: frame.position, tilts: cardTilts),
+                facingOrientation(from: cardTarget, toward: origin, tilts: cardTilts),
                 relativeTo: nil)
         }
 
@@ -143,31 +145,13 @@ final class QuestHUDFollower {
         guard !videoPlaced else { return }
         videoPlaced = true
 
-        let videoPosition = frame.position
-            + frame.forward * QuestTuning.videoDistance
+        let videoPosition = origin
+            + forward * QuestTuning.videoDistance
             + SIMD3(0, QuestTuning.videoVerticalOffset, 0)
         videoPanel.setPosition(videoPosition, relativeTo: nil)
         videoPanel.setOrientation(
-            facingOrientation(from: videoPosition, toward: frame.position, tilts: false),
+            facingOrientation(from: videoPosition, toward: origin, tilts: false),
             relativeTo: nil)
-    }
-
-    /// 데드존 밖일 때만 지수 스무딩으로 따라간다. 최초 1회는 즉시 배치.
-    private func smoothed(current: SIMD3<Float>,
-                          target: SIMD3<Float>,
-                          head: SIMD3<Float>,
-                          dt: Float,
-                          placed: inout Bool) -> SIMD3<Float> {
-        guard placed else {
-            placed = true
-            return target
-        }
-        let angle = angleBetween(current - head, target - head)
-        let distance = simd_distance(current, target)
-        guard angle > QuestTuning.deadZoneAngle || distance > QuestTuning.deadZoneDistance else {
-            return current
-        }
-        return current + (target - current) * (1 - exp(-QuestTuning.smoothingRate * dt))
     }
 
     /// head를 향하는 yaw 빌보드. tilts면 시선각만큼 눕혀 정면으로 마주 보게 한다.
@@ -197,7 +181,7 @@ final class QuestHUDFollower {
         placed = false
         videoPlaced = false
         lastPlacement = nil
-        lastHeadPosition = nil
+        baselineEyeHeight = nil
         wasUsingFallback = false
         session.stop()
     }
@@ -223,11 +207,6 @@ private struct HeadFrame {
 }
 
 // MARK: - simd 헬퍼
-private func angleBetween(_ a: SIMD3<Float>, _ b: SIMD3<Float>) -> Float {
-    let la = simd_length(a), lb = simd_length(b)
-    guard la > 1e-5, lb > 1e-5 else { return 0 }
-    return acos(max(-1, min(1, simd_dot(a, b) / (la * lb))))
-}
 private func normalizeSafe(_ v: SIMD3<Float>) -> SIMD3<Float> {
     let l = simd_length(v)
     return l > 1e-5 ? v / l : SIMD3(0, 0, -1)

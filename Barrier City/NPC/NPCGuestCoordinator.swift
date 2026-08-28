@@ -79,6 +79,20 @@ final class NPCGuestCoordinator {
         /// 빈자리 없이 인접하게 채우려 한다. 일반 2~4인 테이블은 그보다 훨씬
         /// 작아서 이 문턱을 넘지 않는다.
         static let communalTableSeatThreshold = 6
+        /// 음료를 받고 지정 좌석으로 갈 때 지나는 테이블 사이 통로(맵 좌표).
+        /// Indoor.usda의 collision Cube_7(x 0.87~1.47)과 Cube_8(x -1.27~-0.77)
+        /// 사이 약 1.6m 구간이라, 손님이 몰리면 휠체어가 아예 못 지나간다.
+        static let corridorMinX: Float = -2.0
+        static let corridorMaxX: Float = 2.2
+        static let corridorMinZ: Float = 0.6
+        static let corridorMaxZ: Float = 3.0
+        /// 통로 구간 좌석에 앉힐 최대 인원. 분위기용으로 몇 명은 남기되
+        /// 휠체어 진입 폭을 확보한다.
+        static let corridorSeatedLimit = 3
+        /// 입구(-Z에서 진입)에서 봤을 때 오른쪽(+X) 테이블부터 채운다.
+        /// 큰 일행(seatedPoolGroupSizes의 최댓값)이 먼저 배정되므로 자연히
+        /// 오른쪽 테이블에 손님이 몰린다.
+        static let prefersRightSideSeating = true
         /// 키오스크 주변에 배회 목적지가 잡히지 않도록 두는 반경(m). 대기줄이 아닌
         /// 손님이 우연히 키오스크 앞에 서서 막고 있는 문제를 막는다.
         static let kioskExclusionRadius: Float = 1.2
@@ -207,7 +221,7 @@ final class NPCGuestCoordinator {
         /// 약 1m 떨어진 테이블 안쪽에 디저트를 놓는다. 좁은 테이블에서는 아래 edgeMargin을
         /// 뺀 inset 범위로 다시 클램프되므로, 실제로는 "1m 또는 테이블이 허용하는 한
         /// 최대한 안쪽" 중 더 가까운 쪽에 놓인다.
-        static let perSeatForwardOffset: Float = 1.0
+        static let perSeatForwardOffset: Float = 0.5
         /// 좌석 정면 위치에서 무작위로 살짝 어긋나게 둬 기계적으로 보이지 않게 한다.
         static let placementJitter: Float = 0.03
         /// 테이블 가장자리에 걸치지 않도록 바운즈 절반 폭에서 빼는 여백.
@@ -435,10 +449,17 @@ final class NPCGuestCoordinator {
     /// 의도였다), cycler가 자리를 옮길 때마다 매번 같은(가장 외딴) 자리로
     /// 되돌아가 "고정석에 앉는 것처럼" 보이는 부작용이 있었다.
     private func pickSeatIndex(avoiding excludedSeatIndices: Set<Int> = []) -> Int? {
-        let freeIndices = NPCGuestSeatingPolicy.freeSeatIndices(
+        var freeIndices = NPCGuestSeatingPolicy.freeSeatIndices(
             occupants: seatOccupants,
             avoiding: excludedSeatIndices)
         guard !freeIndices.isEmpty else { return nil }
+
+        // 좌석을 순환하는 손님이 통로를 다시 메우지 않게 한다. 상한에 걸리면
+        // 통로 밖 좌석만 후보로 남기고, 그런 자리가 없을 때만 기존 목록을 쓴다.
+        if corridorSeatedCount() >= Tuning.corridorSeatedLimit {
+            let outside = freeIndices.filter { !isCorridorSeat($0) }
+            if !outside.isEmpty { freeIndices = outside }
+        }
 
         var adjacentToOccupiedCandidates: [Int] = []
         for groupIndices in seatTableGroups where groupIndices.count >= Tuning.communalTableSeatThreshold {
@@ -452,6 +473,13 @@ final class NPCGuestCoordinator {
         }
         if let picked = adjacentToOccupiedCandidates.randomElement() { return picked }
         return freeIndices.randomElement()
+    }
+
+    /// 테이블 그룹의 평균 X. 오른쪽 우선 정렬에 쓴다.
+    private func averageSeatX(_ groupIndex: Int) -> Float {
+        let indices = seatTableGroups[groupIndex]
+        guard !indices.isEmpty else { return 0 }
+        return indices.reduce(Float(0)) { $0 + seats[$1].position.x } / Float(indices.count)
     }
 
     /// 한 테이블의 좌석들을 물리적으로 나란히 늘어선 순서로 정렬한다(예: WoodTable
@@ -592,15 +620,45 @@ final class NPCGuestCoordinator {
     /// 순서 기준 "연속된" 좌석 구간에서 고른다 — 예전에는 그 테이블의 빈 좌석
     /// 중에서 완전히 무작위로 size개를 뽑아, 중간에 빈 자리를 남긴 채 듬성듬성
     /// 앉는 경우가 있었다.
+    /// 해당 좌석이 휠체어 동선(테이블 사이 통로) 안에 있는지.
+    private func isCorridorSeat(_ seatIndex: Int) -> Bool {
+        let p = seats[seatIndex].position
+        return p.x >= Tuning.corridorMinX && p.x <= Tuning.corridorMaxX
+            && p.y >= Tuning.corridorMinZ && p.y <= Tuning.corridorMaxZ
+    }
+
+    /// 통로 구간에 이미 앉아 있는(또는 배정된) 인원.
+    private func corridorSeatedCount(including reserved: Set<Int> = []) -> Int {
+        seats.indices.filter { isCorridorSeat($0) && (seatOccupants[$0] != nil || reserved.contains($0)) }
+            .count
+    }
+
     private func makeSeatedPoolGroupQueue(groupSizes: [Int]) -> [Int] {
-        let shuffledGroups = seatTableGroups.indices.shuffled()
+        // 오른쪽(+X) 테이블부터, 통로 테이블은 맨 뒤로 미뤄 배정한다.
+        // 같은 우선순위 안에서는 기존처럼 무작위라 매 진입마다 자리가 달라진다.
+        var orderedGroups = seatTableGroups.indices.shuffled()
+        if Tuning.prefersRightSideSeating {
+            orderedGroups.sort { lhs, rhs in
+                let lCorridor = seatTableGroups[lhs].contains(where: isCorridorSeat)
+                let rCorridor = seatTableGroups[rhs].contains(where: isCorridorSeat)
+                if lCorridor != rCorridor { return !lCorridor }
+                return averageSeatX(lhs) > averageSeatX(rhs)
+            }
+        }
+        let shuffledGroups = orderedGroups
         var usedTableGroups: Set<Int> = []
         var usedSeats: Set<Int> = []
         var queue: [Int] = []
         for size in groupSizes.sorted(by: >) {
             guard let groupIndex = shuffledGroups.first(where: { idx in
-                !usedTableGroups.contains(idx)
-                    && seatTableGroups[idx].filter({ !usedSeats.contains($0) }).count >= size
+                guard !usedTableGroups.contains(idx),
+                      seatTableGroups[idx].filter({ !usedSeats.contains($0) }).count >= size
+                else { return false }
+                // 통로 테이블은 상한을 넘기지 않는 선에서만 쓴다.
+                let corridorSeatsHere = seatTableGroups[idx].filter(isCorridorSeat).count
+                guard corridorSeatsHere > 0 else { return true }
+                return corridorSeatedCount(including: usedSeats) + min(size, corridorSeatsHere)
+                    <= Tuning.corridorSeatedLimit
             }) else { continue }
             usedTableGroups.insert(groupIndex)
             let orderedFree = physicallyOrderedSeatIndices(seatTableGroups[groupIndex])

@@ -31,7 +31,7 @@ struct QuestStep: Identifiable, Equatable {
 /// lazy-follow HUD 튜닝 상수 단일 진실원(시뮬레이터에서 보며 조정).
 enum QuestTuning {
     /// head 앞으로 띄우는 거리(m)
-    static let forwardDistance: Float = 0.85
+    static let forwardDistance: Float = 0.72
     /// 중앙 모달의 head 기준 좌우 오프셋(m, -면 왼쪽)
     static let centerLateralOffset: Float = 0
     /// 중앙 모달의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
@@ -41,10 +41,13 @@ enum QuestTuning {
     //
     // 텍스트 카드는 손 닿는 거리에 낮게 두고 사용자를 향해 눕힌다(책상 위 패널).
     // 영상은 멀리 눈높이에 세워 TV처럼 본다.
+    /// head 추적을 아직 못 얻었을 때 쓸 앉은 자세 눈높이(m).
+    /// 실제로는 몰입 공간 진입 직후 관측한 값을 한 번만 받아 계속 쓴다.
+    static let seatedEyeHeightFallback: Float = 1.15
     /// 텍스트 카드까지의 수평 거리(m).
-    static let cardDistance: Float = 0.70
+    static let cardDistance: Float = 0.50
     /// 텍스트 카드의 눈높이 대비 높이(m).
-    static let cardVerticalOffset: Float = -0.70
+    static let cardVerticalOffset: Float = -0.40
     /// 시선각 대비 실제로 적용할 눕힘 비율. 1이면 정확히 정면으로 마주 본다.
     /// 1보다 작으면 그만큼 덜 눕혀 조금 더 세워진다.
     static let cardPitchRatio: Float = 0.8
@@ -55,19 +58,13 @@ enum QuestTuning {
     /// 영상 패널의 눈높이 대비 높이(m).
     static let videoVerticalOffset: Float = 0.18
     /// 상단 선행 HUD의 head 기준 좌우 오프셋(m, -면 왼쪽)
-    static let hudLateralOffset: Float = -0.56
+    static let hudLateralOffset: Float = -0.47
     /// 상단 선행 HUD의 head 기준 세로 오프셋(m, -면 눈높이보다 아래)
-    static let hudVerticalOffset: Float = 0.2
-    /// 데드존 각도(rad). 이 안이면 따라가지 않음(15°).
-    static let deadZoneAngle: Float = 15 * .pi / 180
-    /// 데드존 거리(m). 이 안이면 따라가지 않음.
-    static let deadZoneDistance: Float = 0.2
-    /// 지수 스무딩 수렴 속도(초당 배율 계수). 클수록 빨리 붙는다.
-    static let smoothingRate: Float = 4.0
+    static let hudVerticalOffset: Float = 0.28
     /// head 포즈를 못 얻을 때 중앙 모달의 고정 배치 위치(씬 원점 기준).
-    static let centerFallbackPosition = SIMD3<Float>(0, 0.80, -0.70)
+    static let centerFallbackPosition = SIMD3<Float>(0, 0.75, -0.60)
     /// head 포즈를 못 얻을 때 상단 선행 HUD의 고정 배치 위치(씬 원점 기준).
-    static let hudFallbackPosition = SIMD3<Float>(-0.56, 1.65, -0.85)
+    static let hudFallbackPosition = SIMD3<Float>(-0.47, 1.43, -0.72)
 }
 
 enum QuestAdvanceOutcome: Equatable {

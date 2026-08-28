@@ -23,37 +23,38 @@ struct NPCDialoguePanelView: View {
                     .transition(.scale(scale: 0.94).combined(with: .opacity))
             } else {
                 subtitleCard
-                    .frame(width: 760)
+                    .frame(width: 980)
                     .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.2), value: controller.isEncounterActive)
     }
 
-    /// NPC 머리 위에 떠 있는 만큼, 실제 머리 크기와 비슷하게 커야 눈에 잘 띈다 —
-    /// subtitleCard(자막 패널)와는 별개로 이 버튼만 크게 잡는다.
-    private static let talkButtonSize: CGFloat = 420
+    /// NPC 머리 위에 떠 있는 만큼 눈에 잘 띄어야 한다. 아이콘을 글자 위에 쌓아
+    /// 정사각형으로 두면 덩어리가 커 보이기만 해서, 가로로 눕히고 캡슐로 감쌌다.
+    private static let talkButtonWidth: CGFloat = 860
+    private static let talkButtonHeight: CGFloat = 190
 
     private var talkButton: some View {
         Button {
             clerk.startConversation()
         } label: {
-            VStack(spacing: 20) {
+            HStack(spacing: 28) {
                 Image(systemName: clerk.isTalkAvailable
                       ? "cup.and.saucer.fill"
                       : "figure.walk")
-                    .font(.system(size: 96, weight: .semibold))
+                    .font(.system(size: 72, weight: .semibold))
                     .foregroundStyle(CafePalette.cream)
 
                 Text(clerk.isTalkAvailable ? "직원과 대화하기" : "직원에게 가까이 가세요")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 44, weight: .bold))
                     .foregroundStyle(CafePalette.foam)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .padding(24)
-            .frame(width: Self.talkButtonSize, height: Self.talkButtonSize)
-            .background(CafePalette.espresso,
-                        in: RoundedRectangle(cornerRadius: 56, style: .continuous))
+            .padding(.horizontal, 56)
+            .frame(width: Self.talkButtonWidth, height: Self.talkButtonHeight)
+            .background(CafePalette.espresso, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!clerk.isTalkAvailable)
@@ -67,7 +68,7 @@ struct NPCDialoguePanelView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Text("직원")
-                    .font(.title2.bold())
+                    .font(.largeTitle.bold())
                     .foregroundStyle(CafePalette.espresso)
 
                 Spacer()
@@ -84,14 +85,14 @@ struct NPCDialoguePanelView: View {
             // 자막 길이가 매 발화마다 달라 패널 높이가 요동쳤다. 최소 높이를 4줄분으로
             // 잡고 그보다 길면 축소해, 말풍선이 제자리에 머무르게 한다.
             Text(displayedSubtitle)
-                .font(.system(size: 36, weight: .semibold, design: .rounded))
+                .font(.system(size: 46, weight: .semibold, design: .rounded))
                 .foregroundStyle(CafePalette.espresso)
                 .multilineTextAlignment(.leading)
-                .lineSpacing(8)
+                .lineSpacing(10)
                 .lineLimit(4)
                 .minimumScaleFactor(0.72)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, minHeight: 176, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 228, alignment: .topLeading)
 
             userTranscript
 
@@ -101,11 +102,11 @@ struct NPCDialoguePanelView: View {
                 .foregroundStyle(CafePalette.roast.opacity(0.5))
 #endif
         }
-        .padding(.horizontal, 36)
-        .padding(.vertical, 30)
+        .padding(.horizontal, 46)
+        .padding(.vertical, 38)
         .background(CafePalette.foam.opacity(0.96),
-                    in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 38, style: .continuous))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 38, style: .continuous))
     }
 
     /// 무응답 타임아웃이나 거리 이탈을 기다리지 않고, 사용자가 언제든 직접 대화를
@@ -118,11 +119,11 @@ struct NPCDialoguePanelView: View {
             HStack(spacing: 8) {
                 Image(systemName: "xmark.circle.fill")
                 Text("대화 종료")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
             }
             .foregroundStyle(CafePalette.roast)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
             .background(CafePalette.roast.opacity(0.12), in: Capsule())
         }
         .buttonStyle(.plain)
