@@ -173,12 +173,17 @@ enum InteractionSetup {
             isMissionTwoActive: isMissionTwoActive,
             isGuideLocked: false)
 
+        if !isNearKiosk {
+            im.kioskFallbackWarningShown = false
+        }
         if isIndoor,
            im.kioskPanelEntity == nil,
            isMissionTwoActive,
-           !im.kioskFailOpenSent {
-            im.kioskFailOpenSent = true
-            guide.handleQuestEvent(.kioskFailed)
+           isNearKiosk,
+           !im.kioskFallbackWarningShown {
+            // 메뉴 attachment 로드 실패도 미션을 자동 완료하지 않는다.
+            // 독립 공간 알림에서 직원 주문을 선택해야 다음 미션으로 진행한다.
+            im.kioskFallbackWarningShown = im.attemptRestrictedKioskCategory(.gazePinch)
         }
 
         // 미션 6 (지정 좌석으로 이동) 활성 시 WayPoint 도착 판정

@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1600" viewBox="0 0 2400 1600" role="img" aria-labelledby="title desc">
+  <title id="title">Barrier City 주요 개발 환경</title>
+  <desc id="desc">Apple Vision Pro 기반 Barrier City의 개발 장비, 언어, 공간 기술, AI, 백엔드, 테스트 및 협업 환경을 정리한 표</desc>
+  <defs>
+    <linearGradient id="headerGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#082B64"/>
+      <stop offset="1" stop-color="#0B58A8"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFB800"/>
+      <stop offset="1" stop-color="#FFD84D"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#082B64" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      text { font-family: AppleGothic; }
+      .title { font-size: 76px; font-weight: 700; fill: #FFFFFF; letter-spacing: -2px; }
+      .subtitle { font-size: 30px; font-weight: 400; fill: #D9EAFF; }
+      .brand { font-size: 24px; font-weight: 700; fill: #082B64; letter-spacing: 2px; }
+      .header-cell { font-size: 30px; font-weight: 700; fill: #FFFFFF; }
+      .category { font-size: 28px; font-weight: 700; fill: #102A4C; }
+      .value { font-size: 28px; font-weight: 500; fill: #233A58; }
+      .note { font-size: 23px; font-weight: 400; fill: #64748B; }
+    </style>
+  </defs>
+
+  <rect width="2400" height="1600" fill="#F4F8FD"/>
+  <rect x="0" y="0" width="2400" height="290" fill="url(#headerGradient)"/>
+  <circle cx="2110" cy="70" r="210" fill="#3B8EEA" opacity="0.18"/>
+  <circle cx="2270" cy="200" r="150" fill="#FFD84D" opacity="0.16"/>
+  <circle cx="1960" cy="230" r="80" fill="#FFFFFF" opacity="0.08"/>
+  <rect x="120" y="74" width="14" height="126" rx="7" fill="url(#accentGradient)"/>
+  <text x="170" y="137" class="title">주요 개발 환경</text>
+  <text x="174" y="194" class="subtitle">Apple Vision Pro 공간컴퓨팅 · 실시간 생성형 AI · 서버리스 보안 구조</text>
+
+  <g filter="url(#shadow)">
+    <rect x="120" y="346" width="2160" height="1080" rx="28" fill="#FFFFFF"/>
+  </g>
+  <rect x="120" y="346" width="2160" height="94" rx="28" fill="#0B4D91"/>
+  <rect x="120" y="412" width="2160" height="28" fill="#0B4D91"/>
+  <rect x="120" y="440" width="2160" height="82" fill="#F7FAFE"/>
+  <rect x="120" y="604" width="2160" height="82" fill="#F7FAFE"/>
+  <rect x="120" y="768" width="2160" height="82" fill="#F7FAFE"/>
+  <rect x="120" y="932" width="2160" height="82" fill="#F7FAFE"/>
+  <rect x="120" y="1096" width="2160" height="82" fill="#F7FAFE"/>
+  <rect x="120" y="1260" width="2160" height="82" fill="#F7FAFE"/>
+
+  <line x1="690" y1="346" x2="690" y2="1426" stroke="#DCE6F2" stroke-width="2"/>
+  <text x="165" y="406" class="header-cell">구분</text>
+  <text x="745" y="406" class="header-cell">기술 및 도구</text>
+
+  <g stroke="#E5EDF6" stroke-width="2">
+    <line x1="120" y1="522" x2="2280" y2="522"/>
+    <line x1="120" y1="604" x2="2280" y2="604"/>
+    <line x1="120" y1="686" x2="2280" y2="686"/>
+    <line x1="120" y1="768" x2="2280" y2="768"/>
+    <line x1="120" y1="850" x2="2280" y2="850"/>
+    <line x1="120" y1="932" x2="2280" y2="932"/>
+    <line x1="120" y1="1014" x2="2280" y2="1014"/>
+    <line x1="120" y1="1096" x2="2280" y2="1096"/>
+    <line x1="120" y1="1178" x2="2280" y2="1178"/>
+    <line x1="120" y1="1260" x2="2280" y2="1260"/>
+    <line x1="120" y1="1342" x2="2280" y2="1342"/>
+  </g>
+
+  <g>
+    <circle cx="166" cy="481" r="18" fill="#1E78D5"/><text x="205" y="491" class="category">대상 플랫폼</text>
+    <text x="745" y="491" class="value">Apple Vision Pro · visionOS 26.2 이상</text>
+
+    <circle cx="166" cy="563" r="18" fill="#1E78D5"/><text x="205" y="573" class="category">개발 도구</text>
+    <text x="745" y="573" class="value">macOS · Xcode 26.3 · Reality Composer Pro</text>
+
+    <circle cx="166" cy="645" r="18" fill="#1E78D5"/><text x="205" y="655" class="category">개발 언어</text>
+    <text x="745" y="655" class="value">Swift 6 · JavaScript</text>
+
+    <circle cx="166" cy="727" r="18" fill="#1E78D5"/><text x="205" y="737" class="category">UI·상태 관리</text>
+    <text x="745" y="737" class="value">SwiftUI · Observation</text>
+
+    <circle cx="166" cy="809" r="18" fill="#FFB800"/><text x="205" y="819" class="category">공간 콘텐츠</text>
+    <text x="745" y="819" class="value">RealityKit · Reality Composer Pro · USD / USDZ</text>
+
+    <circle cx="166" cy="891" r="18" fill="#FFB800"/><text x="205" y="901" class="category">공간 인식</text>
+    <text x="745" y="901" class="value">ARKit Hand Tracking · World Tracking</text>
+
+    <circle cx="166" cy="973" r="18" fill="#FFB800"/><text x="205" y="983" class="category">상호작용·물리</text>
+    <text x="745" y="983" class="value">손 추적 휠체어 조작 · 충돌·지면·경사 판정 · 공간 탭</text>
+
+    <circle cx="166" cy="1055" r="18" fill="#7C5CE6"/><text x="205" y="1065" class="category">생성형 AI</text>
+    <text x="745" y="1065" class="value">OpenAI Realtime API · gpt-realtime-2.1 · gpt-4o-transcribe</text>
+
+    <circle cx="166" cy="1137" r="18" fill="#7C5CE6"/><text x="205" y="1147" class="category">실시간 통신</text>
+    <text x="745" y="1147" class="value">WebRTC · LiveKitWebRTC</text>
+
+    <circle cx="166" cy="1219" r="18" fill="#16A085"/><text x="205" y="1229" class="category">서버리스 백엔드</text>
+    <text x="745" y="1229" class="value">Cloudflare Workers · Wrangler · 임시 토큰·요청 제한</text>
+
+    <circle cx="166" cy="1301" r="18" fill="#16A085"/><text x="205" y="1311" class="category">검증</text>
+    <text x="745" y="1311" class="value">Swift Package Test · Node Test · xcodebuild</text>
+
+    <circle cx="166" cy="1383" r="18" fill="#16A085"/><text x="205" y="1393" class="category">버전 관리·협업</text>
+    <text x="745" y="1393" class="value">Git · GitHub · 기능 브랜치·Pull Request</text>
+  </g>
+
+  <rect x="120" y="1480" width="236" height="44" rx="22" fill="#FFD84D"/>
+  <text x="145" y="1511" class="brand">BARRIER CITY</text>
+  <text x="2280" y="1510" text-anchor="end" class="note">Spatial Accessibility Experience</text>
+</svg>

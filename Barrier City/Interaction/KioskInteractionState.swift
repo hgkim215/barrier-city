@@ -42,6 +42,10 @@ struct KioskInteractionState: Equatable {
         self.isNear = isNear
         self.isMissionTwoActive = isMissionTwoActive
         self.isGuideLocked = isGuideLocked
+        // 공간 팝업은 근접 반경과 독립적이지만 다른 미션/장면까지 남으면 안 된다.
+        if !isIndoor || !isMissionTwoActive || isGuideLocked {
+            barrierVisible = false
+        }
     }
 
     mutating func selectCategory(

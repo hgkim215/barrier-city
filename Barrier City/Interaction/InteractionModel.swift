@@ -211,8 +211,8 @@ final class InteractionModel {
     private var kioskState = KioskInteractionState()
     /// 왼손과 오른손의 이동 이력을 섞지 않도록 손별 detector를 유지한다.
     @ObservationIgnored private var kioskReachDetectors: [KioskHandSide: KioskReachAttemptDetector] = [:]
-    /// attachment가 없을 때 Mission 2를 한 번만 fail-open하기 위한 세션 플래그.
-    @ObservationIgnored var kioskFailOpenSent = false
+    /// 메뉴 attachment가 없을 때 독립 공간 알림을 한 번 표시했는지 여부.
+    @ObservationIgnored var kioskFallbackWarningShown = false
     /// 현재 보이는 맵 엔티티(worldRoot 자식). SceneSwitcher가 교체.
     @ObservationIgnored var visibleMap: Entity?
     /// 씬 원점 고정 투명 콜리전 사본. SceneSwitcher가 교체.
@@ -379,7 +379,7 @@ final class InteractionModel {
 
     func resetKioskSession() {
         kioskState.reset()
-        kioskFailOpenSent = false
+        kioskFallbackWarningShown = false
         kioskScreenPlane = nil
         kioskScreenSurfaceCenter = .zero
         kioskScreenHalfSize = .zero

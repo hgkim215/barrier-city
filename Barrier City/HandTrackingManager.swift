@@ -165,7 +165,8 @@ final class HandTrackingManager {
             resetAllTrackingState(allowImmediateFistCapture: false)
             return
         }
-        guard !GuideFlowModel.shared.isInteractionLocked else {
+        guard !GuideFlowModel.shared.isInteractionLocked,
+              !InteractionModel.shared.kioskBarrierVisible else {
             model.discardGuideLockedInput()
             resetAllTrackingState(allowImmediateFistCapture: false)
             return
