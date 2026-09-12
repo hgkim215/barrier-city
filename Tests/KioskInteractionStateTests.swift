@@ -14,6 +14,7 @@ struct KioskInteractionStateTests {
         menuSelectWorksOnDefaultCategory()
         dismissKeepsMissionRetryable()
         helpRequestLocksInputAndEmitsOnce()
+        spatialPopupSurvivesProximityExitButNotMissionExit()
         sessionResetClearsAllKioskState()
 
         print("KioskInteractionStateTests: PASS")
@@ -120,6 +121,24 @@ struct KioskInteractionStateTests {
         expect(state.helpRequested, false, "reset clears session help lock")
         expect(state.selectedCategory, .best, "reset restores the best category")
         expect(state.selectedMenuID, nil, "reset clears selected menu")
+    }
+
+    private static func spatialPopupSurvivesProximityExitButNotMissionExit() {
+        var state = enabledState()
+        _ = state.attemptRestrictedCategory(.handReach)
+        state.updateContext(isIndoor: true, isNear: false,
+                            isMissionTwoActive: true, isGuideLocked: false)
+        expect(state.barrierVisible, true, "external popup remains actionable outside kiosk proximity")
+        expect(state.requestStaffHelp(), true, "external popup can request staff without touching kiosk")
+
+        for context in [(false, true, false), (true, false, false), (true, true, true)] {
+            var stale = enabledState()
+            _ = stale.attemptRestrictedCategory(.gazePinch)
+            stale.updateContext(isIndoor: context.0, isNear: true,
+                                isMissionTwoActive: context.1, isGuideLocked: context.2)
+            expect(stale.barrierVisible, false, "leaving the active mission dismisses the spatial popup")
+            expect(stale.requestStaffHelp(), false, "stale popup cannot complete another mission")
+        }
     }
 
     private static func enabledState() -> KioskInteractionState {

@@ -31,8 +31,6 @@ private extension KioskMenuTint {
 }
 
 struct KioskOrderView: View {
-    private let warmYellow = Color(red: 1.00, green: 0.79, blue: 0.03)
-    private let warningRed = Color(red: 0.88, green: 0.08, blue: 0.08)
     private let menuColumns = Array(
         repeating: GridItem(.flexible(), spacing: 10),
         count: 3)
@@ -41,36 +39,26 @@ struct KioskOrderView: View {
         let im = InteractionModel.shared
 
         ZStack {
-            warmYellow
+            KioskTheme.background
 
             VStack(spacing: 0) {
                 header
                 categories(interactionModel: im)
 
                 Rectangle()
-                    .fill(.black)
-                    .frame(height: 3)
+                    .fill(KioskTheme.border)
+                    .frame(height: 1)
 
                 menuGrid(interactionModel: im)
                 orderSummary(interactionModel: im)
-            }
-
-            if im.kioskBarrierVisible {
-                Color.black.opacity(0.36)
-                    .contentShape(Rectangle())
-
-                barrierCard(interactionModel: im)
-                    .padding(.horizontal, 36)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .frame(width: 540, height: 960)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(.black, lineWidth: 3)
+                .stroke(KioskTheme.border, lineWidth: 2)
         }
-        .animation(.easeOut(duration: 0.22), value: im.kioskBarrierVisible)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("BARRIER CAFE 키오스크 메뉴")
     }
@@ -79,13 +67,13 @@ struct KioskOrderView: View {
         ZStack {
             Text("BARRIER CAFE")
                 .font(.system(size: 31, weight: .black, design: .rounded))
-                .foregroundStyle(.black)
+                .foregroundStyle(KioskTheme.ink)
 
             HStack {
                 // 실제 동작이 없는 장식 아이콘. 버튼으로 오인되지 않게 VoiceOver에서 숨긴다.
                 Image(systemName: "house.fill")
                     .font(.system(size: 27, weight: .black))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(KioskTheme.ink)
                     .frame(width: 56, height: 56)
                     .accessibilityHidden(true)
 
@@ -122,15 +110,15 @@ struct KioskOrderView: View {
         } label: {
             Text(category.title)
                 .font(.system(size: 17, weight: .black, design: .rounded))
-                .foregroundStyle(isSelected ? .white : .black)
+                .foregroundStyle(isSelected ? KioskTheme.surface : KioskTheme.ink)
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
                 .background(
-                    isSelected ? Color.black : warmYellow,
+                    isSelected ? KioskTheme.ink : KioskTheme.surface,
                     in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(.black, lineWidth: 2)
+                        .stroke(isSelected ? KioskTheme.ink : KioskTheme.border, lineWidth: 1.5)
                 }
                 .contentShape(Rectangle())
         }
@@ -185,7 +173,7 @@ struct KioskOrderView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(warningRed, in: Capsule())
+                            .background(KioskTheme.accent, in: Capsule())
                             .padding(6)
                     }
                 }
@@ -193,20 +181,20 @@ struct KioskOrderView: View {
 
                 Text(item.name)
                     .font(.system(size: 16, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(KioskTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.68)
 
                 Text(priceText(item.price))
                     .font(.system(size: 17, weight: .black, design: .rounded))
-                    .foregroundStyle(warningRed)
+                    .foregroundStyle(KioskTheme.accent)
             }
             .padding(9)
             .frame(maxWidth: .infinity)
-            .background(Color(white: 0.98), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KioskTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(.black, lineWidth: isSelected ? 3 : 1.5)
+                    .stroke(isSelected ? KioskTheme.accent : KioskTheme.border, lineWidth: isSelected ? 3 : 1)
             }
             .contentShape(Rectangle())
         }
@@ -227,7 +215,7 @@ struct KioskOrderView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(selectedItem?.name ?? "선택한 상품")
                     .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(KioskTheme.ink)
                     .lineLimit(1)
 
                 HStack(spacing: 12) {
@@ -235,7 +223,7 @@ struct KioskOrderView: View {
                     Text(selectedItem.map { priceText($0.price) } ?? "0원")
                 }
                 .font(.system(size: 20, weight: .black, design: .rounded))
-                .foregroundStyle(selectedItem == nil ? Color.black : warningRed)
+                .foregroundStyle(selectedItem == nil ? KioskTheme.ink : KioskTheme.accent)
             }
 
             Spacer(minLength: 8)
@@ -248,79 +236,18 @@ struct KioskOrderView: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .frame(width: 142, height: 58)
                 .background(
-                    Color.black.opacity(0.4),
+                    KioskTheme.ink.opacity(0.32),
                     in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHint("결제 기능은 제공되지 않습니다")
         }
         .padding(.horizontal, 20)
         .frame(height: 108)
-        .background(warmYellow)
+        .background(KioskTheme.background)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(.black)
-                .frame(height: 3)
+                .fill(KioskTheme.border)
+                .frame(height: 1)
         }
-    }
-
-    private func barrierCard(interactionModel im: InteractionModel) -> some View {
-        VStack(spacing: 18) {
-            Image(systemName: "hand.raised.slash.fill")
-                .font(.system(size: 42, weight: .black))
-                .foregroundStyle(warningRed)
-                .accessibilityHidden(true)
-
-            Text("높아서 선택할 수 없습니다")
-                .font(.system(size: 27, weight: .black, design: .rounded))
-                .foregroundStyle(.black)
-                .multilineTextAlignment(.center)
-
-            Text("앉은 자세에서는 상단 카테고리에 손이 닿지 않습니다. 카페 직원에게 직접 주문해 보세요.")
-                .font(.system(size: 19, weight: .bold, design: .rounded))
-                .foregroundStyle(.black)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(spacing: 10) {
-                Button("직원에게 직접 주문하기") {
-                    KioskPrimaryActionCoordinator.activate(
-                        interactionModel: im,
-                        eventSink: GuideFlowModel.shared.handleQuestEvent)
-                }
-                .font(.system(size: 20, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 58)
-                .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityHint("키오스크 입력을 종료하고 직원 주문 미션으로 이동합니다")
-
-                Button("닫기") {
-                    _ = im.dismissKioskBarrier()
-                }
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .foregroundStyle(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.black, lineWidth: 2)
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityHint("장벽 안내를 닫고 메뉴로 돌아갑니다")
-            }
-        }
-        .padding(24)
-        .background(warmYellow, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.black, lineWidth: 3)
-        }
-        .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("키오스크 접근성 장벽 안내")
     }
 
     private func priceText(_ price: Int) -> String {

@@ -21,6 +21,7 @@ final class QuestHUDFollower {
     private var stopped = false
     private var placed = false        // 최초 1회는 스무딩 없이 즉시 배치
     private var videoPlaced = false
+    private var kioskBarrierPlaced = false
     private var runGeneration = 0
     private var wasUsingFallback = false
     private var lastPlacement: GuidePlacement?
@@ -154,6 +155,30 @@ final class QuestHUDFollower {
             relativeTo: nil)
     }
 
+    /// 열리는 순간의 사용자 앞에 알림을 배치하고, 읽는 동안에는 공간에 고정한다.
+    /// 고개를 들어 높은 카테고리를 보더라도 알림은 수평 시야 높이로 내려온다.
+    func updateKioskBarrier(panel: Entity?, isPresented: Bool) {
+        guard let panel else { return }
+        guard isPresented else {
+            panel.isEnabled = false
+            kioskBarrierPlaced = false
+            return
+        }
+        if !kioskBarrierPlaced {
+            let head = liveHeadFrame()
+            let eye = head?.position
+                ?? SIMD3<Float>(0, baselineEyeHeight ?? QuestTuning.seatedEyeHeightFallback, 0)
+            let forward = head?.forward ?? SIMD3<Float>(0, 0, -1)
+            let target = eye + forward * 0.70 + SIMD3<Float>(0, -0.12, 0)
+            panel.setPosition(target, relativeTo: nil)
+            panel.setOrientation(
+                facingOrientation(from: target, toward: eye, tilts: true),
+                relativeTo: nil)
+            kioskBarrierPlaced = true
+        }
+        panel.isEnabled = true
+    }
+
     /// head를 향하는 yaw 빌보드. tilts면 시선각만큼 눕혀 정면으로 마주 보게 한다.
     private func facingOrientation(from position: SIMD3<Float>,
                                    toward head: SIMD3<Float>,
@@ -180,6 +205,7 @@ final class QuestHUDFollower {
         running = false
         placed = false
         videoPlaced = false
+        kioskBarrierPlaced = false
         lastPlacement = nil
         baselineEyeHeight = nil
         wasUsingFallback = false

@@ -230,7 +230,7 @@ enum SceneSwitcher {
             kioskPanel.isEnabled = !im.kioskUsesBillboardFallback
         } else {
             im.applyKioskScreenPlacement(.billboardFallback)
-            print("⚠️ kioskScreen attachment 없음 — Mission 2 진입 시 fail-open")
+            print("⚠️ kioskScreen attachment 없음 — 키오스크 접근 시 독립 공간 안내 표시")
         }
 
         // 콜리전은 위에서 이미 실내 것으로 바꿔 뒀다 — 여기서는 시각과 부모-자식

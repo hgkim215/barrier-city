@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1697" viewBox="0 0 2400 1697" role="img" aria-labelledby="title desc">
+  <title id="title">Barrier City 주요 개발 환경</title>
+  <desc id="desc">Word 문서 삽입용으로 정리한 Barrier City 주요 개발 환경 표</desc>
+  <style>
+    text { font-family: AppleGothic; }
+    .title { font-size: 58px; font-weight: 700; fill: #172B45; }
+    .brand { font-size: 23px; font-weight: 700; fill: #315E8C; letter-spacing: 2px; }
+    .sub { font-size: 24px; font-weight: 400; fill: #66788A; }
+    .th { font-size: 28px; font-weight: 700; fill: #FFFFFF; }
+    .label { font-size: 27px; font-weight: 700; fill: #22374F; }
+    .value { font-size: 27px; font-weight: 400; fill: #273C52; }
+    .foot { font-size: 21px; font-weight: 400; fill: #738293; }
+  </style>
+
+  <rect width="2400" height="1697" fill="#FFFFFF"/>
+  <rect x="120" y="82" width="8" height="68" rx="4" fill="#1E5A91"/>
+  <text x="158" y="134" class="title">주요 개발 환경</text>
+  <text x="2280" y="117" text-anchor="end" class="brand">BARRIER CITY</text>
+  <text x="2280" y="151" text-anchor="end" class="sub">Apple Vision Pro Spatial Experience</text>
+  <line x1="120" y1="196" x2="2280" y2="196" stroke="#1E5A91" stroke-width="3"/>
+
+  <rect x="120" y="250" width="2160" height="86" rx="8" fill="#1F4E79"/>
+  <text x="162" y="306" class="th">구분</text>
+  <text x="705" y="306" class="th">기술 및 도구</text>
+  <line x1="650" y1="250" x2="650" y2="1536" stroke="#D6DEE7" stroke-width="2"/>
+
+  <rect x="120" y="336" width="2160" height="100" fill="#F8FAFC"/>
+  <rect x="120" y="536" width="2160" height="100" fill="#F8FAFC"/>
+  <rect x="120" y="736" width="2160" height="100" fill="#F8FAFC"/>
+  <rect x="120" y="936" width="2160" height="100" fill="#F8FAFC"/>
+  <rect x="120" y="1136" width="2160" height="100" fill="#F8FAFC"/>
+  <rect x="120" y="1336" width="2160" height="100" fill="#F8FAFC"/>
+
+  <g stroke="#DDE4EC" stroke-width="2">
+    <line x1="120" y1="336" x2="2280" y2="336"/>
+    <line x1="120" y1="436" x2="2280" y2="436"/>
+    <line x1="120" y1="536" x2="2280" y2="536"/>
+    <line x1="120" y1="636" x2="2280" y2="636"/>
+    <line x1="120" y1="736" x2="2280" y2="736"/>
+    <line x1="120" y1="836" x2="2280" y2="836"/>
+    <line x1="120" y1="936" x2="2280" y2="936"/>
+    <line x1="120" y1="1036" x2="2280" y2="1036"/>
+    <line x1="120" y1="1136" x2="2280" y2="1136"/>
+    <line x1="120" y1="1236" x2="2280" y2="1236"/>
+    <line x1="120" y1="1336" x2="2280" y2="1336"/>
+    <line x1="120" y1="1436" x2="2280" y2="1436"/>
+    <line x1="120" y1="1536" x2="2280" y2="1536"/>
+  </g>
+
+  <g>
+    <text x="162" y="399" class="label">대상 플랫폼</text><text x="705" y="399" class="value">Apple Vision Pro · visionOS 26.2 이상</text>
+    <text x="162" y="499" class="label">개발 도구</text><text x="705" y="499" class="value">macOS · Xcode 26.3 · Reality Composer Pro</text>
+    <text x="162" y="599" class="label">개발 언어</text><text x="705" y="599" class="value">Swift 6 · JavaScript</text>
+    <text x="162" y="699" class="label">UI·상태 관리</text><text x="705" y="699" class="value">SwiftUI · Observation</text>
+    <text x="162" y="799" class="label">공간 콘텐츠</text><text x="705" y="799" class="value">RealityKit · Reality Composer Pro · USD / USDZ</text>
+    <text x="162" y="899" class="label">공간 인식</text><text x="705" y="899" class="value">ARKit Hand Tracking · World Tracking</text>
+    <text x="162" y="999" class="label">상호작용·물리</text><text x="705" y="999" class="value">손 추적 휠체어 조작 · 충돌·지면·경사 판정 · 공간 탭</text>
+    <text x="162" y="1099" class="label">생성형 AI</text><text x="705" y="1099" class="value">OpenAI Realtime API · gpt-realtime-2.1 · gpt-4o-transcribe</text>
+    <text x="162" y="1199" class="label">실시간 통신</text><text x="705" y="1199" class="value">WebRTC · LiveKitWebRTC</text>
+    <text x="162" y="1299" class="label">서버리스 백엔드</text><text x="705" y="1299" class="value">Cloudflare Workers · Wrangler · 임시 토큰·요청 제한</text>
+    <text x="162" y="1399" class="label">검증</text><text x="705" y="1399" class="value">Swift Package Test · Node Test · xcodebuild</text>
+    <text x="162" y="1499" class="label">버전 관리·협업</text><text x="705" y="1499" class="value">Git · GitHub · 기능 브랜치 · Pull Request</text>
+  </g>
+
+  <text x="120" y="1618" class="foot">Barrier City 개발 결과보고서 · 주요 개발 환경</text>
+  <text x="2280" y="1618" text-anchor="end" class="foot">2026 AI·XR 서비스 개발자 경진대회</text>
+</svg>

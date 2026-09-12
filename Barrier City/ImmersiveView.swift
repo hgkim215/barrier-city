@@ -257,6 +257,9 @@ struct ImmersiveView: View {
             Attachment(id: "kioskScreen") {
                 KioskOrderView()
             }
+            Attachment(id: "kioskBarrierAlert") {
+                KioskBarrierAlertView(interactionModel: .shared)
+            }
             // 온보딩과 미션 가이드(head lazy-follow는 QuestSetup이 처리)
             Attachment(id: "questHUD") {
                 ExperienceGuideView(

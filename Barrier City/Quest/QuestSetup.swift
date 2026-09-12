@@ -15,6 +15,7 @@ enum QuestSetup {
     private static var follower: QuestHUDFollower?
     private static var hudPanel: Entity?
     private static var videoPanel: Entity?
+    private static var kioskBarrierPanel: Entity?
     private static var subscription: EventSubscription?
     private static var startTask: Task<Void, Never>?
 
@@ -35,6 +36,13 @@ enum QuestSetup {
         content.add(panel)   // 씬 루트에 직접(HUD는 맵과 함께 움직이면 안 된다)
         hudPanel = panel
 
+        // 키오스크 Plane/worldRoot와 분리해 실제 사용자 앞에 띄운다.
+        if let alert = attachments.entity(for: "kioskBarrierAlert") {
+            alert.isEnabled = false
+            content.add(alert)
+            kioskBarrierPanel = alert
+        }
+
         // 안내 영상은 멀리 TV처럼 걸리는 별도 패널이라 attachment도 따로 둔다.
         if let video = attachments.entity(for: "guideVideo") {
             video.isEnabled = false
@@ -49,6 +57,9 @@ enum QuestSetup {
 
         subscription = content.subscribe(to: SceneEvents.Update.self) { event in
             guard let panel = hudPanel, let f = follower else { return }
+            let showsBarrier = InteractionModel.shared.kioskBarrierVisible
+            panel.isEnabled = !showsBarrier
+            f.updateKioskBarrier(panel: kioskBarrierPanel, isPresented: showsBarrier)
             f.update(panel: panel,
                      videoPanel: videoPanel,
                      placement: GuideFlowModel.shared.placement,
@@ -69,5 +80,7 @@ enum QuestSetup {
         hudPanel = nil
         videoPanel?.removeFromParent()
         videoPanel = nil
+        kioskBarrierPanel?.removeFromParent()
+        kioskBarrierPanel = nil
     }
 }
